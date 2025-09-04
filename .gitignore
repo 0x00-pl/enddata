@@ -1,0 +1,18 @@
+# 原始快照体积大、可再生,不入库;仅保留抓取清单
+data/raw/tablecfg/*
+!data/raw/tablecfg/manifest.json
+
+# 前端构建产物可再生,保留目录占位
+site/data/*
+!site/data/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 编辑器/系统
+.DS_Store
+*.swp
+.idea/
+.vscode/
