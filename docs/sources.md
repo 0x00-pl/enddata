@@ -1,0 +1,105 @@
+# 终末地数据源调研(2026-09-15)
+
+目标:为 EndData(战斗 + 生产数据站)确定可靠、可持续更新的数据来源。
+以下所有结论均经过实际抓取/结构验证,标 ★ 的为已接入 `config/sources.json` 的源。
+
+## 一、游戏解包数值表(TableCfg)—— 主数据源 ★
+
+游戏的全部数值都在 `TableCfg/*.json`(当前 725 张表),文本全部是 `{id: 哈希}` 引用,
+需要 `TableCfg/I18nTextTable_CN.json`(147,603 条)反查中文。
+
+| 仓库 | 状态 | 内容 | 结论 |
+|---|---|---|---|
+| ★ [rmxlinux/EndfieldData](https://github.com/rmxlinux/EndfieldData)(18★) | main,2026-09-08 更新,持续活跃 | **完整数据包:TableCfg 725 表(含 16 语言 i18n)+ LuaScripts + 关卡/地图/NavMesh(共 9.8 万文件,1.5GB)** | **当前采用**。跟随当前游戏版本(1.5.x,33 干员);i18n 在 TableCfg/ 目录内 |
+| [luosky/EndfieldDataRmxLinux](https://github.com/luosky/EndfieldDataRmxLinux)(7★) | main,2026-03-12 | rmxlinux 数值部分的旧备份:TableCfg 586 表 + LuaScripts(无 i18n) | 历史对照 |
+| [XiaBei-cy/EndfieldData](https://github.com/XiaBei-cy/EndfieldData)(15★) | master,2026-01 更新 | 正式服开服版 TableCfg 561 表 + 15 语言 i18n(独立 i18n/ 目录) | 历史对照(开服 25 干员) |
+| [Hengle/EndFieldData-Archive](https://github.com/Hengle/EndFieldData-Archive) | 2025-05-25 | 分版本快照 0.5.5 → 0.5.28,每版 TableCfg 约 360 张 | 版本演进历史(测试服时代) |
+| [lsy-404/EndfieldGameData](https://github.com/lsy-404/EndfieldGameData)(23★) | 2025-01 停更 | 测试服 TableCfg 91 表 | 历史对照 |
+| [UPON-2021/EndFieldData](https://github.com/UPON-2021/EndFieldData)(10★) | 2025-01 停更 | 测试服 TableCfg 360 表 + LuaScripts(UI 逻辑) | 历史对照;Lua 可解释数值公式 |
+| [4n3u/EndfieldResourceData](https://github.com/4n3u/EndfieldResourceData)(7★) | 活跃 | 各版本资源 manifest(1.0.14 → 1.5.3) | **版本更新监控**用 |
+| [BiologyHazard/endfield-archive-library](https://github.com/BiologyHazard/endfield-archive-library) | 每日活跃 | 官方公告/卡池(up-recruit)等 API 响应存档 | 活动与卡池资讯数据,非数值表 |
+
+**版本跟进方式**:rmxlinux 仓库直接跟随游戏版本更新(提交信息即日期),抓取脚本按
+`config/sources.json` 的 repo/branch 拉取即可;注意其仓库体量大,git 操作建议
+`--filter=blob:none` 部分克隆 + 按需取文件(见「本机网络备忘」)。
+
+### 已验证的关键表(战斗)
+
+| 表 | 规模 | 内容 |
+|---|---|---|
+| `CharacterTable` | 33 干员 | 职业、稀有度、武器类型、**按突破阶段分段的等级成长曲线**(生命/攻/防/力/敏/智/意志/暴击/范围…,新版 attrType 为整数枚举) |
+| `CharProfessionTable` | 6 | 职业枚举(近卫/重装/辅助/突击…)与图标 |
+| `SkillPatchTable` | 509 技能 | 技能 blackboard 数值(atk_scale、冷却、费用类型)——DPS 计算的核心,待加工 |
+| `BuffTable` | — | 战斗增益/减益 |
+| `WeaponBasicTable` | 79 | 武器稀有度、类型、满级、天赋/潜能引用 |
+| `EnemyTable` | 381 | 敌人实例:属性模板引用、修饰器、出生 Buff、精英标记 |
+| `EnemyAttributeTemplateTable` | 136 模板 | 敌人**等级曲线**(生命/攻/防)、五系抗性(fire/pulse/cryst/natural/ether,0-100 百分数)、霸体与韧性条 |
+| `CharBreakTable` / `CharLevelUpTable` | 5 / 90 | 突破阶段上限与升级消耗 |
+
+### 已验证的关键表(生产)
+
+| 表 | 规模 | 内容 |
+|---|---|---|
+| `FactoryManualCraftTable` | 102 | 手工制作(烹饪):ingredients/outcomes、稀有度、解锁 |
+| `FactoryMachineCraftTable` | 317 | 工厂机器配方:**支持可替代原料组(group)**、机器绑定、进度 |
+| `FactoryMachineCrafterTable` | 27+ | 机器模式(如 liquid) |
+| `FactoryBuildingTable` / `FactoryItemTable` | — | 工厂建筑与产线物品 |
+| `SpaceshipManufactureFormulaTable` | 8 | 飞船制造公式 |
+| `ItemTable` + `ItemTypeTable` | 2829 / 101 | 全物品:类型、稀有度、堆叠、获取途径引用、图标 ID |
+
+## 二、社区加工数据 —— 补充源
+
+| 来源 | 内容 | 用途 |
+|---|---|---|
+| ★ [AndreaFrederica/jei-web](https://github.com/AndreaFrederica/jei-web)(26★) | `public/packs/aef-skland/recipes.json`(**8.5MB 配方图**)+ 森空岛 Wiki 全量物品包(物品 191/装备 165/武器 62/**威胁 56**/干员 24/设备 65…) | 生产配方交叉验证;**敌人中文名**在「威胁」分区;物品图标 |
+| ★ [JamboChen/endfield-calc](https://github.com/JamboChen/endfield-calc)(117★) | **320 条手工精校配方**(`{inputs, outputs, facilityId, craftingTime}`)+ `power.ts` 电力、`facilities.ts` 设施、LP 产线求解器 | 产线规划器的参考实现与耗时数据源 |
+| [NagiYume/AKEDatabase](https://github.com/NagiYume/AKEDatabase)(36★) | 在线查询工具,自带多语言数据 | 对照 |
+
+已克隆核对(endfield-calc):其配方含 `craftingTime`(秒)字段,而我们的 TableCfg
+`FactoryMachineCraftTable` 对应字段是 `totalProgress=12000 / progressRound=2`,两者换算
+关系未定;产线规划若需精确耗时,优先从 calc 的精校数据取,或以实测校准 `totalProgress`。
+
+## 三、官方 API —— 玩家侧数据(暂不自动采集)
+
+来自 [AixLnyt/skport-api-docs](https://github.com/AixLnyt/skport-api-docs)(非官方文档,已克隆核对:含完整 OAuth 流程、`cred`/`salt` 签名算法与六域名划分):
+
+| 域名 | 用途 |
+|---|---|
+| `as.gryphline.com` | 账号认证、OAuth |
+| `ef-webview.gryphline.com` | 抽卡记录、卡池 metadata(URL token,免签名) |
+| `zonai.skport.com` | 全部游戏资料 API(需 `cred` + HMAC V2 签名) |
+| `static.skport.com` | 静态资源(图片 CDN) |
+
+- **Skport API** 端点:`GET /web/v1/wiki/item/catalog`(官方物品库全量)、`GET /web/v1/wiki/char-pool` / `weapon-pool`(卡池)、`GET /api/v1/game/endfield/card/detail`(玩家完整游戏卡)
+- **抽卡记录**:`https://ef-webview.gryphline.com` 的 `/api/content`、`/api/record/char`、`/api/record/weapon`
+- [daydreamer-json/ak-endfield-api-archive](https://github.com/daydreamer-json/ak-endfield-api-archive)(55★,每日自动存档):已克隆核对,内置完整 API 客户端 SDK(`src/utils/api/akEndfield/`,含 zonai/launcher/webview 等服务),其存档重点是**启动器与版本资源 manifest**,可作版本监控数据源。
+
+玩家个人数据(练度/抽卡)需要用户自己的凭据,涉及账号安全,后续做成"用户自选导入"功能,不做服务端集中采集。
+
+## 四、明确不使用的源
+
+- 各类作弊/修改器仓库(Endfield-Ultra-Vision、Endfield-Hack 等)——与数据站无关且违反游戏条款。
+- 盗版客户端解包资源分发。
+
+## 五、已知缺口与下一步
+
+1. ~~数据新鲜度~~ 已解决:rmxlinux/EndfieldData HEAD 即当前版本(2026-09,725 表 + i18n,33 干员),
+   已切换为主数据源。后续跟进其 main 分支更新即可。
+2. **敌人中文名缺失**:新旧解包表中敌人显示名哈希均为 0(381 个敌人全以 templateId 兜底),
+   从 jei-web「威胁」分区或 Skport wiki 目录补全。
+3. **技能/Buff 数值**:`SkillPatchTable`(新版 6.5MB)已抓取未加工,是战斗计算(DPS 模拟)的下一块拼图;
+   注意新版技能数值可能同样使用整数枚举。
+4. **物品图标**:TableCfg 只有 `iconId`,实际贴图需从 jei-web 物品包或游戏资源获取。
+5. **生产系统深度数据**:电力、物流带、流派加成表已可从 rmxlinux 抓取,尚未加工;
+   机器配方的 `totalProgress/progressRound` 与实际秒数的换算待实测(endfield-calc 用手工维护的 craftingTime)。
+6. **战斗属性枚举**:新版 `attrType` 为整数(AttributeMetaTable 可反查图标名),
+   `scripts/build_dataset.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
+
+## 六、本机网络备忘(采集脚本环境)
+
+- 本机 git 全局配置含 `url.git@github.com:.insteadOf=https://github.com/`,会把 https 改写成 SSH 导致克隆失败;
+  脚本化克隆需 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` 绕过。
+- GitHub 直连不稳定,代理为 `http://10.1.20.20:7890`(/etc/proxychains4.conf 同源):
+  - git 用 `-c http.proxy=...`(libcurl 原生代理)最稳;proxychains4 的 LD_PRELOAD 层会让 git 长连接卡死。
+  - 文件下载走 `cdn.jsdelivr.net/gh/<repo>@<branch>/<path>`(20MB 内),大文件用 GitHub API blob 兜底。
+  - 克隆大仓库务必加 `GIT_HTTP_LOW_SPEED_LIMIT/TIME` 熔断与 `--depth 1`。
