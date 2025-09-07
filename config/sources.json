@@ -1,0 +1,74 @@
+{
+  "$comment": "终末地数据源注册表。branch 为 null 时运行时通过 GitHub API 解析默认分支。",
+  "sources": {
+    "tablecfg": {
+      "desc": "解包游戏数值表(TableCfg),战斗与生产数据的主数据源",
+      "repo": "rmxlinux/EndfieldData",
+      "branch": "main",
+      "note": "2026-09-08 更新,725 表,i18n 位于 TableCfg/ 目录内;HEAD 更新到当前游戏版本",
+      "mirrors": [
+        { "repo": "luosky/EndfieldDataRmxLinux", "branch": "main", "note": "rmxlinux 数值部分的旧备份(2026-03,无 i18n)" },
+        { "repo": "XiaBei-cy/EndfieldData", "branch": "master", "note": "正式服开服版(2026-01,561 表),i18n 在单独 i18n/ 目录;历史对照", "table_dir": "TableCfg", "i18n_dir": "i18n" },
+        { "repo": "Hengle/EndFieldData-Archive", "note": "0.5.5→0.5.28 分版本历史快照(测试服时代)" },
+        { "repo": "lsy-404/EndfieldGameData", "note": "2025-01 测试服旧版,仅作历史参考" },
+        { "repo": "UPON-2021/EndFieldData", "note": "2025-01 测试服旧版,附 LuaScripts" }
+      ],
+      "table_dir": "TableCfg",
+      "i18n_dir": "TableCfg",
+      "core_tables": [
+        "I18nTextTable_CN",
+        "CharacterTable",
+        "CharProfessionTable",
+        "CharLevelUpTable",
+        "CharBreakTable",
+        "SkillPatchTable",
+        "WeaponBasicTable",
+        "EnemyTable",
+        "EnemyDisplayInfoTable",
+        "EnemyAttributeTemplateTable",
+        "ItemTable",
+        "ItemTypeTable",
+        "FactoryManualCraftTable",
+        "FactoryMachineCraftTable",
+        "FactoryMachineCrafterTable",
+        "FactoryItemTable",
+        "FactoryBuildingTable",
+        "SpaceshipManufactureFormulaTable"
+      ]
+    },
+    "skland_pack": {
+      "desc": "森空岛 Wiki 转换的物品百科与合成配方包(jei-web 项目)",
+      "repo": "AndreaFrederica/jei-web",
+      "branch": null,
+      "recipe_path": "public/packs/aef-skland/recipes.json",
+      "item_pack_dir": "public/packs/aef-skland/items"
+    },
+    "production_calc": {
+      "desc": "社区精校产线计算器数据(参考实现;320 条配方含 craftingTime 秒数,可补我们 totalProgress 换算缺口)",
+      "repo": "JamboChen/endfield-calc",
+      "branch": "master",
+      "recipes_ts": "src/data/recipes.ts",
+      "extra_data": ["src/data/power.ts", "src/data/facilities.ts", "src/data/items.ts"]
+    },
+    "world_data": {
+      "desc": "关卡/地图/场景实体数据(rmxlinux HEAD 不含 TableCfg,数值备份在 luosky)",
+      "repo": "rmxlinux/EndfieldData",
+      "branch": "main"
+    },
+    "skport_api": {
+      "desc": "SKPORT/Gryphline 官方 API(玩家卡、Wiki 目录、抽卡记录),需要 cred 与 HMAC 签名,暂不自动采集",
+      "docs_repo": "AixLnyt/skport-api-docs",
+      "base_url": "https://zonai.skport.com",
+      "endpoints": {
+        "item_catalog": "/web/v1/wiki/item/catalog",
+        "char_pool": "/web/v1/wiki/char-pool",
+        "player_card": "/api/v1/game/endfield/card/detail"
+      }
+    },
+    "api_archive": {
+      "desc": "官方游戏 API 响应自动存档(参考端点结构)",
+      "repo": "daydreamer-json/ak-endfield-api-archive",
+      "branch": "main"
+    }
+  }
+}

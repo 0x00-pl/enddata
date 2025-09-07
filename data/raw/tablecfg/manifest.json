@@ -1,0 +1,17 @@
+{
+  "repo": "rmxlinux/EndfieldData",
+  "branch": "main",
+  "fetched_at": "2026-09-15T03:29:53+00:00",
+  "files": {
+    "EnemyDisplayInfoTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EnemyDisplayInfoTable.json",
+      "channel": "jsdelivr",
+      "size_kb": 77
+    },
+    "EnemyAttributeTemplateTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EnemyAttributeTemplateTable.json",
+      "channel": "jsdelivr",
+      "size_kb": 4563
+    }
+  }
+}
