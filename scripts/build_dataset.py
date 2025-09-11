@@ -49,6 +49,32 @@ def attr_name(t) -> str | None:
     return t
 
 
+def vfs_url(kind: str, **params) -> str | None:
+    """按 config/sources.json 的 fffdan_vfs 注册项拼资源 URL(宏山档案局资源镜像,WebP)。"""
+    path = vfs_url.patterns.get(kind)
+    if vfs_url.base is None or not path:
+        return None
+    for k, v in params.items():
+        if v is None or v == "":
+            return None
+        path = path.replace("{" + k + "}", str(v))
+    return f"{vfs_url.base}{vfs_url.prefix}/{path}"
+
+
+vfs_url.base = None
+vfs_url.prefix = None
+vfs_url.patterns = {}
+
+
+def load_vfs_config() -> None:
+    cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"].get("fffdan_vfs")
+    if not cfg:
+        return
+    vfs_url.base = cfg["hosts"][0]
+    vfs_url.prefix = cfg["vfs_prefix"]
+    vfs_url.patterns = cfg["paths"]
+
+
 class I18n:
     def __init__(self, table: dict):
         self.table = table
@@ -94,13 +120,15 @@ def flat_attrs(attrs: list[dict] | None) -> dict:
 def main() -> None:
     t0 = datetime.now(timezone.utc)
     SITE_DATA.mkdir(parents=True, exist_ok=True)
+    load_vfs_config()
     raw = {p.stem: load_json(p) for p in BRANCH_DIR.glob("*.json")}
     info(f"加载原始表: {len(raw)} 张")
 
     t = I18n(raw["I18nTextTable_CN"])
 
     # ---- 角色 ----
-    professions = {v["profession"]: t(v.get("name")) for v in raw["CharProfessionTable"].values()}
+    professions = {v["profession"]: (t(v.get("name")), v.get("iconId"))
+                   for v in raw["CharProfessionTable"].values()}
     max_level = max(int(v.get("maxLevel", 0)) for v in raw["CharBreakTable"].values())
     characters = []
     for cid, c in raw["CharacterTable"].items():
@@ -111,12 +139,15 @@ def main() -> None:
             if attrs.get("Level") == 1 and not lv1:
                 lv1 = attrs
             lv_max = attrs or lv_max
+        _prof_name, _prof_icon = professions.get(c.get("profession"), (None, None))
         characters.append({
             "id": cid,
             "name": t(c.get("name")) or cid,
             "enName": c.get("engName"),
             "profession": c.get("profession"),
-            "professionName": professions.get(c.get("profession")),
+            "professionName": _prof_name,
+            "professionIcon": vfs_url("profession_icon", iconId=_prof_icon),
+            "icon": vfs_url("char_icon", id=cid),
             "rarity": c.get("rarity"),
             "weaponType": c.get("weaponType"),
             "cv": c.get("cvName"),
@@ -141,6 +172,7 @@ def main() -> None:
             "showingType": it.get("showingType"),
             "desc": t(it.get("desc")),
             "icon": it.get("iconId"),
+            "iconUrl": vfs_url("item_icon", iconId=it.get("iconId")),
         })
     items.sort(key=lambda x: (str(x["showingType"] or ""), -(x["rarity"] or 0), x["id"]))
     dump("items", items)
