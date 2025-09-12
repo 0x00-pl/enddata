@@ -67,7 +67,7 @@ function renderOverview() {
     <table><tbody>
       <tr><td class="dim">战斗数据</td><td>干员等级成长曲线、职业、武器类型、敌人属性模板(生命/攻击/防御、抗性、霸体)已入库;技能数值(SkillPatchTable)已抓取,待加工。</td></tr>
       <tr><td class="dim">生产数据</td><td>手工配方 ${c.recipes ? "" : ""}(大世界烹饪)、机器配方(工厂产线)、飞船制造已入库;电力/物流/流派加成待扩展。</td></tr>
-      <tr><td class="dim">计划中</td><td>技能与 Buff 数值解析、产线规划器、敌人名字补全(森空岛 Wiki「威胁」分区)、物品图标。</td></tr>
+      <tr><td class="dim">计划中</td><td>技能与 Buff 数值解析、产线规划器、敌人名字补全(森空岛 Wiki「威胁」分区)、配方产物图标。</td></tr>
     </tbody></table>`;
 }
 
@@ -85,8 +85,8 @@ function renderCharacters() {
     ${toolbar("characters", "搜索干员名 / 职业…")}
     <div class="cards">${list.map((c) => `
       <div class="card">
-        <h3>${esc(c.name)} ${rarityTag(c.rarity)}</h3>
-        <div class="sub">${esc(c.professionName ?? c.profession)} · 武器:${esc(c.weaponType ?? "—")}
+        <h3>${c.icon ? `<img class="avatar" src="${esc(c.icon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(c.name)} ${rarityTag(c.rarity)}</h3>
+        <div class="sub">${c.professionIcon ? `<img class="icon-sm" src="${esc(c.professionIcon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(c.professionName ?? c.profession)} · 武器:${esc(c.weaponType ?? "—")}
           ${c.cv ? ` · CV:${esc(c.cv)}` : ""} · 满级 ${c.maxLevel}</div>
         ${statRow("生命", c.lvMax?.MaxHp)}${statRow("攻击", c.lvMax?.Atk)}
         ${statRow("力", c.lvMax?.Str)}${statRow("敏", c.lvMax?.Agi)}
@@ -122,7 +122,7 @@ function renderItems() {
       </select>`)}
     <table><thead><tr><th>物品</th><th>稀有度</th><th>类型</th><th>堆叠</th></tr></thead><tbody>
     ${list.slice(0, 500).map((i) => `<tr>
-      <td>${esc(i.name ?? i.id)} <span class="dim">${esc(i.id)}</span></td>
+      <td>${i.iconUrl ? `<img class="icon-sm" src="${esc(i.iconUrl)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(i.name ?? i.id)} <span class="dim">${esc(i.id)}</span></td>
       <td>${rarityTag(i.rarity)}</td><td>${esc(i.typeName ?? i.type ?? "—")}</td>
     </tr>`).join("")}
     </tbody></table>
