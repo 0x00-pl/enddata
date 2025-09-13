@@ -51,9 +51,29 @@
 
 | 来源 | 内容 | 用途 |
 |---|---|---|
-| ★ [AndreaFrederica/jei-web](https://github.com/AndreaFrederica/jei-web)(26★) | `public/packs/aef-skland/recipes.json`(**8.5MB 配方图**)+ 森空岛 Wiki 全量物品包(物品 191/装备 165/武器 62/**威胁 56**/干员 24/设备 65…) | 生产配方交叉验证;**敌人中文名**在「威胁」分区;物品图标 |
+| ★ [宏山档案局 end.fffdan.com](https://end.fffdan.com) | 终末地档案站;后端为四主机镜像农场,提供**按路径直取的游戏资源 vfs 接口**与 `/version` 构建号 | **图标资源源**(干员头像/职业/属性/物品图标,WebP);版本更新监控 |
+| ★ [AndreaFrederica/jei-web](https://github.com/AndreaFrederica/jei-web)(26★) | `public/packs/aef-skland/recipes.json`(**8.5MB 配方图**)+ 森空岛 Wiki 全量物品包(物品 191/装备 165/武器 62/**威胁 56**/干员 24/设备 65…) | 生产配方交叉验证;**敌人中文名**在「威胁」分区;物品图标备用源 |
 | ★ [JamboChen/endfield-calc](https://github.com/JamboChen/endfield-calc)(117★) | **320 条手工精校配方**(`{inputs, outputs, facilityId, craftingTime}`)+ `power.ts` 电力、`facilities.ts` 设施、LP 产线求解器 | 产线规划器的参考实现与耗时数据源 |
-| [NagiYume/AKEDatabase](https://github.com/NagiYume/AKEDatabase)(36★) | 在线查询工具,自带多语言数据 | 对照 |
+| [NagiYume/AKEDatabase](https://github.com/NagiYume/AKEDatabase)(36★) | 在线查询工具,自带多语言数据(akedata.wiki) | 对照 |
+
+### 宏山档案局资源接口(已实测验证,已接入)
+
+- **主机故障转移**(前端按序重试):`endfield-assets.fffdan.com` → `cn/cn2/cn3.endfield.fffdan.com`
+- **版本端点**:`GET /version` → 官方构建号(如 `initial_10024360-6_main_10024360-6`),
+  `scripts/fffdan_version.py` 用它做更新监控(`--record` 记录基线,再跑即对比)
+- **资源直取**:`GET /vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites/<路径>`(WebP):
+
+| 资源 | 路径模板 | 对应字段 |
+|---|---|---|
+| 干员头像 | `charicon/icon_{charId}.png` | CharacterTable.charId |
+| 职业图标 | `charprofessionicon/{iconId}.png` | CharProfessionTable.iconId |
+| 属性图标 | `attributeicon/{iconName}.png` | AttributeMetaTable.iconName |
+| 物品图标 | `itemicon/{iconId}.png` | ItemTable.iconId |
+
+  `build_dataset.py` 据此为 characters/items 数据集生成 `icon`/`iconUrl`/`professionIcon` 直链,
+  前端懒加载渲染。站点自身的 `/endfield-update-diff/*` 版本差分接口当前 404
+  (前端仍在调用,恢复后可提供逐表变更清单);该站拉取的原始表与我们一致
+  (CharacterTable/SkillPatchTable/ItemTable…),可作数据旁证。
 
 已克隆核对(endfield-calc):其配方含 `craftingTime`(秒)字段,而我们的 TableCfg
 `FactoryMachineCraftTable` 对应字段是 `totalProgress=12000 / progressRound=2`,两者换算
@@ -89,7 +109,8 @@
    从 jei-web「威胁」分区或 Skport wiki 目录补全。
 3. **技能/Buff 数值**:`SkillPatchTable`(新版 6.5MB)已抓取未加工,是战斗计算(DPS 模拟)的下一块拼图;
    注意新版技能数值可能同样使用整数枚举。
-4. **物品图标**:TableCfg 只有 `iconId`,实际贴图需从 jei-web 物品包或游戏资源获取。
+4. ~~物品图标~~ 已解决:经宏山档案局 vfs 接口直取游戏贴图(见上节),
+   characters/items 数据集已带直链;配方产物图标与敌人图片待接。
 5. **生产系统深度数据**:电力、物流带、流派加成表已可从 rmxlinux 抓取,尚未加工;
    机器配方的 `totalProgress/progressRound` 与实际秒数的换算待实测(endfield-calc 用手工维护的 craftingTime)。
 6. **战斗属性枚举**:新版 `attrType` 为整数(AttributeMetaTable 可反查图标名),
