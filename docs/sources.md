@@ -52,28 +52,36 @@
 | 来源 | 内容 | 用途 |
 |---|---|---|
 | ★ [宏山档案局 end.fffdan.com](https://end.fffdan.com) | 终末地档案站;后端为四主机镜像农场,提供**按路径直取的游戏资源 vfs 接口**与 `/version` 构建号 | **图标资源源**(干员头像/职业/属性/物品图标,WebP);版本更新监控 |
+| ★ [天师工具箱 end-tools.fffdan.com](https://end-tools.fffdan.com) | Blazor WASM 工具箱(Database/Gameplay/Web 三模块,.NET 单文件打包):数据浏览(`/data/tables`、`/data/operators/{charId}`)、战斗模拟器(`/simulator/upgrade`)、配方查询、**vfs 资源浏览器**(`/vfsexplorer`) | 无自有数据 API:其 TableCfg 与图标均从 endfield-assets 的 vfs 加载(Database.wasm 二进制字符串证实);其代码是 vfs 路径模式的权威参考 |
 | ★ [AndreaFrederica/jei-web](https://github.com/AndreaFrederica/jei-web)(26★) | `public/packs/aef-skland/recipes.json`(**8.5MB 配方图**)+ 森空岛 Wiki 全量物品包(物品 191/装备 165/武器 62/**威胁 56**/干员 24/设备 65…) | 生产配方交叉验证;**敌人中文名**在「威胁」分区;物品图标备用源 |
 | ★ [JamboChen/endfield-calc](https://github.com/JamboChen/endfield-calc)(117★) | **320 条手工精校配方**(`{inputs, outputs, facilityId, craftingTime}`)+ `power.ts` 电力、`facilities.ts` 设施、LP 产线求解器 | 产线规划器的参考实现与耗时数据源 |
 | [NagiYume/AKEDatabase](https://github.com/NagiYume/AKEDatabase)(36★) | 在线查询工具,自带多语言数据(akedata.wiki) | 对照 |
 
-### 宏山档案局资源接口(已实测验证,已接入)
+### fffdan 工具家族资源接口(已实测验证,已接入)
 
-- **主机故障转移**(前端按序重试):`endfield-assets.fffdan.com` → `cn/cn2/cn3.endfield.fffdan.com`
+`end.fffdan.com`(档案局)与 `end-tools.fffdan.com`(工具箱)共用同一后端,另有 `blog.fffdan.com`。
+
+- **主机故障转移**(前端按序重试):`endfield-assets.fffdan.com` → `cn/cn2/cn3.endfield.fffdan.com`;
+  该 CDN 间歇性抖动,请求需带重试
 - **版本端点**:`GET /version` → 官方构建号(如 `initial_10024360-6_main_10024360-6`),
   `scripts/fffdan_version.py` 用它做更新监控(`--record` 记录基线,再跑即对比)
-- **资源直取**:`GET /vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites/<路径>`(WebP):
+- **资源直取**:`GET /vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites/<路径>`(WebP)。
 
-| 资源 | 路径模板 | 对应字段 |
-|---|---|---|
-| 干员头像 | `charicon/icon_{charId}.png` | CharacterTable.charId |
-| 职业图标 | `charprofessionicon/{iconId}.png` | CharProfessionTable.iconId |
-| 属性图标 | `attributeicon/{iconName}.png` | AttributeMetaTable.iconName |
-| 物品图标 | `itemicon/{iconId}.png` | ItemTable.iconId |
+| 资源 | 路径模板 | 对应字段 | 验证 |
+|---|---|---|---|
+| 干员头像 | `charicon/icon_{charId}.png` | CharacterTable.charId | ✓ |
+| 干员圆头像 | `charroundicon/icon_round_{charId}.png` | CharacterTable.charId | ✓(自工具箱代码发现) |
+| 职业图标 | `charprofessionicon/{iconId}.png` | CharProfessionTable.iconId | ✓ |
+| 属性图标 | `attributeicon/{iconName}.png` | AttributeMetaTable.iconName | ✓ |
+| 物品图标 | `itemicon/{iconId}.png` | ItemTable.iconId | ✓ |
+| 工厂建筑面板图 | `factory/buildingpanelicon/{icon}.png` | FactoryBuildingTable(精确字段待确认) | 路径来自工具箱代码,文件名未中 |
+| 元素/天赋树/背包图标 | `elementicon`、`talenttreeicon`、`inventory` | 待确认 | 同上 |
 
   `build_dataset.py` 据此为 characters/items 数据集生成 `icon`/`iconUrl`/`professionIcon` 直链,
-  前端懒加载渲染。站点自身的 `/endfield-update-diff/*` 版本差分接口当前 404
-  (前端仍在调用,恢复后可提供逐表变更清单);该站拉取的原始表与我们一致
-  (CharacterTable/SkillPatchTable/ItemTable…),可作数据旁证。
+  前端懒加载渲染;完整路径模板见 `config/sources.json` 的 `fffdan_vfs.paths`
+  (以 `paths_verified`/`paths_unverified` 区分验证状态)。
+  档案局自身的 `/endfield-update-diff/*` 版本差分接口当前 404(前端仍在调用,恢复后可提供逐表变更清单);
+  两站拉取的原始表与我们一致(CharacterTable/SkillPatchTable/ItemTable…),可作数据旁证。
 
 已克隆核对(endfield-calc):其配方含 `craftingTime`(秒)字段,而我们的 TableCfg
 `FactoryMachineCraftTable` 对应字段是 `totalProgress=12000 / progressRound=2`,两者换算

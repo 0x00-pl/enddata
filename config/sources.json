@@ -37,8 +37,10 @@
       ]
     },
     "fffdan_vfs": {
-      "desc": "宏山档案局(end.fffdan.com)的资源镜像后端:按路径直取游戏资源文件(图标为 WebP),四主机可故障转移",
+      "desc": "宏山档案局(end.fffdan.com)与天师工具箱(end-tools.fffdan.com)共用的资源镜像后端:按路径直取游戏资源文件(图标为 WebP),四主机可故障转移",
       "site": "https://end.fffdan.com",
+      "tools_site": "https://end-tools.fffdan.com",
+      "tools_note": "天师工具箱:Blazor WASM(.NET 单文件打包 Database/Gameplay/Web 三模块),数据浏览/战斗模拟器/vfs 资源浏览器;无自有数据 API,其 TableCfg 与图标均从本源 vfs 加载(二进制字符串证实)",
       "hosts": [
         "https://endfield-assets.fffdan.com",
         "https://cn.endfield.fffdan.com",
@@ -46,14 +48,21 @@
         "https://cn3.endfield.fffdan.com"
       ],
       "version_endpoint": "/version",
-      "note": "/version 返回游戏构建号(如 initial_10024360-6_main_10024360-6),可作版本更新监控;站点的 /endfield-update-diff/* 差分接口当前 404",
+      "note": "/version 返回游戏构建号(如 initial_10024360-6_main_10024360-6),可作版本更新监控;档案局的 /endfield-update-diff/* 差分接口当前 404。注意:该 CDN 间歇性抖动,请求失败应重试",
       "vfs_prefix": "/vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites",
       "paths": {
         "char_icon": "charicon/icon_{id}.png",
+        "char_round_icon": "charroundicon/icon_round_{id}.png",
         "profession_icon": "charprofessionicon/{iconId}.png",
         "attribute_icon": "attributeicon/{iconName}.png",
-        "item_icon": "itemicon/{iconId}.png"
-      }
+        "item_icon": "itemicon/{iconId}.png",
+        "factory_building_panel_icon": "factory/buildingpanelicon/{icon}.png",
+        "element_icon": "elementicon/{icon}.png",
+        "talent_tree_icon": "talenttreeicon/icon_talenttree_{icon}.png",
+        "inventory_icon": "inventory/{icon}.png"
+      },
+      "paths_verified": ["char_icon", "char_round_icon", "profession_icon", "attribute_icon", "item_icon"],
+      "paths_unverified": ["factory_building_panel_icon", "element_icon", "talent_tree_icon", "inventory_icon"]
     },
     "skland_pack": {
       "desc": "森空岛 Wiki 转换的物品百科与合成配方包(jei-web 项目)",
