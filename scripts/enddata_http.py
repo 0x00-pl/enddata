@@ -1,13 +1,18 @@
-"""共享的 GitHub 文件抓取工具:jsdelivr CDN → raw.githubusercontent → GitHub API blob 三级回退。
+"""共享的 GitHub 文件抓取工具:本地 git 仓库 → jsdelivr CDN → raw → GitHub API blob 多级回退。
 
-GitHub API 匿名配额为 60 次/小时,因此把无配额限制的 CDN/raw 渠道放在前面,
-API 仅作最后兜底。所有产物写入 data/raw/ 本地缓存,重复运行不产生网络请求。
+GitHub API 匿名配额为 60 次/小时,因此优先级为:
+    1. data/repos/ 下的本地克隆(scripts/clone_sources.py 维护)——零网络
+    2. data/raw/ 的历史缓存——零网络
+    3. jsdelivr / raw(无配额限制的渠道)
+    4. GitHub API blob(有配额,仅兜底)
 """
 
 from __future__ import annotations
 
 import base64
 import json
+import os
+import subprocess
 import sys
 import time
 import urllib.error
@@ -16,9 +21,46 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
+REPOS_DIR = PROJECT_ROOT / "data" / "repos"
 
 USER_AGENT = "enddata-collector (fan-made game data aggregator)"
 TIMEOUT = 90
+
+
+def git_env() -> dict:
+    """绕过全局 git 配置(insteadOf 会把 https 改写成 SSH 导致克隆失败)。"""
+    env = dict(os.environ)
+    env["GIT_CONFIG_GLOBAL"] = "/dev/null"
+    env["GIT_CONFIG_SYSTEM"] = "/dev/null"
+    return env
+
+
+def git_proxy() -> str | None:
+    try:
+        return load_json(PROJECT_ROOT / "config" / "sources.json")["git"].get("proxy")
+    except (FileNotFoundError, KeyError, json.JSONDecodeError):
+        return None
+
+
+def repo_dir(repo: str) -> Path:
+    return REPOS_DIR / repo.replace("/", "__")
+
+
+def read_from_git(repo: str, path: str, timeout: int = 180) -> bytes | None:
+    """从本地克隆读取文件。全量克隆直接读工作区;partial 克隆经 cat-file
+    读取(blob 未在本地时会按需懒取,成功后即本地缓存)。失败返回 None。"""
+    d = repo_dir(repo)
+    if not d.is_dir():
+        return None
+    worktree_file = d / path
+    if worktree_file.is_file():
+        return worktree_file.read_bytes()
+    cmd = ["git", "-C", str(d), "cat-file", "blob", f"HEAD:{path}"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, timeout=timeout, env=git_env())
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    return r.stdout if r.returncode == 0 else None
 
 
 class FetchError(Exception):
@@ -91,14 +133,21 @@ def cache_path(source: str, repo: str, branch: str, *parts: str) -> Path:
 
 def fetch_to_cache(source: str, repo: str, branch: str, remote_path: str, local_name: str | None = None,
                    force: bool = False) -> tuple[Path, str]:
-    """抓取文件并缓存到 data/raw/<source>/<repo>/<branch>/,已存在则直接返回。"""
+    """抓取文件并缓存到 data/raw/<source>/<repo>/<branch>/,已存在则直接返回。
+    渠道优先级:cache → 本地 git 仓库 → jsdelivr → raw → GitHub API blob。"""
     name = local_name or Path(remote_path).name
     dest = cache_path(source, repo, branch, name)
     if dest.exists() and not force:
         return dest, "cache"
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    data, channel = fetch_gh_file(repo, branch, remote_path)
-    dest.write_bytes(data)
+    data = read_from_git(repo, remote_path)
+    if data is not None:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
+        channel = "git"
+    else:
+        data, channel = fetch_gh_file(repo, branch, remote_path)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(data)
     print(f"  [{channel}] {remote_path} -> {dest.relative_to(PROJECT_ROOT)} ({len(data)/1024:.0f} KB)")
     return dest, channel
 

@@ -1,17 +1,22 @@
 {
   "repo": "rmxlinux/EndfieldData",
   "branch": "main",
-  "fetched_at": "2026-09-15T03:29:53+00:00",
+  "fetched_at": "2026-09-15T04:26:28+00:00",
   "files": {
-    "EnemyDisplayInfoTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EnemyDisplayInfoTable.json",
-      "channel": "jsdelivr",
-      "size_kb": 77
+    "CharacterTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/CharacterTable.json",
+      "channel": "git",
+      "size_kb": 10098
     },
-    "EnemyAttributeTemplateTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EnemyAttributeTemplateTable.json",
-      "channel": "jsdelivr",
-      "size_kb": 4563
+    "EnemyTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EnemyTable.json",
+      "channel": "git",
+      "size_kb": 195
+    },
+    "ItemTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/ItemTable.json",
+      "channel": "git",
+      "size_kb": 2695
     }
   }
 }

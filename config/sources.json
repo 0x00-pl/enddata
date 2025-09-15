@@ -1,5 +1,22 @@
 {
   "$comment": "终末地数据源注册表。branch 为 null 时运行时通过 GitHub API 解析默认分支。",
+  "git": {
+    "$comment": "git 形态数据源统一克隆到 data/repos/,抓取脚本优先读本地;partial=true 用 blob:none 部分克隆(blob 按需懒取,取过即本地缓存)",
+    "repos_dir": "data/repos",
+    "proxy": "http://10.1.20.20:7890",
+    "clone": [
+      { "repo": "rmxlinux/EndfieldData", "branch": "main", "partial": true, "role": "tablecfg 主源(1.5GB,必须 partial)" },
+      { "repo": "luosky/EndfieldDataRmxLinux", "branch": "main", "partial": true, "role": "tablecfg 旧备份" },
+      { "repo": "XiaBei-cy/EndfieldData", "branch": "master", "partial": true, "role": "开服版对照" },
+      { "repo": "Hengle/EndFieldData-Archive", "partial": true, "role": "分版本历史快照(文件多,必须 partial)" },
+      { "repo": "lsy-404/EndfieldGameData", "partial": false, "role": "测试服历史(小仓库全量)" },
+      { "repo": "UPON-2021/EndFieldData", "partial": true, "role": "测试服历史+Lua" },
+      { "repo": "AndreaFrederica/jei-web", "partial": true, "role": "森空岛 Wiki 配方/物品包" },
+      { "repo": "JamboChen/endfield-calc", "branch": "master", "partial": false, "role": "产线计算参考(69MB 全量)" },
+      { "repo": "daydreamer-json/ak-endfield-api-archive", "branch": "main", "partial": true, "role": "官方 API 存档" },
+      { "repo": "AixLnyt/skport-api-docs", "partial": false, "role": "Skport API 文档(小仓库全量)" }
+    ]
+  },
   "sources": {
     "tablecfg": {
       "desc": "解包游戏数值表(TableCfg),战斗与生产数据的主数据源",

@@ -19,9 +19,10 @@
 | [4n3u/EndfieldResourceData](https://github.com/4n3u/EndfieldResourceData)(7★) | 活跃 | 各版本资源 manifest(1.0.14 → 1.5.3) | **版本更新监控**用 |
 | [BiologyHazard/endfield-archive-library](https://github.com/BiologyHazard/endfield-archive-library) | 每日活跃 | 官方公告/卡池(up-recruit)等 API 响应存档 | 活动与卡池资讯数据,非数值表 |
 
-**版本跟进方式**:rmxlinux 仓库直接跟随游戏版本更新(提交信息即日期),抓取脚本按
-`config/sources.json` 的 repo/branch 拉取即可;注意其仓库体量大,git 操作建议
-`--filter=blob:none` 部分克隆 + 按需取文件(见「本机网络备忘」)。
+**版本跟进方式**:所有 git 数据源已统一克隆到本地 `data/repos/`(`scripts/clone_sources.py`
+维护,重跑即更新到远端最新);抓取脚本的渠道优先级为 **本地 git 仓库 → data/raw 缓存 →
+jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库(blob:none)的 blob
+首次读取会经仓库配置里的代理懒取,之后即本地缓存。
 
 ### 已验证的关键表(战斗)
 
@@ -127,8 +128,11 @@
 ## 六、本机网络备忘(采集脚本环境)
 
 - 本机 git 全局配置含 `url.git@github.com:.insteadOf=https://github.com/`,会把 https 改写成 SSH 导致克隆失败;
-  脚本化克隆需 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` 绕过。
+  脚本化克隆需 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` 绕过(`enddata_http.git_env` 已内置)。
 - GitHub 直连不稳定,代理为 `http://10.1.20.20:7890`(/etc/proxychains4.conf 同源):
   - git 用 `-c http.proxy=...`(libcurl 原生代理)最稳;proxychains4 的 LD_PRELOAD 层会让 git 长连接卡死。
   - 文件下载走 `cdn.jsdelivr.net/gh/<repo>@<branch>/<path>`(20MB 内),大文件用 GitHub API blob 兜底。
-  - 克隆大仓库务必加 `GIT_HTTP_LOW_SPEED_LIMIT/TIME` 熔断与 `--depth 1`。
+  - 克隆大仓库务必加 `--depth 1` 与低速熔断(`http.lowSpeedLimit/lowSpeedTime`,注意它们是 git 配置而非环境变量)。
+- **数据源本地化**:git 形态的源统一克隆在 `data/repos/`(已 gitignore),由 `scripts/clone_sources.py`
+  克隆/更新;大仓库一律 partial 克隆(`--filter=blob:none --no-checkout`)。
+  ⚠️ partial 仓库更新后**不要** `reset --hard`(会触发全量 blob 懒取),用 `git update-ref` 移动分支引用。

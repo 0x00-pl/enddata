@@ -2,6 +2,9 @@
 data/raw/tablecfg/*
 !data/raw/tablecfg/manifest.json
 
+# 本地克隆的数据源仓库(体积大,可再生)
+data/repos/
+
 # 前端构建产物可再生,保留目录占位
 site/data/*
 !site/data/.gitkeep

@@ -20,7 +20,10 @@
 ## 快速开始
 
 ```bash
-# 1. 抓取原始数值表(已有本地缓存则跳过)
+# 0. (推荐)把所有 git 数据源克隆到本地 data/repos/,抓取优先读本地
+python3 scripts/clone_sources.py      # 重跑即更新到远端最新
+
+# 1. 抓取原始数值表(优先读本地仓库,本地未命中才走网络)
 python3 scripts/fetch_tablecfg.py
 
 # 2. 加工为前端数据集
@@ -38,15 +41,18 @@ python3 -m http.server 8321 --directory site
 ```
 enddata/
 ├── config/
-│   └── sources.json        # 数据源注册表(仓库/分支/核心表清单/官方 API 端点)
+│   └── sources.json        # 数据源注册表(git 仓库清单/核心表/官方 API 端点/资源路径模板)
 ├── docs/
 │   ├── sources.md          # 数据源调研报告(核心文档)
 │   └── data-model.md       # 原始表 → 数据集的流水线与字段说明
 ├── scripts/
-│   ├── enddata_http.py     # 抓取公共库:jsdelivr → raw → GitHub API 三级回退 + 本地缓存
+│   ├── enddata_http.py     # 抓取公共库:本地git → jsdelivr → raw → API 回退 + 本地缓存
+│   ├── clone_sources.py    # 数据源仓库克隆/更新到 data/repos/(partial 克隆大仓库)
 │   ├── fetch_tablecfg.py   # 抓取 TableCfg 数值表到 data/raw/
+│   ├── fffdan_version.py   # 宏山档案局 /version 构建号监控
 │   └── build_dataset.py    # i18n 反查 + 表间 join,输出 site/data/*.json
 ├── data/
+│   ├── repos/              # 数据源本地克隆(gitignore,约 280MB)
 │   ├── raw/                # 原始快照(含 manifest.json 抓取清单)
 │   └── processed/          # 预留:中间产物
 └── site/                   # 静态前端
