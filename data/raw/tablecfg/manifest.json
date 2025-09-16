@@ -1,22 +1,12 @@
 {
   "repo": "rmxlinux/EndfieldData",
   "branch": "main",
-  "fetched_at": "2026-09-15T04:26:28+00:00",
+  "fetched_at": "2026-09-15T04:41:18+00:00",
   "files": {
-    "CharacterTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/CharacterTable.json",
+    "CharProfessionTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/CharProfessionTable.json",
       "channel": "git",
-      "size_kb": 10098
-    },
-    "EnemyTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EnemyTable.json",
-      "channel": "git",
-      "size_kb": 195
-    },
-    "ItemTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/ItemTable.json",
-      "channel": "git",
-      "size_kb": 2695
+      "size_kb": 1
     }
   }
 }

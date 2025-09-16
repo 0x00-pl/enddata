@@ -14,7 +14,10 @@
       { "repo": "AndreaFrederica/jei-web", "partial": true, "role": "森空岛 Wiki 配方/物品包" },
       { "repo": "JamboChen/endfield-calc", "branch": "master", "partial": false, "role": "产线计算参考(69MB 全量)" },
       { "repo": "daydreamer-json/ak-endfield-api-archive", "branch": "main", "partial": true, "role": "官方 API 存档" },
-      { "repo": "AixLnyt/skport-api-docs", "partial": false, "role": "Skport API 文档(小仓库全量)" }
+      { "repo": "AixLnyt/skport-api-docs", "partial": false, "role": "Skport API 文档(小仓库全量)" },
+      { "repo": "CaffuChin0/zmdgraph", "partial": false, "role": "终末地养成规划计算器(19MB,含养成数据)" },
+      { "repo": "mikunyaaa/endfield-calculator", "partial": false, "role": "产线分流计算器" },
+      { "repo": "Arknights-yituliu/ef-frontend-v1", "branch": "main", "partial": true, "role": "一图流前端(数据端点权威参考)" }
     ]
   },
   "sources": {
@@ -80,6 +83,27 @@
       },
       "paths_verified": ["char_icon", "char_round_icon", "profession_icon", "attribute_icon", "item_icon"],
       "paths_unverified": ["factory_building_panel_icon", "element_icon", "talent_tree_icon", "inventory_icon"]
+    },
+    "yituliu_cos": {
+      "desc": "终末地一图流的 COS 解包数据镜像:TableCfg 可 HTTP 直取(jsdelivr 失效时的备源),无需 git",
+      "table_base": "https://cos.yituliu.cn/endfield/endfielddata/TableCfg",
+      "note": "已验证 CharacterTable(7.2MB)/I18nTextTable_CN(11MB) 返回 200;尺寸与 rmxlinux 版本有差异,仅作备源。后端 endfield.backend.yituliu.cn 与前端仓库 Arknights-yituliu/ef-frontend-v1",
+      "mirrors": ["https://cos.yituliu.cn"]
+    },
+    "tools_and_wikis": {
+      "$comment": "工具站与 Wiki:定位为参考/工具生态,暂不作为数据采集源",
+      "entries": [
+        { "name": "endfieldtools.dev", "type": "database+tools", "note": "英文数据库与工具站(Next.js SSR),API 未公开文档化" },
+        { "name": "maaend.com", "type": "automation", "note": "MaaEnd 智能自动化助手,数据无关" },
+        { "name": "end.canmoe.com", "type": "planner", "note": "CEP 终末地规划器(原基质规划器),Next.js" },
+        { "name": "dige.aunly.cn", "type": "planner", "note": "D.I.G.E. 帝江号工厂能源生产/存储系统设计器" },
+        { "name": "www.end-axis.com/timeline", "type": "tool", "note": "Endaxis 排轴工具(活动时间线)" },
+        { "name": "www.gamekee.com/zmd", "type": "wiki", "note": "GameKee 终末地攻略 Wiki" },
+        { "name": "warfarin.wiki/cn/operators", "type": "wiki", "note": "Warfarin Wiki 干员数据(SSR 内嵌,无公开 JSON 端点)" },
+        { "name": "end.wiki", "type": "wiki", "note": "DNS 解析失败(2026-09-15),不可达" },
+        { "name": "ef.yituliu.cn/resources/essence-recognizer", "type": "tool", "note": "一图流基质识别器" },
+        { "name": "factory.ef.yituliu.cn", "type": "planner", "note": "一图流旗下终末地量化计算器" }
+      ]
     },
     "skland_pack": {
       "desc": "森空岛 Wiki 转换的物品百科与合成配方包(jei-web 项目)",

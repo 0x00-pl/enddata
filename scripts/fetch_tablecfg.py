@@ -14,7 +14,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-from enddata_http import RAW_DIR, PROJECT_ROOT, fetch_to_cache, gh_api, info, load_json, resolve_branch
+from enddata_http import RAW_DIR, PROJECT_ROOT, fetch_to_cache, gh_api, http_get, info, load_json, resolve_branch
 
 MANIFEST = RAW_DIR / "tablecfg" / "manifest.json"
 
@@ -41,6 +41,11 @@ def main() -> None:
 
     results = {"repo": repo, "branch": branch, "fetched_at": None, "files": {}}
     ok = 0
+    cos_base = None
+    try:
+        cos_base = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["yituliu_cos"]["table_base"]
+    except (KeyError, FileNotFoundError, json.JSONDecodeError):
+        pass
     for name in wanted:
         try:
             last_err = None
@@ -52,6 +57,13 @@ def main() -> None:
                     break
                 except Exception as e:  # noqa: BLE001 - 目录候选失败则继续
                     last_err = e
+            if dest is None and cos_base:
+                # 兜底:一图流 COS 直取(无需 git,见 docs/sources.md)
+                data = http_get(f"{cos_base}/{name}.json")
+                dest = RAW_DIR / "tablecfg" / repo.replace("/", "__") / branch / f"{name}.json"
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                dest.write_bytes(data)
+                channel = "yituliu-cos"
             if dest is None:
                 raise last_err
             results["files"][name] = {

@@ -88,6 +88,32 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 `FactoryMachineCraftTable` 对应字段是 `totalProgress=12000 / progressRound=2`,两者换算
 关系未定;产线规划若需精确耗时,优先从 calc 的精校数据取,或以实测校准 `totalProgress`。
 
+### 一图流(yituliu)数据镜像(已实测验证,备源 ★)
+
+- **TableCfg HTTP 直取**:`https://cos.yituliu.cn/endfield/endfielddata/TableCfg/<表名>.json`
+  (无需 git;已验证 CharacterTable 7.2MB、I18nTextTable_CN 11MB 均返回 200;
+  尺寸与 rmxlinux 版本有差异,作为 jsdelivr/raw 失效时的备源,已登记 `config/sources.json` 的 `yituliu_cos`)
+- 开源生态:前端 [Arknights-yituliu/ef-frontend-v1](https://github.com/Arknights-yituliu/ef-frontend-v1)
+  (已克隆,数据端点权威参考)、后端 `endfield-yituliu-backend`(Java)、资产仓库 `ef-yituliu-frontend-assets`
+- 子站:`factory.ef.yituliu.cn`(量化计算器)、`ef.yituliu.cn/resources/essence-recognizer`(基质识别器)
+
+### 工具站与 Wiki(参考生态,暂不采集)
+
+| 站点 | 类型 | 备注 |
+|---|---|---|
+| [endfieldtools.dev](https://endfieldtools.dev) | 英文数据库+工具 | Next.js SSR,API 未公开文档化 |
+| [caffuchin0/zmdgraph](https://caffuchin0.github.io/zmdgraph) | 养成规划计算器 | **已克隆**;数据内嵌于 `js/data.js`(干员中文名/养成数值,可交叉验证) |
+| [mikunyaaa/endfield-calculator](https://mikunyaaa.github.io/endfield-calculator) | 产线分流计算器 | **已克隆**;数据运行时远程加载 |
+| [maaend.com](https://maaend.com) | 自动化助手 | MaaEnd 智能自动化,数据无关 |
+| [end.canmoe.com](https://end.canmoe.com) | CEP 规划器 | 原终末地基质规划器(Next.js) |
+| [dige.aunly.cn](https://dige.aunly.cn) | 工厂设计器 | D.I.G.E. 能源生产/存储系统设计 |
+| [www.end-axis.com/timeline](https://www.end-axis.com/timeline) | 排轴工具 | 活动时间线 |
+| [www.gamekee.com/zmd](https://www.gamekee.com/zmd) | 攻略 Wiki | GameKee |
+| [warfarin.wiki/cn/operators](https://warfarin.wiki/cn/operators) | 干员 Wiki | SSR 内嵌数据,无公开 JSON 端点 |
+| end.wiki | Wiki | DNS 解析失败(2026-09-15),不可达 |
+
+以上登记于 `config/sources.json` 的 `tools_and_wikis`,后续需要工具逻辑参考或补数据时按图索骥。
+
 ## 三、官方 API —— 玩家侧数据(暂不自动采集)
 
 来自 [AixLnyt/skport-api-docs](https://github.com/AixLnyt/skport-api-docs)(非官方文档,已克隆核对:含完整 OAuth 流程、`cred`/`salt` 签名算法与六域名划分):
