@@ -87,7 +87,7 @@
     "yituliu_cos": {
       "desc": "终末地一图流的 COS 解包数据镜像:TableCfg 可 HTTP 直取(jsdelivr 失效时的备源),无需 git",
       "table_base": "https://cos.yituliu.cn/endfield/endfielddata/TableCfg",
-      "note": "已验证 CharacterTable(7.2MB)/I18nTextTable_CN(11MB) 返回 200;尺寸与 rmxlinux 版本有差异,仅作备源。后端 endfield.backend.yituliu.cn 与前端仓库 Arknights-yituliu/ef-frontend-v1",
+      "note": "实测为开服版快照(25 角色,落后 rmxlinux 8 个;2026-09-15 对比),仅作应急备源不作跟版源。后端 endfield.backend.yituliu.cn 与前端仓库 Arknights-yituliu/ef-frontend-v1",
       "mirrors": ["https://cos.yituliu.cn"]
     },
     "tools_and_wikis": {

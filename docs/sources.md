@@ -88,11 +88,12 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 `FactoryMachineCraftTable` 对应字段是 `totalProgress=12000 / progressRound=2`,两者换算
 关系未定;产线规划若需精确耗时,优先从 calc 的精校数据取,或以实测校准 `totalProgress`。
 
-### 一图流(yituliu)数据镜像(已实测验证,备源 ★)
+### 一图流(yituliu)数据镜像(已实测验证,应急备源 ★)
 
 - **TableCfg HTTP 直取**:`https://cos.yituliu.cn/endfield/endfielddata/TableCfg/<表名>.json`
-  (无需 git;已验证 CharacterTable 7.2MB、I18nTextTable_CN 11MB 均返回 200;
-  尺寸与 rmxlinux 版本有差异,作为 jsdelivr/raw 失效时的备源,已登记 `config/sources.json` 的 `yituliu_cos`)
+  (无需 git;已验证可用)
+- ⚠️ **实测为开服版快照**(25 角色,落后 rmxlinux 8 个角色,与 XiaBei 同世代,2026-09-15 逐项对比):
+  仅作 git 源全部失效时的应急备源,不作跟版源
 - 开源生态:前端 [Arknights-yituliu/ef-frontend-v1](https://github.com/Arknights-yituliu/ef-frontend-v1)
   (已克隆,数据端点权威参考)、后端 `endfield-yituliu-backend`(Java)、资产仓库 `ef-yituliu-frontend-assets`
 - 子站:`factory.ef.yituliu.cn`(量化计算器)、`ef.yituliu.cn/resources/essence-recognizer`(基质识别器)

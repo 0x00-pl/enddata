@@ -77,6 +77,48 @@ graph TD
 **图标资源**(数值表不含贴图,此项无 git 形态,属"无 git 才用网页"的合法情形)。
 一图流 COS 同理:其数值表与 rmxlinux 同源同构,仅作 HTTP 备源,不作主源。
 
+## 二·五、血统确认(2026-09-15 实测)
+
+### 内容世代对比(CharacterTable + i18n)
+
+| 源 | 渠道 | 角色数 | i18n 条数 | 最新角色 | 世代判定 |
+|---|---|---|---|---|---|
+| rmxlinux/EndfieldData | git 本地 | **33** | **147,603** | chr_0032_lizhiyan | **当前版本(唯一跟版)** |
+| luosky/EndfieldDataRmxLinux | git 本地 | 26 | 96,165 | chr_0029_pograni | 2026-03 世代 |
+| 一图流 COS | HTTP | 25 | — | chr_0025_ardelia | **开服版世代** |
+| XiaBei-cy/EndfieldData | git 本地 | 25 | (独立 i18n 目录) | chr_0012_avywen | 开服版世代 |
+
+共同角色字段逐项一致(稀有度/成长曲线相同;rmxlinux 每角色多 3 个新字段)。
+**结论**:四源同出一脉(游戏解包),差别只是解包时点;cos 与 XiaBei 同为开服世代,
+内容上是彼此的冗余而非互补;rmxlinux 是唯一持续跟版的数据源。
+
+### 提交频率(近 90 天,2026-09-15 统计)
+
+| 仓库 | 近90天提交 | 最近提交 | 活跃度判定 |
+|---|---|---|---|
+| JamboChen/endfield-calc | **16** | 2026-09-04 | 最活跃(手工精校持续进行) |
+| daydreamer-json/ak-endfield-api-archive | 13 | 2026-09-05 | 活跃(近自动) |
+| rmxlinux/EndfieldData | 10 | 2026-09-08 | 活跃(随游戏版本提交) |
+| AndreaFrederica/jei-web | 2 | 2026-08-06 | 放缓(数据包趋稳) |
+
+## 二·六、推荐优先数据来源(按数据类别)
+
+> 图例:P0=当前在用主源 P1=推荐备源 P2=历史对照/参考 R=规划接入
+
+| 数据类别 | 推荐顺序 |
+|---|---|
+| **数值表 TableCfg** | **P0 rmxlinux(git 本地)** → P1 一图流 COS(HTTP,开服版仅应急)→ P2 luosky/XiaBei(历史) |
+| **中文 i18n** | **P0 rmxlinux**(147,603 条,唯一含最新文本) → P2 XiaBei 独立 i18n |
+| **图标资源**(头像/职业/物品) | **P0 fffdan vfs**(无 git 形态,唯一渠道);P1 jei-web 森空岛物品包(git,备用) |
+| **生产配方结构** | **P0 rmxlinux FactoryCraftTable 家族**(427 条) |
+| **配方耗时/电力** | **P0 endfield-calc**(git,最活跃,craftingTime 精校)→ P1 rmxlinux totalProgress(换算待实测) |
+| **技能数值(DPS)** | **P0 rmxlinux SkillPatchTable**(509 技能,待加工);参考 endfield-calc 模拟器实现 |
+| **敌人中文名** | **P0 jei-web「威胁」分区**(git);备选 Skport wiki 目录(HTTP) |
+| **养成数值验证** | **P0 zmdgraph js/data.js**(git 内嵌);P1 本表成长曲线自洽校验 |
+| **版本监控** | **P0 rmxlinux main 提交**;P1 fffdan `/version`(HTTP);P2 4n3u manifest |
+| **公告/卡池** | **P0 BiologyHazard archive**(git)→ R Skport API |
+| **玩家个人数据** | R Skport API(无 git,唯一渠道,需用户凭据) |
+
 ## 三、数据类别 × 来源 × 渠道
 
 | 数据类别 | 主源(git) | 备源 | 渠道 | 状态 |
