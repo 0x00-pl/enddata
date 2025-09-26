@@ -4,12 +4,13 @@
 
 ```
 GitHub 源仓库 (rmxlinux/EndfieldData@main,跟随当前游戏版本)
-        │  scripts/fetch_tablecfg.py(jsdelivr → raw → API 三级回退,本地缓存)
+        │  collection/fetch_tablecfg.py(本地git → 缓存 → jsdelivr → raw → COS → API)
         ▼
 data/raw/tablecfg/<repo>/<branch>/*.json     ← 原始快照 + manifest.json(抓取时间)
-        │  scripts/build_dataset.py(i18n 反查、表间 join、attrType 枚举翻译、裁剪字段)
+        │  analysis/build_dataset.py(i18n 反查、表间 join、attrType 枚举翻译、裁剪字段)
         ▼
-site/data/{meta,characters,weapons,items,recipes,enemies}.json   ← 前端直接消费
+data/processed/{meta,characters,weapons,items,recipes,enemies}.json   ← 生成的报告,由 site/ 消费
+reports/build-report.md                                               ← 人类可读构建报告
 ```
 
 ## 文本引用规则
@@ -20,7 +21,7 @@ site/data/{meta,characters,weapons,items,recipes,enemies}.json   ← 前端直�
 
 ## 属性枚举(重要)
 
-新版解包把 `attrType` 从字符串改成了整数。`scripts/build_dataset.py` 内置
+新版解包把 `attrType` 从字符串改成了整数。`analysis/build_dataset.py` 内置
 `INT_ATTR_MAP`(0=Level,1=MaxHp,2=Atk,3=Def,9=暴击率,10=暴击伤害,
 39-42=力/敏/智/意志,4-7/48/55=各系受伤倍率),依据 `TableCfg/AttributeMetaTable.json`
 的 iconName 反查并经数值交叉验证。旧镜像的字符串 attrType 原样透传,两版兼容。

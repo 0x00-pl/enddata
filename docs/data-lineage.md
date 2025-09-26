@@ -6,10 +6,10 @@
 
 > **原则:同一数据优先追溯到 git 项目;没有 git 项目的,才允许网页/HTTP 渠道。**
 
-实际解析顺序(`scripts/enddata_http.py` 统一实现):
+实际解析顺序(`collection/enddata_http.py` 统一实现):
 
 ```
-1. data/repos/ 本地 git 克隆      ← 零网络,首选(scripts/clone_sources.py 维护)
+1. sources/ 本地 git 克隆      ← 零网络,首选(collection/clone_sources.py 维护)
 2. data/raw/ 历史缓存             ← 零网络
 3. jsdelivr / raw.githubusercontent ← 无配额 HTTP(git 项目文件的网页形态)
 4. 一图流 COS(TableCfg 专用)     ← 无 git 的 HTTP 镜像,备源
@@ -66,7 +66,7 @@ graph TD
     ARCHIVE -.->|"版本资源 manifest(规划)"| ENDDATA
 
     subgraph ENDDATA[EndData 本项目]
-        FETCH[fetch_tablecfg.py] --> BUILD[build_dataset.py] --> SITE[site/data/*.json]
+        FETCH[fetch_tablecfg.py] --> BUILD[build_dataset.py] --> SITE[data/processed/*.json]
     end
 
     GAME -.->|"同源旁证:两站消费同一份解包"| FFFDAN_SPA[宏山档案局/天师工具箱<br>消费同一 vfs 后端]
@@ -137,7 +137,7 @@ graph TD
 
 ## 四、统计(2026-09-15)
 
-### 本地 git 仓库(`data/repos/`,已 gitignore)
+### 本地 git 仓库(`sources/`,已 gitignore)
 
 | 指标 | 值 |
 |---|---|
@@ -157,7 +157,7 @@ graph TD
 | rmxlinux/EndfieldData | 6.6M | **主源**(partial) |
 | 其余 7 个 | <1.1M | 历史对照/文档/工具 |
 
-### 数据集产出(`site/data/`,构建于 rmxlinux@main 2026-09-08)
+### 数据集产出(`data/processed/`,构建于 rmxlinux@main 2026-09-08)
 
 | 数据集 | 条数 |
 |---|---|
@@ -183,5 +183,5 @@ graph TD
    `config/sources.json` 标注 `note` 说明原因。
 2. 同一数据出现多个来源时,以「跟版最新 > 结构完整 > 可本地化」排序,其余降级为
    历史对照(参考现有主源/镜像分层)。
-3. 更新流程:`python3 scripts/clone_sources.py`(更新所有 git 源)→ `fetch_tablecfg.py`
-   (本地直读)→ `build_dataset.py` → 提交 `site/data` 变更。
+3. 更新流程:`python3 collection/clone_sources.py`(更新所有 git 源)→ `fetch_tablecfg.py`
+   (本地直读)→ `build_dataset.py` → 提交 `reports/` 变更。

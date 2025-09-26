@@ -15,7 +15,7 @@ const FORMATTER = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 async function loadData() {
   const names = ["meta", "characters", "weapons", "items", "recipes", "enemies"];
   const results = await Promise.allSettled(
-    names.map(async (n) => (await fetch(`data/${n}.json`)).json())
+    names.map(async (n) => (await fetch(`/data/processed/${n}.json`)).json())
   );
   names.forEach((n, i) => {
     if (results[i].status === "fulfilled") state.data[n] = results[i].value;

@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""把 data/raw/ 下的原始 TableCfg 加工为前端可用的数据集,输出到 site/data/。
+"""数据分析:把 data/raw/ 下的原始 TableCfg 加工为数据集(生成的报告)。
+
+产出:
+    - data/processed/*.json        数据集(由 site/ 网页展示消费)
+    - reports/build-report.md      人类可读的构建报告
 
 流水线:
     1. 加载 i18n 中文表,把所有 {id: 哈希} 文本引用解析成中文名
@@ -8,18 +12,21 @@
     4. 手工/机器/飞船配方合并 → recipes.json(机器配方的可选原料组保留为 options)
     5. 武器表 → weapons.json
     6. 敌人表 × 显示信息 × 属性模板 → enemies.json(含等级曲线摘要与抗性)
-    7. meta.json(构建信息与统计)
+    7. meta.json(构建信息与统计)+ 构建报告 markdown
 
-用法: python3 scripts/build_dataset.py
+用法: python3 analysis/build_dataset.py
 """
 
 from __future__ import annotations
 
 import json
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-from enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "collection"))
+
+from enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json  # noqa: E402
 
 
 def raw_dir() -> Path:
@@ -28,7 +35,8 @@ def raw_dir() -> Path:
 
 
 BRANCH_DIR = raw_dir()
-SITE_DATA = PROJECT_ROOT / "site" / "data"
+PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+REPORTS_DIR = PROJECT_ROOT / "reports"
 
 ATTRACTIONS_OF_INTEREST = ["MaxHp", "Atk", "Def", "Str", "Agi", "Wisd", "Will"]
 
@@ -96,7 +104,7 @@ class I18n:
 
 
 def dump(name: str, payload):
-    dest = SITE_DATA / f"{name}.json"
+    dest = PROCESSED_DIR / f"{name}.json"
     dest.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
     info(f"  -> {dest.relative_to(PROJECT_ROOT)} ({dest.stat().st_size/1024:.0f} KB, {len(payload) if isinstance(payload, list) else '...'} 条)")
 
@@ -119,7 +127,8 @@ def flat_attrs(attrs: list[dict] | None) -> dict:
 
 def main() -> None:
     t0 = datetime.now(timezone.utc)
-    SITE_DATA.mkdir(parents=True, exist_ok=True)
+    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
+    REPORTS_DIR.mkdir(parents=True, exist_ok=True)
     load_vfs_config()
     raw = {p.stem: load_json(p) for p in BRANCH_DIR.glob("*.json")}
     info(f"加载原始表: {len(raw)} 张")
@@ -272,6 +281,39 @@ def main() -> None:
     }
     dump("meta", meta)
     info(f"i18n 未命中 {t.misses} 处(哈希不在 CN 表中,多为占位 0)")
+
+    # ---- 构建报告(人类可读,写入 reports/) ----
+    manifest = load_json(RAW_DIR / "tablecfg" / "manifest.json")
+    channels: dict[str, int] = {}
+    for f in manifest.get("files", {}).values():
+        ch = f.get("channel", "?")
+        channels[ch] = channels.get(ch, 0) + 1
+    icon_items = sum(1 for i in items if i.get("iconUrl"))
+    report = f"""# 构建报告
+
+- 构建时间:{t0.isoformat(timespec="seconds")}(UTC)
+- 数据源:{_src["repo"]}@{_src["branch"]}(抓取于 {meta["source"]["fetchedAt"]})
+- 抓取渠道分布:{json.dumps(channels, ensure_ascii=False)}
+- i18n 未命中:{t.misses}
+
+## 数据集规模
+
+| 数据集 | 条数 |
+|---|---|
+| 干员 characters | {len(characters)} |
+| 物品 items(含图标链接 {icon_items} 条) | {len(items)} |
+| 配方 recipes | {len(recipes)} |
+| 武器 weapons | {len(weapons)} |
+| 敌人 enemies | {len(enemies)} |
+
+## 产物位置
+
+- 数据集:`data/processed/*.json`(网页展示由 `site/` 消费)
+- 本报告:`reports/build-report.md`
+"""
+    report_dest = REPORTS_DIR / "build-report.md"
+    report_dest.write_text(report, encoding="utf-8")
+    info(f"  -> {report_dest.relative_to(PROJECT_ROOT)}")
 
 
 if __name__ == "__main__":

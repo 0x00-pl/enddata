@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""把 config/sources.json 中所有 git 形态数据源克隆/更新到本地 data/repos/。
+"""把 config/sources.json 中所有 git 形态数据源克隆/更新到本地 sources/。
 
 克隆策略:
     - 全部 --depth 1 --single-branch(只需要当前版本数据)
@@ -9,8 +9,8 @@
     - 已存在的仓库执行 fetch + reset 更新到远端最新
 
 用法:
-    python3 scripts/clone_sources.py            # 克隆缺失的 + 更新已有的
-    python3 scripts/clone_sources.py --no-update  # 只克隆缺失的,不更新已有
+    python3 collection/clone_sources.py            # 克隆缺失的 + 更新已有的
+    python3 collection/clone_sources.py --no-update  # 只克隆缺失的,不更新已有
 """
 
 from __future__ import annotations
@@ -97,7 +97,7 @@ def main() -> None:
     if args.only:
         entries = [e for e in entries if e["repo"] in args.only]
 
-    REPOS_DIR = PROJECT_ROOT / git_cfg.get("repos_dir", "data/repos")
+    REPOS_DIR = PROJECT_ROOT / git_cfg.get("repos_dir", "sources")
     REPOS_DIR.mkdir(parents=True, exist_ok=True)
 
     summary: dict[str, int] = {}

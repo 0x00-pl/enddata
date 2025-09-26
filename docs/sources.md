@@ -19,7 +19,7 @@
 | [4n3u/EndfieldResourceData](https://github.com/4n3u/EndfieldResourceData)(7★) | 活跃 | 各版本资源 manifest(1.0.14 → 1.5.3) | **版本更新监控**用 |
 | [BiologyHazard/endfield-archive-library](https://github.com/BiologyHazard/endfield-archive-library) | 每日活跃 | 官方公告/卡池(up-recruit)等 API 响应存档 | 活动与卡池资讯数据,非数值表 |
 
-**版本跟进方式**:所有 git 数据源已统一克隆到本地 `data/repos/`(`scripts/clone_sources.py`
+**版本跟进方式**:所有 git 数据源已统一克隆到本地 `sources/`(`collection/clone_sources.py`
 维护,重跑即更新到远端最新);抓取脚本的渠道优先级为 **本地 git 仓库 → data/raw 缓存 →
 jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库(blob:none)的 blob
 首次读取会经仓库配置里的代理懒取,之后即本地缓存。
@@ -65,7 +65,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 - **主机故障转移**(前端按序重试):`endfield-assets.fffdan.com` → `cn/cn2/cn3.endfield.fffdan.com`;
   该 CDN 间歇性抖动,请求需带重试
 - **版本端点**:`GET /version` → 官方构建号(如 `initial_10024360-6_main_10024360-6`),
-  `scripts/fffdan_version.py` 用它做更新监控(`--record` 记录基线,再跑即对比)
+  `tools/fffdan_version.py` 用它做更新监控(`--record` 记录基线,再跑即对比)
 - **资源直取**:`GET /vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites/<路径>`(WebP)。
 
 | 资源 | 路径模板 | 对应字段 | 验证 |
@@ -150,7 +150,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 5. **生产系统深度数据**:电力、物流带、流派加成表已可从 rmxlinux 抓取,尚未加工;
    机器配方的 `totalProgress/progressRound` 与实际秒数的换算待实测(endfield-calc 用手工维护的 craftingTime)。
 6. **战斗属性枚举**:新版 `attrType` 为整数(AttributeMetaTable 可反查图标名),
-   `scripts/build_dataset.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
+   `analysis/build_dataset.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
 
 ## 六、本机网络备忘(采集脚本环境)
 
@@ -160,6 +160,6 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
   - git 用 `-c http.proxy=...`(libcurl 原生代理)最稳;proxychains4 的 LD_PRELOAD 层会让 git 长连接卡死。
   - 文件下载走 `cdn.jsdelivr.net/gh/<repo>@<branch>/<path>`(20MB 内),大文件用 GitHub API blob 兜底。
   - 克隆大仓库务必加 `--depth 1` 与低速熔断(`http.lowSpeedLimit/lowSpeedTime`,注意它们是 git 配置而非环境变量)。
-- **数据源本地化**:git 形态的源统一克隆在 `data/repos/`(已 gitignore),由 `scripts/clone_sources.py`
+- **数据源本地化**:git 形态的源统一克隆在 `sources/`(已 gitignore),由 `collection/clone_sources.py`
   克隆/更新;大仓库一律 partial 克隆(`--filter=blob:none --no-checkout`)。
   ⚠️ partial 仓库更新后**不要** `reset --hard`(会触发全量 blob 懒取),用 `git update-ref` 移动分支引用。

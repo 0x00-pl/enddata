@@ -1,23 +1,81 @@
 {
   "$comment": "终末地数据源注册表。branch 为 null 时运行时通过 GitHub API 解析默认分支。",
   "git": {
-    "$comment": "git 形态数据源统一克隆到 data/repos/,抓取脚本优先读本地;partial=true 用 blob:none 部分克隆(blob 按需懒取,取过即本地缓存)",
-    "repos_dir": "data/repos",
+    "$comment": "git 形态数据源统一克隆到 sources//,抓取脚本优先读本地;partial=true 用 blob:none 部分克隆(blob 按需懒取,取过即本地缓存)",
+    "repos_dir": "sources",
     "proxy": "http://10.1.20.20:7890",
     "clone": [
-      { "repo": "rmxlinux/EndfieldData", "branch": "main", "partial": true, "role": "tablecfg 主源(1.5GB,必须 partial)" },
-      { "repo": "luosky/EndfieldDataRmxLinux", "branch": "main", "partial": true, "role": "tablecfg 旧备份" },
-      { "repo": "XiaBei-cy/EndfieldData", "branch": "master", "partial": true, "role": "开服版对照" },
-      { "repo": "Hengle/EndFieldData-Archive", "partial": true, "role": "分版本历史快照(文件多,必须 partial)" },
-      { "repo": "lsy-404/EndfieldGameData", "partial": false, "role": "测试服历史(小仓库全量)" },
-      { "repo": "UPON-2021/EndFieldData", "partial": true, "role": "测试服历史+Lua" },
-      { "repo": "AndreaFrederica/jei-web", "partial": true, "role": "森空岛 Wiki 配方/物品包" },
-      { "repo": "JamboChen/endfield-calc", "branch": "master", "partial": false, "role": "产线计算参考(69MB 全量)" },
-      { "repo": "daydreamer-json/ak-endfield-api-archive", "branch": "main", "partial": true, "role": "官方 API 存档" },
-      { "repo": "AixLnyt/skport-api-docs", "partial": false, "role": "Skport API 文档(小仓库全量)" },
-      { "repo": "CaffuChin0/zmdgraph", "partial": false, "role": "终末地养成规划计算器(19MB,含养成数据)" },
-      { "repo": "mikunyaaa/endfield-calculator", "partial": false, "role": "产线分流计算器" },
-      { "repo": "Arknights-yituliu/ef-frontend-v1", "branch": "main", "partial": true, "role": "一图流前端(数据端点权威参考)" }
+      {
+        "repo": "rmxlinux/EndfieldData",
+        "branch": "main",
+        "partial": true,
+        "role": "tablecfg 主源(1.5GB,必须 partial)"
+      },
+      {
+        "repo": "luosky/EndfieldDataRmxLinux",
+        "branch": "main",
+        "partial": true,
+        "role": "tablecfg 旧备份"
+      },
+      {
+        "repo": "XiaBei-cy/EndfieldData",
+        "branch": "master",
+        "partial": true,
+        "role": "开服版对照"
+      },
+      {
+        "repo": "Hengle/EndFieldData-Archive",
+        "partial": true,
+        "role": "分版本历史快照(文件多,必须 partial)"
+      },
+      {
+        "repo": "lsy-404/EndfieldGameData",
+        "partial": false,
+        "role": "测试服历史(小仓库全量)"
+      },
+      {
+        "repo": "UPON-2021/EndFieldData",
+        "partial": true,
+        "role": "测试服历史+Lua"
+      },
+      {
+        "repo": "AndreaFrederica/jei-web",
+        "partial": true,
+        "role": "森空岛 Wiki 配方/物品包"
+      },
+      {
+        "repo": "JamboChen/endfield-calc",
+        "branch": "master",
+        "partial": false,
+        "role": "产线计算参考(69MB 全量)"
+      },
+      {
+        "repo": "daydreamer-json/ak-endfield-api-archive",
+        "branch": "main",
+        "partial": true,
+        "role": "官方 API 存档"
+      },
+      {
+        "repo": "AixLnyt/skport-api-docs",
+        "partial": false,
+        "role": "Skport API 文档(小仓库全量)"
+      },
+      {
+        "repo": "CaffuChin0/zmdgraph",
+        "partial": false,
+        "role": "终末地养成规划计算器(19MB,含养成数据)"
+      },
+      {
+        "repo": "mikunyaaa/endfield-calculator",
+        "partial": false,
+        "role": "产线分流计算器"
+      },
+      {
+        "repo": "Arknights-yituliu/ef-frontend-v1",
+        "branch": "main",
+        "partial": true,
+        "role": "一图流前端(数据端点权威参考)"
+      }
     ]
   },
   "sources": {
@@ -27,11 +85,30 @@
       "branch": "main",
       "note": "2026-09-08 更新,725 表,i18n 位于 TableCfg/ 目录内;HEAD 更新到当前游戏版本",
       "mirrors": [
-        { "repo": "luosky/EndfieldDataRmxLinux", "branch": "main", "note": "rmxlinux 数值部分的旧备份(2026-03,无 i18n)" },
-        { "repo": "XiaBei-cy/EndfieldData", "branch": "master", "note": "正式服开服版(2026-01,561 表),i18n 在单独 i18n/ 目录;历史对照", "table_dir": "TableCfg", "i18n_dir": "i18n" },
-        { "repo": "Hengle/EndFieldData-Archive", "note": "0.5.5→0.5.28 分版本历史快照(测试服时代)" },
-        { "repo": "lsy-404/EndfieldGameData", "note": "2025-01 测试服旧版,仅作历史参考" },
-        { "repo": "UPON-2021/EndFieldData", "note": "2025-01 测试服旧版,附 LuaScripts" }
+        {
+          "repo": "luosky/EndfieldDataRmxLinux",
+          "branch": "main",
+          "note": "rmxlinux 数值部分的旧备份(2026-03,无 i18n)"
+        },
+        {
+          "repo": "XiaBei-cy/EndfieldData",
+          "branch": "master",
+          "note": "正式服开服版(2026-01,561 表),i18n 在单独 i18n/ 目录;历史对照",
+          "table_dir": "TableCfg",
+          "i18n_dir": "i18n"
+        },
+        {
+          "repo": "Hengle/EndFieldData-Archive",
+          "note": "0.5.5→0.5.28 分版本历史快照(测试服时代)"
+        },
+        {
+          "repo": "lsy-404/EndfieldGameData",
+          "note": "2025-01 测试服旧版,仅作历史参考"
+        },
+        {
+          "repo": "UPON-2021/EndFieldData",
+          "note": "2025-01 测试服旧版,附 LuaScripts"
+        }
       ],
       "table_dir": "TableCfg",
       "i18n_dir": "TableCfg",
@@ -81,28 +158,81 @@
         "talent_tree_icon": "talenttreeicon/icon_talenttree_{icon}.png",
         "inventory_icon": "inventory/{icon}.png"
       },
-      "paths_verified": ["char_icon", "char_round_icon", "profession_icon", "attribute_icon", "item_icon"],
-      "paths_unverified": ["factory_building_panel_icon", "element_icon", "talent_tree_icon", "inventory_icon"]
+      "paths_verified": [
+        "char_icon",
+        "char_round_icon",
+        "profession_icon",
+        "attribute_icon",
+        "item_icon"
+      ],
+      "paths_unverified": [
+        "factory_building_panel_icon",
+        "element_icon",
+        "talent_tree_icon",
+        "inventory_icon"
+      ]
     },
     "yituliu_cos": {
       "desc": "终末地一图流的 COS 解包数据镜像:TableCfg 可 HTTP 直取(jsdelivr 失效时的备源),无需 git",
       "table_base": "https://cos.yituliu.cn/endfield/endfielddata/TableCfg",
       "note": "实测为开服版快照(25 角色,落后 rmxlinux 8 个;2026-09-15 对比),仅作应急备源不作跟版源。后端 endfield.backend.yituliu.cn 与前端仓库 Arknights-yituliu/ef-frontend-v1",
-      "mirrors": ["https://cos.yituliu.cn"]
+      "mirrors": [
+        "https://cos.yituliu.cn"
+      ]
     },
     "tools_and_wikis": {
       "$comment": "工具站与 Wiki:定位为参考/工具生态,暂不作为数据采集源",
       "entries": [
-        { "name": "endfieldtools.dev", "type": "database+tools", "note": "英文数据库与工具站(Next.js SSR),API 未公开文档化" },
-        { "name": "maaend.com", "type": "automation", "note": "MaaEnd 智能自动化助手,数据无关" },
-        { "name": "end.canmoe.com", "type": "planner", "note": "CEP 终末地规划器(原基质规划器),Next.js" },
-        { "name": "dige.aunly.cn", "type": "planner", "note": "D.I.G.E. 帝江号工厂能源生产/存储系统设计器" },
-        { "name": "www.end-axis.com/timeline", "type": "tool", "note": "Endaxis 排轴工具(活动时间线)" },
-        { "name": "www.gamekee.com/zmd", "type": "wiki", "note": "GameKee 终末地攻略 Wiki" },
-        { "name": "warfarin.wiki/cn/operators", "type": "wiki", "note": "Warfarin Wiki 干员数据(SSR 内嵌,无公开 JSON 端点)" },
-        { "name": "end.wiki", "type": "wiki", "note": "DNS 解析失败(2026-09-15),不可达" },
-        { "name": "ef.yituliu.cn/resources/essence-recognizer", "type": "tool", "note": "一图流基质识别器" },
-        { "name": "factory.ef.yituliu.cn", "type": "planner", "note": "一图流旗下终末地量化计算器" }
+        {
+          "name": "endfieldtools.dev",
+          "type": "database+tools",
+          "note": "英文数据库与工具站(Next.js SSR),API 未公开文档化"
+        },
+        {
+          "name": "maaend.com",
+          "type": "automation",
+          "note": "MaaEnd 智能自动化助手,数据无关"
+        },
+        {
+          "name": "end.canmoe.com",
+          "type": "planner",
+          "note": "CEP 终末地规划器(原基质规划器),Next.js"
+        },
+        {
+          "name": "dige.aunly.cn",
+          "type": "planner",
+          "note": "D.I.G.E. 帝江号工厂能源生产/存储系统设计器"
+        },
+        {
+          "name": "www.end-axis.com/timeline",
+          "type": "tool",
+          "note": "Endaxis 排轴工具(活动时间线)"
+        },
+        {
+          "name": "www.gamekee.com/zmd",
+          "type": "wiki",
+          "note": "GameKee 终末地攻略 Wiki"
+        },
+        {
+          "name": "warfarin.wiki/cn/operators",
+          "type": "wiki",
+          "note": "Warfarin Wiki 干员数据(SSR 内嵌,无公开 JSON 端点)"
+        },
+        {
+          "name": "end.wiki",
+          "type": "wiki",
+          "note": "DNS 解析失败(2026-09-15),不可达"
+        },
+        {
+          "name": "ef.yituliu.cn/resources/essence-recognizer",
+          "type": "tool",
+          "note": "一图流基质识别器"
+        },
+        {
+          "name": "factory.ef.yituliu.cn",
+          "type": "planner",
+          "note": "一图流旗下终末地量化计算器"
+        }
       ]
     },
     "skland_pack": {
@@ -117,7 +247,11 @@
       "repo": "JamboChen/endfield-calc",
       "branch": "master",
       "recipes_ts": "src/data/recipes.ts",
-      "extra_data": ["src/data/power.ts", "src/data/facilities.ts", "src/data/items.ts"]
+      "extra_data": [
+        "src/data/power.ts",
+        "src/data/facilities.ts",
+        "src/data/items.ts"
+      ]
     },
     "world_data": {
       "desc": "关卡/地图/场景实体数据(rmxlinux HEAD 不含 TableCfg,数值备份在 luosky)",
