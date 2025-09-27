@@ -9,8 +9,8 @@
     - 已存在的仓库执行 fetch + reset 更新到远端最新
 
 用法:
-    python3 collection/clone_sources.py            # 克隆缺失的 + 更新已有的
-    python3 collection/clone_sources.py --no-update  # 只克隆缺失的,不更新已有
+    python3 src/collection/clone_sources.py            # 克隆缺失的 + 更新已有的
+    python3 src/collection/clone_sources.py --no-update  # 只克隆缺失的,不更新已有
 """
 
 from __future__ import annotations

@@ -19,7 +19,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # src/collection/ → 仓库根
 RAW_DIR = PROJECT_ROOT / "data" / "raw"
 REPOS_DIR = PROJECT_ROOT / "sources"
 

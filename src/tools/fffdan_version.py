@@ -5,8 +5,8 @@
 与上次记录(data/raw/fffdan_version.txt)对比,变化时提示可能出新版本数据。
 
 用法:
-    python3 collection/fffdan_version.py            # 查询并对比
-    python3 collection/fffdan_version.py --record   # 查询并记录当前版本
+    python3 src/collection/fffdan_version.py            # 查询并对比
+    python3 src/collection/fffdan_version.py --record   # 查询并记录当前版本
 """
 
 from __future__ import annotations

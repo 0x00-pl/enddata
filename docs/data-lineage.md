@@ -9,7 +9,7 @@
 实际解析顺序(`collection/enddata_http.py` 统一实现):
 
 ```
-1. sources/ 本地 git 克隆      ← 零网络,首选(collection/clone_sources.py 维护)
+1. sources/ 本地 git 克隆      ← 零网络,首选(src/collection/clone_sources.py 维护)
 2. data/raw/ 历史缓存             ← 零网络
 3. jsdelivr / raw.githubusercontent ← 无配额 HTTP(git 项目文件的网页形态)
 4. 一图流 COS(TableCfg 专用)     ← 无 git 的 HTTP 镜像,备源
@@ -183,5 +183,5 @@ graph TD
    `config/sources.json` 标注 `note` 说明原因。
 2. 同一数据出现多个来源时,以「跟版最新 > 结构完整 > 可本地化」排序,其余降级为
    历史对照(参考现有主源/镜像分层)。
-3. 更新流程:`python3 collection/clone_sources.py`(更新所有 git 源)→ `fetch_tablecfg.py`
+3. 更新流程:`python3 src/collection/clone_sources.py`(更新所有 git 源)→ `fetch_tablecfg.py`
    (本地直读)→ `build_dataset.py` → 提交 `reports/` 变更。

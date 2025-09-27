@@ -2,9 +2,9 @@
 """抓取终末地 TableCfg 核心数值表到 data/raw/tablecfg/。
 
 用法:
-    python3 collection/fetch_tablecfg.py              # 抓取 config/sources.json 中的 core_tables
-    python3 collection/fetch_tablecfg.py ItemTable EnemyTable   # 只抓指定表
-    python3 collection/fetch_tablecfg.py --force      # 忽略本地缓存强制重新抓取
+    python3 src/collection/fetch_tablecfg.py              # 抓取 config/sources.json 中的 core_tables
+    python3 src/collection/fetch_tablecfg.py ItemTable EnemyTable   # 只抓指定表
+    python3 src/collection/fetch_tablecfg.py --force      # 忽略本地缓存强制重新抓取
 """
 
 from __future__ import annotations

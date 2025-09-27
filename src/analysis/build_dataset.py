@@ -14,7 +14,7 @@
     6. 敌人表 × 显示信息 × 属性模板 → enemies.json(含等级曲线摘要与抗性)
     7. meta.json(构建信息与统计)+ 构建报告 markdown
 
-用法: python3 analysis/build_dataset.py
+用法: python3 src/analysis/build_dataset.py
 """
 
 from __future__ import annotations

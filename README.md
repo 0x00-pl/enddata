@@ -24,11 +24,11 @@
 
 ```bash
 # ① 数据采集:把所有 git 数据源克隆到本地 sources/,抓取优先读本地
-python3 collection/clone_sources.py      # 重跑即更新到远端最新
-python3 collection/fetch_tablecfg.py     # 抓取原始数值表(本地命中则零网络)
+python3 src/collection/clone_sources.py      # 重跑即更新到远端最新
+python3 src/collection/fetch_tablecfg.py     # 抓取原始数值表(本地命中则零网络)
 
 # ② 数据分析:加工为数据集与构建报告
-python3 analysis/build_dataset.py        # 输出 data/processed/*.json + reports/build-report.md
+python3 src/analysis/build_dataset.py        # 输出 data/processed/*.json + reports/build-report.md
 
 # ③ 数据展示:本地预览(从仓库根目录起服务)
 python3 -m http.server 8321 --bind 127.0.0.1
@@ -47,14 +47,15 @@ enddata/
 │   ├── sources.md          # 数据源调研报告
 │   ├── data-model.md       # 原始表 → 数据集的流水线与字段说明
 │   └── data-lineage.md     # 来源血缘关系、追溯规则与统计
-├── collection/             # ① 数据采集
-│   ├── enddata_http.py     #   抓取公共库:本地git → 缓存 → jsdelivr → raw → COS → API
-│   ├── clone_sources.py    #   数据源仓库克隆/更新到 sources/
-│   └── fetch_tablecfg.py   #   TableCfg 数值表抓取到 data/raw/
-├── analysis/               # ② 数据分析
-│   └── build_dataset.py    #   i18n 反查 + 表间 join → 数据集与构建报告
-├── tools/                  # 其他工具
-│   └── fffdan_version.py   #   宏山档案局 /version 构建号监控
+├── src/                    # 功能代码
+│   ├── collection/         #   ① 数据采集
+│   │   ├── enddata_http.py     # 抓取公共库:本地git → 缓存 → jsdelivr → raw → COS → API
+│   │   ├── clone_sources.py    # 数据源仓库克隆/更新到 sources/
+│   │   └── fetch_tablecfg.py   # TableCfg 数值表抓取到 data/raw/
+│   ├── analysis/           #   ② 数据分析
+│   │   └── build_dataset.py    # i18n 反查 + 表间 join → 数据集与构建报告
+│   └── tools/              #   其他工具
+│       └── fffdan_version.py   # 宏山档案局 /version 构建号监控
 ├── sources/                # 数据源(13 个本地 git 克隆,gitignore,约 380MB)
 ├── data/
 │   ├── raw/                # 采集好的数据(原始快照 + manifest 抓取清单)
