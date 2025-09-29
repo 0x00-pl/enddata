@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "enddata"
+version = "0.1.0"
+description = "明日方舟:终末地 战斗与生产数据采集、分析与展示(标准库实现,零第三方依赖)"
+authors = ["enddata"]
+readme = "README.md"
+license = "MIT"
+packages = [
+    { include = "collection", from = "src" },
+    { include = "analysis", from = "src" },
+    { include = "tools", from = "src" },
+]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+# 运行时零第三方依赖:采集走标准库(urllib/subprocess),分析走 json/csv
+
+[tool.poetry.scripts]
+enddata-clone = "collection.clone_sources:main"
+enddata-fetch = "collection.fetch_tablecfg:main"
+enddata-build = "analysis.build_dataset:main"
+enddata-version = "tools.fffdan_version:main"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
