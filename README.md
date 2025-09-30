@@ -22,25 +22,31 @@
 
 ## 快速开始
 
+项目由 Poetry 管理(运行时零第三方依赖),首次使用先 `poetry install`:
+
 ```bash
 # ① 数据采集:把所有 git 数据源克隆到本地 sources/,抓取优先读本地
-python3 src/collection/clone_sources.py      # 重跑即更新到远端最新
-python3 src/collection/fetch_tablecfg.py     # 抓取原始数值表(本地命中则零网络)
+poetry run enddata-clone                 # 重跑即更新到远端最新
+poetry run enddata-fetch                 # 抓取原始数值表(本地命中则零网络)
 
 # ② 数据分析:加工为数据集与构建报告
-python3 src/analysis/build_dataset.py        # 输出 data/processed/*.json + reports/build-report.md
+poetry run enddata-build                 # 输出 data/processed/*.json + reports/build-report.md
 
 # ③ 数据展示:本地预览(从仓库根目录起服务)
 python3 -m http.server 8321 --bind 127.0.0.1
 # 打开 http://127.0.0.1:8321/site/
 ```
 
-无第三方依赖(Python 3.10+ 标准库)。
+等价的辅助命令:`poetry run enddata-version`(宏山档案局构建号监控)。
+不使用 Poetry 也可以直接以脚本方式运行:`python3 src/collection/clone_sources.py`、
+`python3 src/collection/fetch_tablecfg.py`、`python3 src/analysis/build_dataset.py`(Python 3.10+ 标准库)。
 
 ## 目录结构
 
 ```
 enddata/
+├── pyproject.toml          # Poetry 项目定义与命令行入口
+├── poetry.lock
 ├── config/
 │   └── sources.json        # 数据源注册表(git 仓库清单/核心表/官方 API 端点/资源路径模板)
 ├── docs/                   # 项目文档
