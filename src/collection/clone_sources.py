@@ -17,14 +17,9 @@ from __future__ import annotations
 
 import argparse
 import subprocess
-import sys
 import time
-from pathlib import Path
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from collection.enddata_http import PROJECT_ROOT, git_env, git_proxy, info, load_json, repo_dir  # noqa: E402
+from collection.enddata_http import PROJECT_ROOT, git_env, git_proxy, info, load_json, repo_dir
 
 
 def run_git(args: list[str], cwd: Path | None = None, timeout: int = 600) -> tuple[int, str]:

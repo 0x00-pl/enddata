@@ -11,13 +11,8 @@ from __future__ import annotations
 
 import argparse
 import json
-import sys
 import time
-from pathlib import Path
 from datetime import datetime, timezone
-
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from collection.enddata_http import RAW_DIR, PROJECT_ROOT, fetch_to_cache, gh_api, http_get, info, load_json, resolve_branch
 

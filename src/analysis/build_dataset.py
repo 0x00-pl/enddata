@@ -20,14 +20,10 @@
 from __future__ import annotations
 
 import json
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from collection.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json  # noqa: E402
+from collection.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
 
 
 def raw_dir() -> Path:

@@ -37,9 +37,10 @@ python3 -m http.server 8321 --bind 127.0.0.1
 # 打开 http://127.0.0.1:8321/site/
 ```
 
-等价的辅助命令:`poetry run enddata-version`(宏山档案局构建号监控)。
-不使用 Poetry 也可以直接以脚本方式运行:`python3 src/collection/clone_sources.py`、
-`python3 src/collection/fetch_tablecfg.py`、`python3 src/analysis/build_dataset.py`(Python 3.10+ 标准库)。
+等价的辅助命令:`poetry run enddata-version`(宏山档案局构建号监控);
+也支持模块方式运行:`poetry run python -m collection.fetch_tablecfg`。
+导入采用规范的包内绝对导入(`from collection.enddata_http import ...`),不做任何 sys.path 修改,
+因此请在 Poetry 虚拟环境内运行(`poetry run`/`poetry shell`,需先 `poetry install`)。
 
 ## 目录结构
 

@@ -12,11 +12,6 @@
 from __future__ import annotations
 
 import argparse
-import sys
-from pathlib import Path
-
-if __package__ in (None, ""):
-    sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from collection.enddata_http import PROJECT_ROOT, RAW_DIR, http_get, load_json
 
