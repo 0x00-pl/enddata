@@ -102,7 +102,7 @@ class I18n:
 
 def dump(name: str, payload):
     dest = PROCESSED_DIR / f"{name}.json"
-    dest.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    dest.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     info(f"  -> {dest.relative_to(PROJECT_ROOT)} ({dest.stat().st_size/1024:.0f} KB, {len(payload) if isinstance(payload, list) else '...'} 条)")
 
 
