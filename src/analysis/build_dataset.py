@@ -11,8 +11,9 @@
     3. 物品表 × 物品类型表 → items.json
     4. 手工/机器/飞船配方合并 → recipes.json(机器配方的可选原料组保留为 options)
     5. 武器表 → weapons.json
-    6. 敌人表 × 显示信息 × 属性模板 → enemies.json(含等级曲线摘要与抗性)
-    7. meta.json(构建信息与统计)+ 构建报告 markdown
+    6. 装备表 × 套装表 → equips.json(含词条与套装效果)
+    7. 敌人表 × 显示信息 × 属性模板 → enemies.json(含等级曲线摘要与抗性)
+    8. meta.json(构建信息与统计)+ 构建报告 markdown
 
 用法: python3 src/analysis/build_dataset.py
 """
@@ -45,6 +46,13 @@ INT_ATTR_MAP = {
     4: "PhysicalDamageTakenScalar", 5: "FireDamageTakenScalar",
     6: "PulseDamageTakenScalar", 7: "CrystDamageTakenScalar",
     55: "EtherDamageTakenScalar", 48: "NaturalDamageTakenScalar",
+    # 以下取自 AttributeMetaTable 的 iconName(装备词条常见效率类)
+    17: "NormalAtkEfficiency", 28: "UltimateSkillEfficiency", 32: "NormalSkillEfficiency",
+    33: "ComboSkillEfficiency", 44: "UltimateSpGainScalar", 47: "ComboSkillCooldown",
+    29: "HealOutputIncrease", 30: "HealTakenIncrease", 26: "PoiseEfficiency",
+    50: "PhysicalDamageIncrease", 51: "FireDamageIncrease", 52: "PulseDamageIncrease",
+    53: "CrystDamageIncrease", 54: "NaturalDamageIncrease", 61: "DamageToBrokenUnitIncrease",
+    87: "OriginiumArts",
 }
 
 
@@ -234,6 +242,51 @@ def main() -> None:
     weapons.sort(key=lambda x: (-(x["rarity"] or 0), x["id"]))
     dump("weapons", weapons)
 
+    # ---- 装备(EquipTable)与套装(EquipSuitTable) ----
+    PART_BY_INT = {}
+    for eid2, e2 in raw["EquipTable"].items():
+        for tag in ("body", "hand", "edc"):
+            if f"_{tag}_" in eid2:
+                PART_BY_INT.setdefault(e2.get("partType"), tag)
+    equips = []
+    for eid2, e2 in raw["EquipTable"].items():
+        iid = e2.get("itemId") or eid2
+        item = raw["ItemTable"].get(iid, {})
+        part = next((tag for tag in ("body", "hand", "edc") if f"_{tag}_" in eid2),
+                    PART_BY_INT.get(e2.get("partType"), e2.get("partType")))
+        mods = []
+        for m in e2.get("displayAttrModifiers") or []:
+            mods.append({
+                "type": attr_name(m.get("attrType")) or f"attr{m.get('attrType')}",
+                "value": m.get("attrValue"),
+            })
+        base = e2.get("displayBaseAttrModifier") or None
+        equips.append({
+            "id": eid2,
+            "name": t(item.get("name")) or eid2,
+            "part": part,
+            "suit": e2.get("suitID") or None,
+            "rarity": item.get("rarity"),
+            "minWearLv": e2.get("minWearLv"),
+            "icon": vfs_url("item_icon", iconId=item.get("iconId")),
+            "baseAttr": {"type": attr_name(base.get("attrType")), "value": base.get("attrValue")} if base else None,
+            "attrs": mods,
+        })
+    equips.sort(key=lambda x: (x["suit"] or "", x["part"] or "", x["id"]))
+    suits = []
+    for sid, s in raw["EquipSuitTable"].items():
+        tiers = s.get("list") or []
+        suits.append({
+            "id": sid,
+            "name": t((tiers[0] if tiers else {}).get("suitName")) or sid,
+            "logo": (tiers[0] if tiers else {}).get("suitLogoName"),
+            "members": len(s.get("equipList") or []),
+            "effects": [{"count": x.get("equipCnt"), "skill": x.get("skillID"), "lv": x.get("skillLv")}
+                        for x in tiers],
+        })
+    suits.sort(key=lambda x: x["id"])
+    dump("equips", {"equips": equips, "suits": suits})
+
     # ---- 敌人 ----
     display = raw["EnemyDisplayInfoTable"]
     enemies = []
@@ -274,6 +327,7 @@ def main() -> None:
         "counts": {
             "characters": len(characters), "items": len(items),
             "recipes": len(recipes), "weapons": len(weapons), "enemies": len(enemies),
+            "equips": len(equips), "suits": len(suits),
         },
     }
     dump("meta", meta)

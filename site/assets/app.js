@@ -13,7 +13,7 @@ const state = {
 const FORMATTER = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 
 async function loadData() {
-  const names = ["meta", "characters", "weapons", "items", "recipes", "enemies"];
+  const names = ["meta", "characters", "weapons", "equips", "items", "recipes", "enemies"];
   const results = await Promise.allSettled(
     names.map(async (n) => (await fetch(`/data/processed/${n}.json`)).json())
   );
@@ -59,6 +59,7 @@ function renderOverview() {
     <div class="kpis">
       <div class="kpi"><div class="n">${c.characters}</div><div class="l">干员</div></div>
       <div class="kpi"><div class="n">${c.weapons}</div><div class="l">武器</div></div>
+      <div class="kpi"><div class="n">${c.equips ?? "—"}</div><div class="l">装备</div></div>
       <div class="kpi"><div class="n">${c.items}</div><div class="l">物品</div></div>
       <div class="kpi"><div class="n">${c.recipes}</div><div class="l">生产配方</div></div>
       <div class="kpi"><div class="n">${c.enemies}</div><div class="l">敌人</div></div>
@@ -162,6 +163,39 @@ function renderRecipes() {
     </tbody></table>`;
 }
 
+function renderEquips() {
+  const data = state.data.equips ?? { equips: [], suits: [] };
+  const q = state.search.equips ?? "";
+  const part = state.filters.equips ?? "";
+  const suit = state.filters.equipSuit ?? "";
+  const suits = data.suits ?? [];
+  const list = (data.equips ?? [])
+    .filter((e) => (!part || e.part === part) && (!suit || e.suit === suit)
+      && (match(e.name, q) || match(e.suit, q)));
+  const PART = { body: "躯体", hand: "手部", edc: "挂载" };
+  return `
+    ${toolbar("equips", "搜索装备名 / 套装…", `
+      <select onchange="window.__filter('equips', this.value)">
+        <option value="">全部部位</option>
+        ${["body", "hand", "edc"].map((t) => `<option value="${t}" ${t === part ? "selected" : ""}>${PART[t]}</option>`).join("")}
+      </select>
+      <select onchange="window.__filter('equipSuit', this.value)">
+        <option value="">全部套装</option>
+        ${suits.map((x) => `<option value="${esc(x.id)}" ${x.id === suit ? "selected" : ""}>${esc(x.name)}</option>`).join("")}
+      </select>`)}
+    <p class="note">套装效果(件数 → 被动技能 ID;技能描述待接入技能表):
+      ${suits.map((x) => `<span class="badge">${esc(x.name)}(${x.effects.map((e2) => e2.count + "件").join("/")})</span>`).join(" ")}
+    </p>
+    <table><thead><tr><th>装备</th><th>稀有度</th><th>部位</th><th>套装</th><th>词条</th></tr></thead><tbody>
+    ${list.map((e) => `<tr>
+      <td>${e.icon ? `<img class="icon-sm" src="${esc(e.icon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(e.name)} <span class="dim">${esc(e.id)}</span></td>
+      <td>${rarityTag(e.rarity)}</td><td>${PART[e.part] ?? e.part ?? "—"}</td>
+      <td>${e.suit ? `<span class="badge machine">${esc((suits.find((x) => x.id === e.suit) ?? {}).name ?? e.suit)}</span>` : "—"}</td>
+      <td class="dim">${(e.attrs ?? []).map((a) => `${a.type} +${num(a.value)}`).join(" / ") || "—"}</td>
+    </tr>`).join("")}
+    </tbody></table>`;
+}
+
 function renderEnemies() {
   const q = state.search.enemies ?? "";
   const list = (state.data.enemies ?? []).filter(
@@ -186,7 +220,7 @@ function renderEnemies() {
 
 const RENDERERS = {
   overview: renderOverview, characters: renderCharacters, weapons: renderWeapons,
-  items: renderItems, recipes: renderRecipes, enemies: renderEnemies,
+  equips: renderEquips, items: renderItems, recipes: renderRecipes, enemies: renderEnemies,
 };
 
 function render() {

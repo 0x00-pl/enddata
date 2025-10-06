@@ -1,12 +1,27 @@
 {
   "repo": "rmxlinux/EndfieldData",
   "branch": "main",
-  "fetched_at": "2026-09-15T07:03:25+00:00",
+  "fetched_at": "2026-09-15T07:11:48+00:00",
   "files": {
-    "CharProfessionTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/CharProfessionTable.json",
-      "channel": "cache",
-      "size_kb": 1
+    "EquipTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipTable.json",
+      "channel": "git",
+      "size_kb": 603
+    },
+    "EquipItemTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipItemTable.json",
+      "channel": "git",
+      "size_kb": 29
+    },
+    "EquipSuitTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipSuitTable.json",
+      "channel": "git",
+      "size_kb": 18
+    },
+    "EquipFormulaTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipFormulaTable.json",
+      "channel": "git",
+      "size_kb": 82
     }
   }
 }

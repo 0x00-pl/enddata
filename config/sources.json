@@ -130,7 +130,11 @@
         "FactoryMachineCrafterTable",
         "FactoryItemTable",
         "FactoryBuildingTable",
-        "SpaceshipManufactureFormulaTable"
+        "SpaceshipManufactureFormulaTable",
+        "EquipTable",
+        "EquipItemTable",
+        "EquipSuitTable",
+        "EquipFormulaTable"
       ]
     },
     "fffdan_vfs": {

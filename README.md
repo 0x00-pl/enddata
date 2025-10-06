@@ -15,6 +15,7 @@
 | 物品(含图标直链) | 2829 | ItemTable × ItemTypeTable × I18nTextTable_CN |
 | 生产配方(手工/工厂/飞船) | 427 | FactoryManualCraftTable + FactoryMachineCraftTable + SpaceshipManufactureFormulaTable |
 | 武器 | 79 | WeaponBasicTable |
+| 装备(含词条/套装) | 258 + 24 套装 | EquipTable × EquipSuitTable × ItemTable |
 | 敌人(属性/抗性/韧性/霸体) | 381 | EnemyTable × EnemyAttributeTemplateTable |
 
 数据源调研结论见 **[docs/sources.md](docs/sources.md)**,字段结构见 **[docs/data-model.md](docs/data-model.md)**,

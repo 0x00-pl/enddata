@@ -61,6 +61,22 @@ reports/build-report.md                                               ← 人类
 ### weapons.json — 武器
 `{id, name, rarity, weaponType, maxLevel}`
 
+### equips.json — 装备与套装(战斗/养成)
+```json
+{
+  "equips": [ { "id": "item_equip_t0_parts_tundra01_body_01", "name": "简易护甲",
+                "part": "body", "suit": null, "rarity": 1, "minWearLv": 1,
+                "icon": "…vfs…/itemicon/….png",
+                "baseAttr": null,
+                "attrs": [ { "type": "Str", "value": 15.0 }, { "type": "MaxHp", "value": 46.3 } ] } ],
+  "suits":  [ { "id": "suit_agi01", "name": "巡行信使", "logo": "icon_pack_tundra_suit_agi01",
+                "members": 9,
+                "effects": [ { "count": 3, "skill": "passive_equipsuit_agi_01", "lv": 1 } ] } ]
+}
+```
+`part` 自装备 id 解析(body/hand/edc),`name`/`rarity`/`icon` 经 itemId join ItemTable;
+套装效果仅登记件数与被动技能 ID,技能描述文本待接入技能表。
+
 ### enemies.json — 敌人(战斗)
 ```json
 {
