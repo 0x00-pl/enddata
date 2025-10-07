@@ -66,7 +66,7 @@ graph TD
     ARCHIVE -.->|"版本资源 manifest(规划)"| ENDDATA
 
     subgraph ENDDATA[EndData 本项目]
-        FETCH[fetch_tablecfg.py] --> BUILD[build_dataset.py] --> SITE[data/processed/*.json]
+        FETCH[fetch_tablecfg.py] --> BUILD[collection/build_all.py] --> SITE[data/processed/*.json]
     end
 
     GAME -.->|"同源旁证:两站消费同一份解包"| FFFDAN_SPA[宏山档案局/天师工具箱<br>消费同一 vfs 后端]
@@ -184,4 +184,4 @@ graph TD
 2. 同一数据出现多个来源时,以「跟版最新 > 结构完整 > 可本地化」排序,其余降级为
    历史对照(参考现有主源/镜像分层)。
 3. 更新流程:`python3 src/collection/clone_sources.py`(更新所有 git 源)→ `fetch_tablecfg.py`
-   (本地直读)→ `build_dataset.py` → 提交 `reports/` 变更。
+   (本地直读)→ `collection/build_all.py` → 提交 `reports/` 变更。

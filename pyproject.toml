@@ -18,7 +18,7 @@ python = "^3.10"
 [tool.poetry.scripts]
 enddata-clone = "collection.clone_sources:main"
 enddata-fetch = "collection.fetch_tablecfg:main"
-enddata-build = "analysis.build_dataset:main"
+enddata-build = "collection.build_all:main"
 enddata-version = "tools.fffdan_version:main"
 
 [build-system]

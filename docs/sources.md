@@ -78,7 +78,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 | 工厂建筑面板图 | `factory/buildingpanelicon/{icon}.png` | FactoryBuildingTable(精确字段待确认) | 路径来自工具箱代码,文件名未中 |
 | 元素/天赋树/背包图标 | `elementicon`、`talenttreeicon`、`inventory` | 待确认 | 同上 |
 
-  `build_dataset.py` 据此为 characters/items 数据集生成 `icon`/`iconUrl`/`professionIcon` 直链,
+  `collection/` 各产物模块据此为 characters/items 数据集生成 `icon`/`iconUrl`/`professionIcon` 直链,
   前端懒加载渲染;完整路径模板见 `config/sources.json` 的 `fffdan_vfs.paths`
   (以 `paths_verified`/`paths_unverified` 区分验证状态)。
   档案局自身的 `/endfield-update-diff/*` 版本差分接口当前 404(前端仍在调用,恢复后可提供逐表变更清单);
@@ -150,7 +150,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 5. **生产系统深度数据**:电力、物流带、流派加成表已可从 rmxlinux 抓取,尚未加工;
    机器配方的 `totalProgress/progressRound` 与实际秒数的换算待实测(endfield-calc 用手工维护的 craftingTime)。
 6. **战斗属性枚举**:新版 `attrType` 为整数(AttributeMetaTable 可反查图标名),
-   `analysis/build_dataset.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
+   `src/collection/common.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
 
 ## 六、本机网络备忘(采集脚本环境)
 

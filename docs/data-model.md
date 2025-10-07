@@ -7,7 +7,7 @@ GitHub 源仓库 (rmxlinux/EndfieldData@main,跟随当前游戏版本)
         │  collection/fetch_tablecfg.py(本地git → 缓存 → jsdelivr → raw → COS → API)
         ▼
 data/raw/tablecfg/<repo>/<branch>/*.json     ← 原始快照 + manifest.json(抓取时间)
-        │  analysis/build_dataset.py(i18n 反查、表间 join、attrType 枚举翻译、裁剪字段)
+        │  collection/build_all.py(按产物模块初步处理:i18n 反查、表间 join、attrType 枚举翻译)
         ▼
 data/processed/{meta,characters,weapons,items,recipes,enemies}.json   ← 生成的报告,由 site/ 消费
 reports/build-report.md                                               ← 人类可读构建报告
@@ -21,7 +21,7 @@ reports/build-report.md                                               ← 人类
 
 ## 属性枚举(重要)
 
-新版解包把 `attrType` 从字符串改成了整数。`analysis/build_dataset.py` 内置
+新版解包把 `attrType` 从字符串改成了整数。`src/collection/common.py` 内置
 `INT_ATTR_MAP`(0=Level,1=MaxHp,2=Atk,3=Def,9=暴击率,10=暴击伤害,
 39-42=力/敏/智/意志,4-7/48/55=各系受伤倍率),依据 `TableCfg/AttributeMetaTable.json`
 的 iconName 反查并经数值交叉验证。旧镜像的字符串 attrType 原样透传,两版兼容。
