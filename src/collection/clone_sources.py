@@ -83,12 +83,12 @@ def update_one(entry: dict) -> tuple[str, str]:
     return "updated", ""
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--no-update", action="store_true", help="只克隆缺失的,不更新已有仓库")
     parser.add_argument("--only", nargs="*", help="只处理指定仓库(如 rmxlinux/EndfieldData)")
-    args = parser.parse_args()
 
+
+def run(args) -> None:
     git_cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["git"]
     entries = git_cfg["clone"]
     if args.only:
@@ -112,6 +112,12 @@ def main() -> None:
 
     info(f"\n汇总: {summary}")
     info(f"仓库目录: {REPOS_DIR}")
+
+
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    configure_parser(parser)
+    run(parser.parse_args(argv))
 
 
 if __name__ == "__main__":

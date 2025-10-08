@@ -6,6 +6,7 @@ authors = ["enddata"]
 readme = "README.md"
 license = "MIT"
 packages = [
+    { include = "enddata", from = "src" },
     { include = "collection", from = "src" },
     { include = "analysis", from = "src" },
     { include = "tools", from = "src" },
@@ -16,10 +17,7 @@ python = "^3.10"
 # 运行时零第三方依赖:采集走标准库(urllib/subprocess),分析走 json/csv
 
 [tool.poetry.scripts]
-enddata-clone = "collection.clone_sources:main"
-enddata-fetch = "collection.fetch_tablecfg:main"
-enddata-build = "collection.build_all:main"
-enddata-version = "tools.fffdan_version:main"
+enddata = "enddata.cli:main"
 
 [build-system]
 requires = ["poetry-core"]

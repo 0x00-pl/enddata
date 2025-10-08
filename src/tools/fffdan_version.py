@@ -18,11 +18,11 @@ from collection.enddata_http import PROJECT_ROOT, RAW_DIR, http_get, load_json
 RECORD = RAW_DIR / "fffdan_version.txt"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--record", action="store_true", help="把当前版本写入本地记录")
-    args = parser.parse_args()
 
+
+def run(args) -> None:
     cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["fffdan_vfs"]
     current = None
     for host in cfg["hosts"]:
@@ -49,6 +49,12 @@ def main() -> None:
         RECORD.parent.mkdir(parents=True, exist_ok=True)
         RECORD.write_text(current, encoding="utf-8")
         print(f"已记录到 {RECORD.relative_to(PROJECT_ROOT)}")
+
+
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    configure_parser(parser)
+    run(parser.parse_args(argv))
 
 
 if __name__ == "__main__":

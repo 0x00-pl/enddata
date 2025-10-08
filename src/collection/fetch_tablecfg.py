@@ -19,12 +19,12 @@ from collection.enddata_http import RAW_DIR, PROJECT_ROOT, fetch_to_cache, gh_ap
 MANIFEST = RAW_DIR / "tablecfg" / "manifest.json"
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
+def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("tables", nargs="*", help="要抓取的表名(不含 .json),缺省取 core_tables 全部")
     parser.add_argument("--force", action="store_true", help="忽略本地缓存")
-    args = parser.parse_args()
 
+
+def run(args) -> None:
     cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
     repo = cfg["repo"]
     branch = resolve_branch(repo, cfg.get("branch"))
@@ -81,6 +81,12 @@ def main() -> None:
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     info(f"完成 {ok}/{len(wanted)},清单已写入 {MANIFEST.relative_to(PROJECT_ROOT)}")
+
+
+def main(argv=None) -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    configure_parser(parser)
+    run(parser.parse_args(argv))
 
 
 if __name__ == "__main__":

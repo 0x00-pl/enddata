@@ -25,21 +25,25 @@
 
 项目由 Poetry 管理(运行时零第三方依赖),首次使用先 `poetry install`:
 
+统一 CLI(子命令见 `poetry run enddata --help`):
+
 ```bash
 # ① 数据采集:把所有 git 数据源克隆到本地 sources/,抓取优先读本地
-poetry run enddata-clone                 # 重跑即更新到远端最新
-poetry run enddata-fetch                 # 抓取原始数值表(本地命中则零网络)
+poetry run enddata clone                 # 重跑即更新到远端最新
+poetry run enddata fetch                 # 抓取原始数值表(本地命中则零网络)
+poetry run enddata fetch ItemTable --force
 
 # ② 数据分析:加工为数据集与构建报告
-poetry run enddata-build                 # 输出 data/processed/*.json + reports/build-report.md
+poetry run enddata build                 # 输出 data/processed/*.json + reports/build-report.md
 
 # ③ 数据展示:本地预览(从仓库根目录起服务)
 python3 -m http.server 8321 --bind 127.0.0.1
 # 打开 http://127.0.0.1:8321/site/
+
+# 辅助:宏山档案局构建号监控
+poetry run enddata version --record
 ```
 
-等价的辅助命令:`poetry run enddata-version`(宏山档案局构建号监控);
-也支持模块方式运行:`poetry run python -m collection.fetch_tablecfg`。
 导入采用规范的包内绝对导入(`from collection.enddata_http import ...`),不做任何 sys.path 修改,
 因此请在 Poetry 虚拟环境内运行(`poetry run`/`poetry shell`,需先 `poetry install`)。
 
