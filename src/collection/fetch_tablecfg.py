@@ -24,11 +24,11 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--force", action="store_true", help="忽略本地缓存")
 
 
-def run(args) -> None:
+def fetch_tables(names: list[str] | None = None, force: bool = False) -> None:
     cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
     repo = cfg["repo"]
     branch = resolve_branch(repo, cfg.get("branch"))
-    wanted = args.tables or cfg["core_tables"]
+    wanted = names or cfg["core_tables"]
     table_dir = cfg.get("table_dir", "TableCfg")
     i18n_dir = cfg.get("i18n_dir", table_dir)
     # 不同镜像的 i18n 位置不同(rmxlinux 在 TableCfg/ 内,XiaBei-cy 在 i18n/ 目录),
@@ -52,7 +52,7 @@ def run(args) -> None:
             dest = channel = None
             for d in candidates:
                 try:
-                    dest, channel = fetch_to_cache("tablecfg", repo, branch, f"{d}/{name}.json", force=args.force)
+                    dest, channel = fetch_to_cache("tablecfg", repo, branch, f"{d}/{name}.json", force=force)
                     last_err = None
                     break
                 except Exception as e:  # noqa: BLE001 - 目录候选失败则继续
@@ -81,6 +81,22 @@ def run(args) -> None:
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     info(f"完成 {ok}/{len(wanted)},清单已写入 {MANIFEST.relative_to(PROJECT_ROOT)}")
+
+
+def ensure_tables(names: list[str] | None = None, force: bool = False) -> None:
+    """产物命令的隐式依赖:确保原始表在本地缓存,缺失的自动补抓。"""
+    from collection.common import raw_tables_dir
+    cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
+    d = raw_tables_dir()
+    wanted = names or cfg["core_tables"]
+    if force:
+        info(f"强制重抓依赖的原始表 {len(wanted)} 张")
+        fetch_tables(wanted, force=True)
+        return
+    missing = [n for n in wanted if not (d / f"{n}.json").exists()]
+    if missing:
+        info(f"缺少原始表,自动补抓 {len(missing)} 张: {', '.join(missing)}")
+        fetch_tables(missing, force=False)
 
 
 def main(argv=None) -> None:

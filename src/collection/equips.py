@@ -12,6 +12,8 @@ from collection.common import I18n, attr_name, dump, load_raw_tables, load_vfs_c
 
 PRODUCT = "equips"
 
+REQUIRED_TABLES = ["EquipTable", "EquipSuitTable", "ItemTable", "I18nTextTable_CN"]
+
 
 def build(raw: dict, t: I18n) -> dict:
     # partType 整数 → 部位标签(从装备 id 中的 _body_/_hand_/_edc_ 反推)

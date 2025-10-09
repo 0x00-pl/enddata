@@ -11,6 +11,9 @@ from collection.common import I18n, dump, load_raw_tables
 
 PRODUCT = "recipes"
 
+REQUIRED_TABLES = ["FactoryManualCraftTable", "FactoryMachineCraftTable",
+                                 "SpaceshipManufactureFormulaTable", "ItemTable", "I18nTextTable_CN"]
+
 
 def build(raw: dict, t: I18n) -> list[dict]:
     item_name = {iid: t(it.get("name")) for iid, it in raw["ItemTable"].items() if t(it.get("name"))}

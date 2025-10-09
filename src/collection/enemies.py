@@ -10,6 +10,8 @@ from collection.common import I18n, attr_map, dump, load_raw_tables
 
 PRODUCT = "enemies"
 
+REQUIRED_TABLES = ["EnemyTable", "EnemyDisplayInfoTable", "EnemyAttributeTemplateTable", "I18nTextTable_CN"]
+
 
 def build(raw: dict, t: I18n) -> list[dict]:
     display = raw["EnemyDisplayInfoTable"]

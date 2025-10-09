@@ -28,15 +28,15 @@
 统一 CLI(子命令见 `poetry run enddata --help`):
 
 ```bash
-# ① 数据采集:把所有 git 数据源克隆到本地 sources/,抓取优先读本地
-poetry run enddata clone                 # 重跑即更新到远端最新
-poetry run enddata fetch                 # 抓取原始数值表(本地命中则零网络)
-poetry run enddata fetch ItemTable --force
+# 数据采集:原始表抓取 + 各产物数据集(产物隐式依赖 fetch,缺原始表自动补抓)
+poetry run enddata collection clone                      # 更新 sources/ 下数据源仓库
+poetry run enddata collection fetch                      # 抓取核心原始表(本地命中则零网络)
+poetry run enddata collection fetch ItemTable --force
+poetry run enddata collection items                      # 只生成 items 数据集
+poetry run enddata collection equips --force             # 强制重抓装备依赖的原始表
+poetry run enddata collection all                        # 依赖全部 collection,产出所有数据集与报告
 
-# ② 数据分析:加工为数据集与构建报告
-poetry run enddata build                 # 输出 data/processed/*.json + reports/build-report.md
-
-# ③ 数据展示:本地预览(从仓库根目录起服务)
+# 数据展示:本地预览(从仓库根目录起服务)
 python3 -m http.server 8321 --bind 127.0.0.1
 # 打开 http://127.0.0.1:8321/site/
 

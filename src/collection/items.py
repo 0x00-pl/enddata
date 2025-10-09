@@ -10,6 +10,8 @@ from collection.common import I18n, dump, load_raw_tables, load_vfs_config, vfs_
 
 PRODUCT = "items"
 
+REQUIRED_TABLES = ["ItemTable", "ItemTypeTable", "I18nTextTable_CN"]
+
 
 def build(raw: dict, t: I18n) -> list[dict]:
     type_names = {v.get("itemType"): t(v.get("name")) for v in raw["ItemTypeTable"].values()}

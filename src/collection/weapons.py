@@ -10,6 +10,8 @@ from collection.common import I18n, dump, load_raw_tables
 
 PRODUCT = "weapons"
 
+REQUIRED_TABLES = ["WeaponBasicTable", "I18nTextTable_CN"]
+
 
 def build(raw: dict, t: I18n) -> list[dict]:
     weapons = []

@@ -18,6 +18,8 @@ from collection.common import (
 
 PRODUCT = "characters"
 
+REQUIRED_TABLES = ["CharacterTable", "CharProfessionTable", "CharBreakTable", "I18nTextTable_CN"]
+
 
 def build(raw: dict, t: I18n) -> list[dict]:
     professions = {v["profession"]: (t(v.get("name")), v.get("iconId"))

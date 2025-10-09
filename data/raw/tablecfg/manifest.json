@@ -1,27 +1,17 @@
 {
   "repo": "rmxlinux/EndfieldData",
   "branch": "main",
-  "fetched_at": "2026-09-15T07:11:48+00:00",
+  "fetched_at": "2026-09-15T07:38:50+00:00",
   "files": {
-    "EquipTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipTable.json",
+    "WeaponBasicTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/WeaponBasicTable.json",
       "channel": "git",
-      "size_kb": 603
+      "size_kb": 54
     },
-    "EquipItemTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipItemTable.json",
+    "I18nTextTable_CN": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/I18nTextTable_CN.json",
       "channel": "git",
-      "size_kb": 29
-    },
-    "EquipSuitTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipSuitTable.json",
-      "channel": "git",
-      "size_kb": 18
-    },
-    "EquipFormulaTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/EquipFormulaTable.json",
-      "channel": "git",
-      "size_kb": 82
+      "size_kb": 11459
     }
   }
 }

@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from collection import characters, enemies, equips, items, recipes, weapons
+from collection import characters, enemies, equips, fetch_tablecfg, items, recipes, weapons
 from collection.common import (
     I18n,
     PROCESSED_DIR,
@@ -24,7 +24,9 @@ from collection.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
 PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies)
 
 
-def main() -> None:
+def run(force: bool = False) -> None:
+    required = sorted({t for m in PRODUCT_MODULES for t in m.REQUIRED_TABLES})
+    fetch_tablecfg.ensure_tables(required, force=force)
     t0 = datetime.now(timezone.utc)
     load_vfs_config()
     raw = load_raw_tables()
@@ -98,6 +100,10 @@ def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None
     dest = REPORTS_DIR / "build-report.md"
     dest.write_text(report, encoding="utf-8")
     info(f"  -> {dest.relative_to(PROJECT_ROOT)}")
+
+
+def main(argv=None) -> None:
+    run()
 
 
 if __name__ == "__main__":
