@@ -44,7 +44,7 @@ python3 -m http.server 8321 --bind 127.0.0.1
 poetry run enddata version --record
 ```
 
-导入采用规范的包内绝对导入(`from collection.enddata_http import ...`),不做任何 sys.path 修改,
+导入采用规范的包内绝对导入(`from tools.enddata_http import ...`),不做任何 sys.path 修改,
 因此请在 Poetry 虚拟环境内运行(`poetry run`/`poetry shell`,需先 `poetry install`)。
 
 ## 目录结构
@@ -61,7 +61,6 @@ enddata/
 │   └── data-lineage.md     # 来源血缘关系、追溯规则与统计
 ├── src/                    # 功能代码
 │   ├── collection/         #   ① 数据采集:原始数据的收集 + 初步处理(按产物一个模块)
-│   │   ├── enddata_http.py     # 抓取公共库:本地git → 缓存 → jsdelivr → raw → COS → API
 │   │   ├── clone_sources.py    # 数据源仓库克隆/更新到 sources/
 │   │   ├── fetch_tablecfg.py   # TableCfg 原始表抓取到 data/raw/
 │   │   ├── common.py           # i18n 反查/属性枚举/vfs 链接等共享工具
@@ -69,6 +68,9 @@ enddata/
 │   │   └── build_all.py        # 统一入口:全部产物 + meta + 构建报告
 │   └── analysis/           #   ② 进阶分析(概率/DPS/产线规划等,见其 README)
 │       └── README.md
+├── tools/                  # 工具库:抓取公共库 + 版本监控
+│   ├── enddata_http.py     #   抓取公共库:本地git → 缓存 → jsdelivr → raw → COS → API
+│   └── fffdan_version.py   #   宏山档案局 /version 构建号监控
 ├── sources/                # 数据源(13 个本地 git 克隆,gitignore,约 380MB)
 ├── data/
 │   ├── raw/                # 采集好的数据(原始快照 + manifest 抓取清单)

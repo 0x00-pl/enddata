@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from collection.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
+from tools.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
 
 PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
 REPORTS_DIR = PROJECT_ROOT / "reports"

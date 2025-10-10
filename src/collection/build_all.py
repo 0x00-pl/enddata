@@ -19,7 +19,7 @@ from collection.common import (
     load_raw_tables,
     load_vfs_config,
 )
-from collection.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
+from tools.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
 
 PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies)
 

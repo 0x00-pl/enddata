@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import argparse
 
-from collection.enddata_http import PROJECT_ROOT, RAW_DIR, http_get, load_json
+from tools.enddata_http import PROJECT_ROOT, RAW_DIR, http_get, load_json
 
 RECORD = RAW_DIR / "fffdan_version.txt"
 

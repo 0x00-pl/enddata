@@ -14,7 +14,7 @@ import json
 import time
 from datetime import datetime, timezone
 
-from collection.enddata_http import RAW_DIR, PROJECT_ROOT, fetch_to_cache, gh_api, http_get, info, load_json, resolve_branch
+from tools.enddata_http import RAW_DIR, PROJECT_ROOT, fetch_to_cache, gh_api, http_get, info, load_json, resolve_branch
 
 MANIFEST = RAW_DIR / "tablecfg" / "manifest.json"
 
@@ -81,6 +81,10 @@ def fetch_tables(names: list[str] | None = None, force: bool = False) -> None:
     MANIFEST.parent.mkdir(parents=True, exist_ok=True)
     MANIFEST.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     info(f"完成 {ok}/{len(wanted)},清单已写入 {MANIFEST.relative_to(PROJECT_ROOT)}")
+
+
+def run(args) -> None:
+    fetch_tables(args.tables or None, force=args.force)
 
 
 def ensure_tables(names: list[str] | None = None, force: bool = False) -> None:

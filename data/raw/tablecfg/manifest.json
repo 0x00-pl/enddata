@@ -1,17 +1,12 @@
 {
   "repo": "rmxlinux/EndfieldData",
   "branch": "main",
-  "fetched_at": "2026-09-15T07:38:50+00:00",
+  "fetched_at": "2026-09-15T07:43:16+00:00",
   "files": {
-    "WeaponBasicTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/WeaponBasicTable.json",
-      "channel": "git",
-      "size_kb": 54
-    },
-    "I18nTextTable_CN": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/I18nTextTable_CN.json",
-      "channel": "git",
-      "size_kb": 11459
+    "CharProfessionTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/CharProfessionTable.json",
+      "channel": "cache",
+      "size_kb": 1
     }
   }
 }

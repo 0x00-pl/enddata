@@ -6,7 +6,7 @@
 
 > **原则:同一数据优先追溯到 git 项目;没有 git 项目的,才允许网页/HTTP 渠道。**
 
-实际解析顺序(`collection/enddata_http.py` 统一实现):
+实际解析顺序(`tools/enddata_http.py` 统一实现):
 
 ```
 1. sources/ 本地 git 克隆      ← 零网络,首选(src/collection/clone_sources.py 维护)

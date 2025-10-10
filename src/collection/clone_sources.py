@@ -19,7 +19,7 @@ import argparse
 import subprocess
 import time
 
-from collection.enddata_http import PROJECT_ROOT, git_env, git_proxy, info, load_json, repo_dir
+from tools.enddata_http import PROJECT_ROOT, git_env, git_proxy, info, load_json, repo_dir
 
 
 def run_git(args: list[str], cwd: Path | None = None, timeout: int = 600) -> tuple[int, str]:
