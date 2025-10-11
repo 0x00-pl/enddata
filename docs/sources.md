@@ -11,11 +11,11 @@
 | 仓库 | 状态 | 内容 | 结论 |
 |---|---|---|---|
 | ★ [rmxlinux/EndfieldData](https://github.com/rmxlinux/EndfieldData)(18★) | main,2026-09-08 更新,持续活跃 | **完整数据包:TableCfg 725 表(含 16 语言 i18n)+ LuaScripts + 关卡/地图/NavMesh(共 9.8 万文件,1.5GB)** | **当前采用**。跟随当前游戏版本(1.5.x,33 干员);i18n 在 TableCfg/ 目录内 |
-| [luosky/EndfieldDataRmxLinux](https://github.com/luosky/EndfieldDataRmxLinux)(7★) | main,2026-03-12 | rmxlinux 数值部分的旧备份:TableCfg 586 表 + LuaScripts(无 i18n) | 历史对照 |
-| [XiaBei-cy/EndfieldData](https://github.com/XiaBei-cy/EndfieldData)(15★) | master,2026-01 更新 | 正式服开服版 TableCfg 561 表 + 15 语言 i18n(独立 i18n/ 目录) | 历史对照(开服 25 干员) |
-| [Hengle/EndFieldData-Archive](https://github.com/Hengle/EndFieldData-Archive) | 2025-05-25 | 分版本快照 0.5.5 → 0.5.28,每版 TableCfg 约 360 张 | 版本演进历史(测试服时代) |
-| [lsy-404/EndfieldGameData](https://github.com/lsy-404/EndfieldGameData)(23★) | 2025-01 停更 | 测试服 TableCfg 91 表 | 历史对照 |
-| [UPON-2021/EndFieldData](https://github.com/UPON-2021/EndFieldData)(10★) | 2025-01 停更 | 测试服 TableCfg 360 表 + LuaScripts(UI 逻辑) | 历史对照;Lua 可解释数值公式 |
+| ~~luosky/EndfieldDataRmxLinux~~ | 2026-03-12 | rmxlinux 旧备份:TableCfg 586 表 + LuaScripts(无 i18n) | **退役**(严格子集,2026-09-15 审查) |
+| ~~XiaBei-cy/EndfieldData~~ | 2026-01 | 开服版 TableCfg 561 表 + 15 语言 i18n | **退役**(内容 ⊂ rmxlinux,2026-09-15 审查) |
+| ~~[Hengle/EndFieldData-Archive](https://github.com/Hengle/EndFieldData-Archive)~~ | 2025-05-25 | 0.5.5→0.5.28 分版本快照 | **退役**(测试服时代,无当前信息) |
+| ~~lsy-404/EndfieldGameData~~ | 2025-01 停更 | 测试服 TableCfg 91 表 | **退役**(子集,2026-09-15 审查) |
+| ~~UPON-2021/EndFieldData~~ | 2025-01 停更 | 测试服 TableCfg 360 表 + LuaScripts | **退役**(子集,Lua 已在 rmxlinux,2026-09-15 审查) |
 | [4n3u/EndfieldResourceData](https://github.com/4n3u/EndfieldResourceData)(7★) | 活跃 | 各版本资源 manifest(1.0.14 → 1.5.3) | **版本更新监控**用 |
 | [BiologyHazard/endfield-archive-library](https://github.com/BiologyHazard/endfield-archive-library) | 每日活跃 | 官方公告/卡池(up-recruit)等 API 响应存档 | 活动与卡池资讯数据,非数值表 |
 

@@ -12,33 +12,6 @@
         "role": "tablecfg 主源(1.5GB,必须 partial)"
       },
       {
-        "repo": "luosky/EndfieldDataRmxLinux",
-        "branch": "main",
-        "partial": true,
-        "role": "tablecfg 旧备份"
-      },
-      {
-        "repo": "XiaBei-cy/EndfieldData",
-        "branch": "master",
-        "partial": true,
-        "role": "开服版对照"
-      },
-      {
-        "repo": "Hengle/EndFieldData-Archive",
-        "partial": true,
-        "role": "分版本历史快照(文件多,必须 partial)"
-      },
-      {
-        "repo": "lsy-404/EndfieldGameData",
-        "partial": false,
-        "role": "测试服历史(小仓库全量)"
-      },
-      {
-        "repo": "UPON-2021/EndFieldData",
-        "partial": true,
-        "role": "测试服历史+Lua"
-      },
-      {
         "repo": "AndreaFrederica/jei-web",
         "partial": true,
         "role": "森空岛 Wiki 配方/物品包"
@@ -64,17 +37,36 @@
         "repo": "CaffuChin0/zmdgraph",
         "partial": false,
         "role": "终末地养成规划计算器(19MB,含养成数据)"
+      }
+    ],
+    "retired": [
+      {
+        "repo": "luosky/EndfieldDataRmxLinux",
+        "reason": "rmxlinux 的旧备份(26 角色 ⊂ 33),严格子集,2026-09-15 审查移除"
+      },
+      {
+        "repo": "XiaBei-cy/EndfieldData",
+        "reason": "开服版 25 角色 ⊂ rmxlinux,内容被覆盖;2026-09-15 审查移除"
+      },
+      {
+        "repo": "Hengle/EndFieldData-Archive",
+        "reason": "测试服 0.5.x 分版本快照,对当前版本数据无新增信息;2026-09-15 审查移除"
+      },
+      {
+        "repo": "lsy-404/EndfieldGameData",
+        "reason": "测试服旧版 91 表,为 UPON/XiaBei 的子集;2026-09-15 审查移除"
+      },
+      {
+        "repo": "UPON-2021/EndFieldData",
+        "reason": "测试服旧版,LuaScripts 在 rmxlinux 同样存在;2026-09-15 审查移除"
       },
       {
         "repo": "mikunyaaa/endfield-calculator",
-        "partial": false,
-        "role": "产线分流计算器"
+        "reason": "仓库内无数据(运行时远程加载),零信息;2026-09-15 审查移除"
       },
       {
         "repo": "Arknights-yituliu/ef-frontend-v1",
-        "branch": "main",
-        "partial": true,
-        "role": "一图流前端(数据端点权威参考)"
+        "reason": "纯前端代码无数据,COS 端点已文档化于 yituliu_cos;2026-09-15 审查移除"
       }
     ]
   },

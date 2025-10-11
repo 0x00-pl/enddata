@@ -30,11 +30,7 @@ graph TD
 
     subgraph GIT1[git:解包数据仓库]
         RMX[rmxlinux/EndfieldData ★主源<br>TableCfg 725表+i18n+Lua+关卡]
-        LUOSKY[luosky/EndfieldDataRmxLinux<br>rmxlinux 旧备份 2026-03]
-        XIABEI[XiaBei-cy/EndfieldData<br>开服版 2026-01]
-        HENGLE[Hengle/EndFieldData-Archive<br>0.5.x 分版本快照]
-        LSY[lsy-404/EndfieldGameData<br>测试服 2025-01]
-        UPON[UPON-2021/EndFieldData<br>测试服+Lua 2025-01]
+        XIABEI[XiaBei-cy/EndfieldData 等 5 个<br>历史对照镜像/测试服快照<br>⚠️ 2026-09-15 审查退役]
     end
 
     subgraph GIT2[git:官方 API 派生]
@@ -101,6 +97,23 @@ graph TD
 | rmxlinux/EndfieldData | 10 | 2026-09-08 | 活跃(随游戏版本提交) |
 | AndreaFrederica/jei-web | 2 | 2026-08-06 | 放缓(数据包趋稳) |
 
+## 二·五·一、数据源审查(2026-09-15)
+
+原则:无新增信息(内容被保留源完全覆盖、或仓库内无数据)的数据源退役;
+保留血统最优/质量最高/信息独特者,并优先使用本地 git 克隆。
+
+| 处置 | 源 | 理由 |
+|---|---|---|
+| ✅ 保留 | rmxlinux/EndfieldData | 唯一跟版(33 角色/725 表),血统最优 |
+| ✅ 保留 | jei-web | 森空岛 Wiki 血统(与解包互补):敌人中文名、物品包 |
+| ✅ 保留 | endfield-calc | 人工精校(耗时/电力),近 90 天 16 次提交最活跃 |
+| ✅ 保留 | ak-endfield-api-archive | 官方 API/资源 manifest 存档(版本监控) |
+| ✅ 保留 | skport-api-docs / zmdgraph | API 文档;养成数值交叉验证 |
+| ❌ 退役 | luosky / XiaBei / Hengle / lsy-404 / UPON | 旧版备份或测试服子集,内容被 rmxlinux 覆盖 |
+| ❌ 退役 | mikunyaaa / ef-frontend-v1 | 仓库内无数据(纯代码),端点已文档化 |
+
+退役源保留在 `config/sources.json` 的 `git.retired`(含复克隆所需信息),需要时可随时恢复。
+
 ## 二·六、推荐优先数据来源(按数据类别)
 
 > 图例:P0=当前在用主源 P1=推荐备源 P2=历史对照/参考 R=规划接入
@@ -137,13 +150,12 @@ graph TD
 
 ## 四、统计(2026-09-15)
 
-### 本地 git 仓库(`sources/`,已 gitignore)
+### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-15 审查后
 
 | 指标 | 值 |
 |---|---|
-| 仓库总数 | **13** |
-| 总体积 | **324 MB**(大仓库全部 partial 克隆,rmxlinux 1.5GB 仅占 6.6MB) |
-| 克隆方式 | 全量 4 个(小仓库)/ partial(blob:none)9 个 |
+| 仓库总数 | **6**(审查前 13,退役 7) |
+| 总体积 | **约 299 MB**(大仓库全部 partial 克隆,rmxlinux 1.5GB 仅占 18MB) |
 | 主源核心表本地可直读 | **24/24(100%,零网络)** |
 | partial 懒取实测 | 首次 13s(经代理)→ 之后 0.02s(纯本地) |
 
