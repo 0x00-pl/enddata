@@ -1,10 +1,10 @@
 """EndData 统一命令行入口:数据采集(collection)、版本监控(version)。
 
 用法示例:
-    enddata collection fetch                    # 抓取核心原始表
+    enddata collection fetch                    # 更新数据源仓库 + 抓取核心原始表
     enddata collection items                    # 生成 items 数据集(隐式依赖 fetch)
     enddata collection all                      # 依赖全部 collection,产出所有数据集与报告
-    enddata collection clone --only rmxlinux/EndfieldData
+    enddata collection fetch --no-update        # 离线:跳过仓库更新,仅抓数值表
     enddata version --record
 """
 
@@ -40,15 +40,16 @@ def build_parser() -> argparse.ArgumentParser:
     coll_sub = coll.add_subparsers(
         dest="target",
         required=True,
-        metavar="{fetch,clone,all,characters,items,recipes,weapons,equips,enemies}",
+        metavar="{fetch,all,characters,items,recipes,weapons,equips,enemies}",
     )
 
-    clone_sources.configure_parser(
-        coll_sub.add_parser("clone", help="克隆/更新数据源仓库到 sources/")
+    fetch_p = coll_sub.add_parser(
+        "fetch",
+        help="更新 sources/ 数据源仓库,并抓取原始数值表(缺省 core_tables 全部)",
     )
-    fetch_tablecfg.configure_parser(
-        coll_sub.add_parser("fetch", help="抓取原始数值表(缺省 core_tables 全部)")
-    )
+    fetch_p.add_argument("--no-update", action="store_true", help="跳过数据源仓库更新(离线时使用)")
+    fetch_tablecfg.configure_parser(fetch_p)
+
     all_p = coll_sub.add_parser("all", help="全部产物数据集 + meta + 构建报告")
     all_p.add_argument("--force", action="store_true", help="重新抓取全部依赖的原始表")
     for name, mod in PRODUCT_MODULES.items():
@@ -68,9 +69,9 @@ def main(argv=None) -> None:
         return
 
     # collection 域
-    if args.target == "clone":
-        clone_sources.run(args)
-    elif args.target == "fetch":
+    if args.target == "fetch":
+        if not args.no_update:
+            clone_sources.run(argparse.Namespace(no_update=False, only=None))
         fetch_tablecfg.run(args)
     elif args.target == "all":
         build_all.run(force=args.force)
