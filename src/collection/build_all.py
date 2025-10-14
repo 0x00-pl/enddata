@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from collection import characters, enemies, equips, fetch_tablecfg, items, recipes, weapons
+from collection import characters, enemies, equips, fetch, items, recipes, weapons
 from collection.common import (
     I18n,
     PROCESSED_DIR,
@@ -26,7 +26,7 @@ PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies)
 
 def run(force: bool = False) -> None:
     required = sorted({t for m in PRODUCT_MODULES for t in m.REQUIRED_TABLES})
-    fetch_tablecfg.ensure_tables(required, force=force)
+    fetch.ensure_tables(required, force=force)
     t0 = datetime.now(timezone.utc)
     load_vfs_config()
     raw = load_raw_tables()

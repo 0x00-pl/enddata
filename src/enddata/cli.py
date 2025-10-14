@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 
-from collection import build_all, clone_sources, fetch_tablecfg
+from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, weapons
 from tools import fffdan_version
 
@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     coll = sub.add_parser(
         "collection",
-        help="数据采集:原始表抓取与各产物数据集(产物隐式依赖 fetch,缺表自动补抓)",
+        help="数据采集:数据源仓库同步、原始表抓取与各产物数据集",
     )
     coll_sub = coll.add_subparsers(
         dest="target",
@@ -47,8 +47,7 @@ def build_parser() -> argparse.ArgumentParser:
         "fetch",
         help="更新 sources/ 数据源仓库,并抓取原始数值表(缺省 core_tables 全部)",
     )
-    fetch_p.add_argument("--no-update", action="store_true", help="跳过数据源仓库更新(离线时使用)")
-    fetch_tablecfg.configure_parser(fetch_p)
+    fetch.configure_parser(fetch_p)
 
     all_p = coll_sub.add_parser("all", help="全部产物数据集 + meta + 构建报告")
     all_p.add_argument("--force", action="store_true", help="重新抓取全部依赖的原始表")
@@ -70,12 +69,10 @@ def main(argv=None) -> None:
 
     # collection 域
     if args.target == "fetch":
-        if not args.no_update:
-            clone_sources.run(argparse.Namespace(no_update=False, only=None))
-        fetch_tablecfg.run(args)
+        fetch.run(args)
     elif args.target == "all":
         build_all.run(force=args.force)
     else:  # 单产物
         mod = PRODUCT_MODULES[args.target]
-        fetch_tablecfg.ensure_tables(mod.REQUIRED_TABLES, force=args.force)
+        fetch.ensure_tables(mod.REQUIRED_TABLES, force=args.force)
         mod.main()

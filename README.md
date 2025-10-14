@@ -61,8 +61,7 @@ enddata/
 │   └── data-lineage.md     # 来源血缘关系、追溯规则与统计
 ├── src/                    # 功能代码
 │   ├── collection/         #   ① 数据采集:原始数据的收集 + 初步处理(按产物一个模块)
-│   │   ├── clone_sources.py    # 数据源仓库克隆/更新到 sources/
-│   │   ├── fetch_tablecfg.py   # TableCfg 原始表抓取到 data/raw/
+│   │   └── fetch.py            # 数据源仓库同步(sources/)+ 原始表抓取到 data/raw/
 │   │   ├── common.py           # i18n 反查/属性枚举/vfs 链接等共享工具
 │   │   ├── characters.py items.py recipes.py weapons.py equips.py enemies.py
 │   │   └── build_all.py        # 统一入口:全部产物 + meta + 构建报告

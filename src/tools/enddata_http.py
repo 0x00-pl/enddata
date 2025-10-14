@@ -1,7 +1,7 @@
 """共享的 GitHub 文件抓取工具:本地 git 仓库 → jsdelivr CDN → raw → GitHub API blob 多级回退。
 
 GitHub API 匿名配额为 60 次/小时,因此优先级为:
-    1. sources/ 下的本地克隆(collection/clone_sources.py 维护)——零网络
+    1. sources/ 下的本地克隆(collection/fetch.py 维护)——零网络
     2. data/raw/ 的历史缓存——零网络
     3. jsdelivr / raw(无配额限制的渠道)
     4. GitHub API blob(有配额,仅兜底)

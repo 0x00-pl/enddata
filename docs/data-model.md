@@ -4,7 +4,7 @@
 
 ```
 GitHub 源仓库 (rmxlinux/EndfieldData@main,跟随当前游戏版本)
-        │  collection/fetch_tablecfg.py(本地git → 缓存 → jsdelivr → raw → COS → API)
+        │  collection/fetch.py(仓库同步 + 本地git → 缓存 → jsdelivr → raw → COS → API)
         ▼
 data/raw/tablecfg/<repo>/<branch>/*.json     ← 原始快照 + manifest.json(抓取时间)
         │  collection/build_all.py(按产物模块初步处理:i18n 反查、表间 join、attrType 枚举翻译)

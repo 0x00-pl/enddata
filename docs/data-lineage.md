@@ -9,7 +9,7 @@
 实际解析顺序(`tools/enddata_http.py` 统一实现):
 
 ```
-1. sources/ 本地 git 克隆      ← 零网络,首选(src/collection/clone_sources.py 维护)
+1. sources/ 本地 git 克隆      ← 零网络,首选(src/collection/fetch.py 维护)
 2. data/raw/ 历史缓存             ← 零网络
 3. jsdelivr / raw.githubusercontent ← 无配额 HTTP(git 项目文件的网页形态)
 4. 一图流 COS(TableCfg 专用)     ← 无 git 的 HTTP 镜像,备源
@@ -62,7 +62,7 @@ graph TD
     ARCHIVE -.->|"版本资源 manifest(规划)"| ENDDATA
 
     subgraph ENDDATA[EndData 本项目]
-        FETCH[fetch_tablecfg.py] --> BUILD[collection/build_all.py] --> SITE[data/processed/*.json]
+        FETCH[fetch.py] --> BUILD[collection/build_all.py] --> SITE[data/processed/*.json]
     end
 
     GAME -.->|"同源旁证:两站消费同一份解包"| FFFDAN_SPA[宏山档案局/天师工具箱<br>消费同一 vfs 后端]
@@ -183,7 +183,7 @@ graph TD
 
 | 渠道 | 配额/限制 | 备注 |
 |---|---|---|
-| 本地 git | 无 | 首选;更新靠 `clone_sources.py` |
+| 本地 git | 无 | 首选;更新靠 `collection/fetch.py` |
 | jsdelivr | 单文件 20MB | GitHub 文件的 CDN 形态 |
 | 一图流 COS | 无已知限制 | 备源;尺寸与主源有差异需比对 |
 | fffdan vfs | CDN 间歇抖动,需重试 | 图标专用 |
@@ -195,5 +195,5 @@ graph TD
    `config/sources.json` 标注 `note` 说明原因。
 2. 同一数据出现多个来源时,以「跟版最新 > 结构完整 > 可本地化」排序,其余降级为
    历史对照(参考现有主源/镜像分层)。
-3. 更新流程:`python3 src/collection/clone_sources.py`(更新所有 git 源)→ `fetch_tablecfg.py`
+3. 更新流程:`python3 -m collection.fetch`(更新所有 git 源 + 抓表)
    (本地直读)→ `collection/build_all.py` → 提交 `reports/` 变更。
