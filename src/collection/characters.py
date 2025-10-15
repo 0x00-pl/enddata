@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collection.common import (
+from tools.common import (
     ATTRACTIONS_OF_INTEREST,
     I18n,
     dump,

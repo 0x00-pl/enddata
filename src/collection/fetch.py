@@ -193,7 +193,7 @@ def fetch_tables(names: list[str] | None = None, force: bool = False) -> None:
 
 def ensure_tables(names: list[str] | None = None, force: bool = False) -> None:
     """产物命令的隐式依赖:确保原始表在本地缓存,缺失的自动补抓。"""
-    from collection.common import raw_tables_dir
+    from tools.common import raw_tables_dir
 
     cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
     d = raw_tables_dir()

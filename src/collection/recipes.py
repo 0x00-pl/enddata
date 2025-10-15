@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 
-from collection.common import I18n, dump, load_raw_tables
+from tools.common import I18n, dump, load_raw_tables
 
 PRODUCT = "recipes"
 

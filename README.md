@@ -61,14 +61,14 @@ enddata/
 │   └── data-lineage.md     # 来源血缘关系、追溯规则与统计
 ├── src/                    # 功能代码
 │   ├── collection/         #   ① 数据采集:原始数据的收集 + 初步处理(按产物一个模块)
-│   │   └── fetch.py            # 数据源仓库同步(sources/)+ 原始表抓取到 data/raw/
-│   │   ├── common.py           # i18n 反查/属性枚举/vfs 链接等共享工具
+│   │   ├── fetch.py            # 数据源仓库同步(sources/)+ 原始表抓取到 data/raw/
 │   │   ├── characters.py items.py recipes.py weapons.py equips.py enemies.py
 │   │   └── build_all.py        # 统一入口:全部产物 + meta + 构建报告
 │   └── analysis/           #   ② 进阶分析(概率/DPS/产线规划等,见其 README)
 │       └── README.md
-├── tools/                  # 工具库:抓取公共库 + 版本监控
+├── tools/                  # 工具库:抓取公共库 + 共享初步处理工具 + 版本监控
 │   ├── enddata_http.py     #   抓取公共库:本地git → 缓存 → jsdelivr → raw → COS → API
+│   ├── common.py           #   i18n 反查/属性枚举/vfs 链接等共享工具
 │   └── fffdan_version.py   #   宏山档案局 /version 构建号监控
 ├── sources/                # 数据源(6 个本地 git 克隆,gitignore,约 299MB,经血统审查裁剪)
 ├── data/

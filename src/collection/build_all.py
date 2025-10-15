@@ -11,7 +11,7 @@ import json
 from datetime import datetime, timezone
 
 from collection import characters, enemies, equips, fetch, items, recipes, weapons
-from collection.common import (
+from tools.common import (
     I18n,
     PROCESSED_DIR,
     REPORTS_DIR,

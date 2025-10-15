@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from collection.common import I18n, attr_map, dump, load_raw_tables
+from tools.common import I18n, attr_map, dump, load_raw_tables
 
 PRODUCT = "enemies"
 

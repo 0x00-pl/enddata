@@ -8,7 +8,7 @@
 
 from __future__ import annotations
 
-from collection.common import I18n, attr_name, dump, load_raw_tables, load_vfs_config, vfs_url
+from tools.common import I18n, attr_name, dump, load_raw_tables, load_vfs_config, vfs_url
 
 PRODUCT = "equips"
 
