@@ -150,7 +150,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 5. **生产系统深度数据**:电力、物流带、流派加成表已可从 rmxlinux 抓取,尚未加工;
    机器配方的 `totalProgress/progressRound` 与实际秒数的换算待实测(endfield-calc 用手工维护的 craftingTime)。
 6. **战斗属性枚举**:新版 `attrType` 为整数(AttributeMetaTable 可反查图标名),
-   `src/collection/common.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
+   `src/tools/common.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
 
 ## 六、本机网络备忘(采集脚本环境)
 

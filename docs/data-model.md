@@ -21,7 +21,7 @@ reports/build-report.md                                               ← 人类
 
 ## 属性枚举(重要)
 
-新版解包把 `attrType` 从字符串改成了整数。`src/collection/common.py` 内置
+新版解包把 `attrType` 从字符串改成了整数。`src/tools/common.py` 内置
 `INT_ATTR_MAP`(0=Level,1=MaxHp,2=Atk,3=Def,9=暴击率,10=暴击伤害,
 39-42=力/敏/智/意志,4-7/48/55=各系受伤倍率),依据 `TableCfg/AttributeMetaTable.json`
 的 iconName 反查并经数值交叉验证。旧镜像的字符串 attrType 原样透传,两版兼容。
