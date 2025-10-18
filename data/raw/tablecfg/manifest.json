@@ -1,12 +1,12 @@
 {
   "repo": "rmxlinux/EndfieldData",
   "branch": "main",
-  "fetched_at": "2026-09-15T07:56:22+00:00",
+  "fetched_at": "2026-09-15T08:05:03+00:00",
   "files": {
-    "CharProfessionTable": {
-      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/CharProfessionTable.json",
-      "channel": "cache",
-      "size_kb": 1
+    "ItemTable": {
+      "path": "data/raw/tablecfg/rmxlinux__EndfieldData/main/ItemTable.json",
+      "channel": "git",
+      "size_kb": 2695
     }
   }
 }

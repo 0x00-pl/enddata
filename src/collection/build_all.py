@@ -1,7 +1,7 @@
 """统一采集入口:运行全部产物脚本,生成 data/processed/*.json、meta.json 与 reports/build-report.md。
 
 用法:
-    poetry run enddata-build
+    poetry run enddata collection all
     python3 -m collection.build_all
 """
 

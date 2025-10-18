@@ -103,31 +103,7 @@
         }
       ],
       "table_dir": "TableCfg",
-      "i18n_dir": "TableCfg",
-      "core_tables": [
-        "I18nTextTable_CN",
-        "CharacterTable",
-        "CharProfessionTable",
-        "CharLevelUpTable",
-        "CharBreakTable",
-        "SkillPatchTable",
-        "WeaponBasicTable",
-        "EnemyTable",
-        "EnemyDisplayInfoTable",
-        "EnemyAttributeTemplateTable",
-        "ItemTable",
-        "ItemTypeTable",
-        "FactoryManualCraftTable",
-        "FactoryMachineCraftTable",
-        "FactoryMachineCrafterTable",
-        "FactoryItemTable",
-        "FactoryBuildingTable",
-        "SpaceshipManufactureFormulaTable",
-        "EquipTable",
-        "EquipItemTable",
-        "EquipSuitTable",
-        "EquipFormulaTable"
-      ]
+      "i18n_dir": "TableCfg"
     },
     "fffdan_vfs": {
       "desc": "宏山档案局(end.fffdan.com)与天师工具箱(end-tools.fffdan.com)共用的资源镜像后端:按路径直取游戏资源文件(图标为 WebP),四主机可故障转移",

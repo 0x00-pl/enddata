@@ -10,7 +10,6 @@
        多级回退,产物写入 data/raw/tablecfg/ 并更新 manifest.json
 
 用法(通常经由 `enddata collection fetch` 调用):
-    python3 -m collection.fetch               # 更新仓库 + 抓取 core_tables
     python3 -m collection.fetch --no-update   # 跳过仓库更新(离线)
     python3 -m collection.fetch ItemTable --force
 """
@@ -103,6 +102,11 @@ def update_one(entry: dict) -> tuple[str, str]:
     return "updated", ""
 
 
+def configure_clone_parser(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--no-update", action="store_true", help="只克隆缺失的,不更新已有仓库")
+    parser.add_argument("--only", nargs="*", help="只处理指定仓库(如 rmxlinux/EndfieldData)")
+
+
 def update_repos(no_update: bool = False, only: list[str] | None = None) -> None:
     git_cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["git"]
     entries = git_cfg["clone"]
@@ -132,11 +136,11 @@ def update_repos(no_update: bool = False, only: list[str] | None = None) -> None
 # ================= 第二步:数值表抓取 =================
 
 
-def fetch_tables(names: list[str] | None = None, force: bool = False) -> None:
+def fetch_tables(names: list[str], force: bool = False) -> None:
     cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
     repo = cfg["repo"]
     branch = resolve_branch(repo, cfg.get("branch"))
-    wanted = names or cfg["core_tables"]
+    wanted = names
     table_dir = cfg.get("table_dir", "TableCfg")
     i18n_dir = cfg.get("i18n_dir", table_dir)
     # 不同镜像的 i18n 位置不同(rmxlinux 在 TableCfg/ 内,XiaBei-cy 在 i18n/ 目录),
@@ -191,13 +195,12 @@ def fetch_tables(names: list[str] | None = None, force: bool = False) -> None:
     info(f"完成 {ok}/{len(wanted)},清单已写入 {MANIFEST.relative_to(PROJECT_ROOT)}")
 
 
-def ensure_tables(names: list[str] | None = None, force: bool = False) -> None:
+def ensure_tables(names: list[str], force: bool = False) -> None:
     """产物命令的隐式依赖:确保原始表在本地缓存,缺失的自动补抓。"""
     from tools.common import raw_tables_dir
 
-    cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
     d = raw_tables_dir()
-    wanted = names or cfg["core_tables"]
+    wanted = names
     if force:
         info(f"强制重抓依赖的原始表 {len(wanted)} 张")
         fetch_tables(wanted, force=True)
@@ -206,28 +209,3 @@ def ensure_tables(names: list[str] | None = None, force: bool = False) -> None:
     if missing:
         info(f"缺少原始表,自动补抓 {len(missing)} 张: {', '.join(missing)}")
         fetch_tables(missing, force=False)
-
-
-# ================= 命令行 =================
-
-
-def configure_parser(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("tables", nargs="*", help="要抓取的表名(不含 .json),缺省取 core_tables 全部")
-    parser.add_argument("--force", action="store_true", help="忽略本地缓存")
-    parser.add_argument("--no-update", action="store_true", help="跳过数据源仓库更新(离线时使用)")
-
-
-def run(args) -> None:
-    if not args.no_update:
-        update_repos()
-    fetch_tables(args.tables or None, force=args.force)
-
-
-def main(argv=None) -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    configure_parser(parser)
-    run(parser.parse_args(argv))
-
-
-if __name__ == "__main__":
-    main()
