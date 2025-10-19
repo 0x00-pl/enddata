@@ -29,11 +29,7 @@
 
 ```bash
 # 数据采集:原始表抓取 + 各产物数据集(产物隐式依赖 fetch,缺原始表自动补抓)
-poetry run enddata collection fetch                      # 更新数据源仓库 + 抓取核心原始表
-poetry run enddata collection fetch --no-update          # 离线:跳过仓库更新
-poetry run enddata collection fetch ItemTable --force
-poetry run enddata collection items                      # 只生成 items 数据集
-poetry run enddata collection equips --force             # 强制重抓装备依赖的原始表
+poetry run enddata collection items                      # 只生成 items 数据集(缺原始表自动补抓)
 poetry run enddata collection all                        # 依赖全部 collection,产出所有数据集与报告
 
 # 数据展示:本地预览(从仓库根目录起服务)

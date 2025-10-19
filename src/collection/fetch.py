@@ -9,7 +9,7 @@
     2. 数值表抓取:本地 git 仓库 → 缓存 → jsdelivr → raw → 一图流 COS → GitHub API
        多级回退,产物写入 data/raw/tablecfg/ 并更新 manifest.json
 
-用法(通常经由 `enddata collection fetch` 调用):
+由 `enddata collection <产物>/all` 的隐式依赖机制调用:
     python3 -m collection.fetch --no-update   # 跳过仓库更新(离线)
     python3 -m collection.fetch ItemTable --force
 """
