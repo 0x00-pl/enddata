@@ -29,6 +29,8 @@
 
 ```bash
 # 数据采集:原始表抓取 + 各产物数据集(产物隐式依赖 fetch,缺原始表自动补抓)
+poetry run enddata collection clone                      # 更新 sources/ 下数据源仓库
+poetry run enddata collection characters --force         # 强制重抓干员依赖的原始表
 poetry run enddata collection items                      # 只生成 items 数据集(缺原始表自动补抓)
 poetry run enddata collection all                        # 依赖全部 collection,产出所有数据集与报告
 
