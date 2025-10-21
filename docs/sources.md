@@ -65,7 +65,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 - **主机故障转移**(前端按序重试):`endfield-assets.fffdan.com` → `cn/cn2/cn3.endfield.fffdan.com`;
   该 CDN 间歇性抖动,请求需带重试
 - **版本端点**:`GET /version` → 官方构建号(如 `initial_10024360-6_main_10024360-6`),
-  `tools/fffdan_version.py` 用它做更新监控(`--record` 记录基线,再跑即对比)
+  `enddata version --record` 做更新监控(记录基线,再跑即对比)
 - **资源直取**:`GET /vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites/<路径>`(WebP)。
 
 | 资源 | 路径模板 | 对应字段 | 验证 |

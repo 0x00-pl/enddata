@@ -14,7 +14,7 @@ import argparse
 
 from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, weapons
-from tools import fffdan_version
+from tools import version
 
 PRODUCT_MODULES = {
     "characters": characters,
@@ -52,8 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
         pp = coll_sub.add_parser(name, help=f"生成 {name}.json(缺原始表时自动补抓)")
         pp.add_argument("--force", action="store_true", help="强制重抓该产物依赖的原始表")
 
-    version_p = sub.add_parser("version", help="宏山档案局构建号监控")
-    fffdan_version.configure_parser(version_p)
+    version_p = sub.add_parser("version", help="项目版本与数据源版本报告")
+    version.configure_parser(version_p)
     return parser
 
 
@@ -61,7 +61,7 @@ def main(argv=None) -> None:
     args = build_parser().parse_args(argv)
 
     if args.command == "version":
-        fffdan_version.run(args)
+        version.run(args)
         return
 
     # collection 域
