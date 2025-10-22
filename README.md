@@ -67,7 +67,7 @@ enddata/
 ├── tools/                  # 工具库:抓取公共库 + 共享初步处理工具 + 版本监控
 │   ├── enddata_http.py     #   抓取公共库:本地git → 缓存 → jsdelivr → raw → COS → API
 │   ├── common.py           #   i18n 反查/属性枚举/vfs 链接等共享工具
-│   └── fffdan_version.py   #   宏山档案局 /version 构建号监控
+│   └── version.py          #   项目/数据源版本报告
 ├── sources/                # 数据源(6 个本地 git 克隆,gitignore,约 299MB,经血统审查裁剪)
 ├── data/
 │   ├── raw/                # 采集好的数据(原始快照 + manifest 抓取清单)

@@ -144,7 +144,7 @@ graph TD
 | **技能/Buff 数值** | rmxlinux SkillPatchTable(509 技能,已抓取) | — | 本地 git | ⏳ 已取未加工 |
 | **敌人中文名** | 无(解包哈希为 0) | jei-web 森空岛包「威胁」分区(git) | 本地 git | ⏳ 待接入 |
 | **养成数值交叉验证** | zmdgraph(git,数据内嵌 js) | — | 本地 git | 参考 |
-| **版本更新监控** | rmxlinux main 提交 + 4n3u manifest(git) | 宏山档案局 /version(HTTP);fffdan_version.py | 本地 git + HTTP | ✅ 在用 |
+| **版本更新监控** | rmxlinux main 提交 + 4n3u manifest(git) | 宏山档案局 /version(HTTP);`enddata version` 报告 | 本地 git + HTTP | ✅ 在用 |
 | **公告/卡池资讯** | BiologyHazard/endfield-archive-library(git) | — | 本地 git | ⏳ 规划 |
 | **玩家个人数据**(练度/抽卡) | 无 git(Skport 官方 API) | skport-api-docs 仅为文档(git) | HTTP+签名 | ⏳ 规划(用户自选导入) |
 
