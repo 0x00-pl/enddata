@@ -82,7 +82,6 @@ enddata/
 ## 数据来源与致谢
 
 - [rmxlinux/EndfieldData](https://github.com/rmxlinux/EndfieldData) — **主数据源**:跟随当前版本的完整 TableCfg(725 表 + i18n)
-- [XiaBei-cy/EndfieldData](https://github.com/XiaBei-cy/EndfieldData) — 正式服开服版 TableCfg(历史对照)
 - [AndreaFrederica/jei-web](https://github.com/AndreaFrederica/jei-web) — 森空岛 Wiki 物品/配方包(规划接入)
 - [AixLnyt/skport-api-docs](https://github.com/AixLnyt/skport-api-docs) — 官方 API 文档(玩家数据,规划接入)
 - [JamboChen/endfield-calc](https://github.com/JamboChen/endfield-calc) — 产线规划参考实现

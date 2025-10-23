@@ -23,20 +23,9 @@
         "role": "产线计算参考(69MB 全量)"
       },
       {
-        "repo": "daydreamer-json/ak-endfield-api-archive",
-        "branch": "main",
-        "partial": true,
-        "role": "官方 API 存档"
-      },
-      {
         "repo": "AixLnyt/skport-api-docs",
         "partial": false,
         "role": "Skport API 文档(小仓库全量)"
-      },
-      {
-        "repo": "CaffuChin0/zmdgraph",
-        "partial": false,
-        "role": "终末地养成规划计算器(19MB,含养成数据)"
       }
     ],
     "retired": [
@@ -67,6 +56,14 @@
       {
         "repo": "Arknights-yituliu/ef-frontend-v1",
         "reason": "纯前端代码无数据,COS 端点已文档化于 yituliu_cos;2026-09-15 审查移除"
+      },
+      {
+        "repo": "daydreamer-json/ak-endfield-api-archive",
+        "reason": "182MB;版本监控已由 enddata version(fffdan /version)覆盖,资源 manifest 可用 4n3u 替代;2026-09-15 二轮审查移除"
+      },
+      {
+        "repo": "CaffuChin0/zmdgraph",
+        "reason": "31MB;养成数据为解包表衍生品,交叉验证用途可随时重克隆;2026-09-15 二轮审查移除"
       }
     ]
   },

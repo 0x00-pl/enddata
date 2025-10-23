@@ -128,7 +128,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 
 - **Skport API** 端点:`GET /web/v1/wiki/item/catalog`(官方物品库全量)、`GET /web/v1/wiki/char-pool` / `weapon-pool`(卡池)、`GET /api/v1/game/endfield/card/detail`(玩家完整游戏卡)
 - **抽卡记录**:`https://ef-webview.gryphline.com` 的 `/api/content`、`/api/record/char`、`/api/record/weapon`
-- [daydreamer-json/ak-endfield-api-archive](https://github.com/daydreamer-json/ak-endfield-api-archive)(55★,每日自动存档):已克隆核对,内置完整 API 客户端 SDK(`src/utils/api/akEndfield/`,含 zonai/launcher/webview 等服务),其存档重点是**启动器与版本资源 manifest**,可作版本监控数据源。
+- ~~[daydreamer-json/ak-endfield-api-archive](https://github.com/daydreamer-json/ak-endfield-api-archive)~~(55★,每日自动存档):**退役**(版本监控已由 fffdan /version 覆盖;资源 manifest 用 4n3u 替代),已克隆核对过其内置 API 客户端 SDK。
 
 玩家个人数据(练度/抽卡)需要用户自己的凭据,涉及账号安全,后续做成"用户自选导入"功能,不做服务端集中采集。
 

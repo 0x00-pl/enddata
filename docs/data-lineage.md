@@ -34,16 +34,12 @@ graph TD
     end
 
     subgraph GIT2[git:官方 API 派生]
-        ARCHIVE[daydreamer-json/ak-endfield-api-archive<br>API 响应/版本资源存档]
         SKPORTDOC[AixLnyt/skport-api-docs<br>API 逆向文档]
         BHAZ[BiologyHazard/endfield-archive-library<br>公告/卡池存档]
     end
 
     subgraph GIT3[git:社区手工精校]
         CALC[JamboChen/endfield-calc<br>320条配方+耗时+电力]
-        ZMDGRAPH[CaffuChin0/zmdgraph<br>养成计算器,数据内嵌]
-        MIKUN[mikunyaaa/endfield-calculator<br>产线分流计算器]
-        EFFRONT[Arknights-yituliu/ef-frontend-v1<br>一图流前端,端点参考]
     end
 
     subgraph NOWEB[无 git:HTTP/网页渠道]
@@ -56,7 +52,6 @@ graph TD
     YITULIU_COS -.->|"备源(尺寸与rmxlinux有差异)"| ENDDATA
     FFFDAN_VFS -->|"icon/iconUrl 直链"| ENDDATA
     CALC -.->|"craftingTime/电力参考"| ENDDATA
-    ZMDGRAPH -.->|"养成数值交叉验证"| ENDDATA
     SKPORT -.->|"玩家数据(规划:用户自选导入)"| ENDDATA
     BHAZ -.->|"公告/卡池(规划)"| ENDDATA
     ARCHIVE -.->|"版本资源 manifest(规划)"| ENDDATA
@@ -108,9 +103,11 @@ graph TD
 | ✅ 保留 | jei-web | 森空岛 Wiki 血统(与解包互补):敌人中文名、物品包 |
 | ✅ 保留 | endfield-calc | 人工精校(耗时/电力),近 90 天 16 次提交最活跃 |
 | ✅ 保留 | ak-endfield-api-archive | 官方 API/资源 manifest 存档(版本监控) |
-| ✅ 保留 | skport-api-docs / zmdgraph | API 文档;养成数值交叉验证 |
+| ✅ 保留 | skport-api-docs | API 文档(236KB,玩家数据功能需要) |
 | ❌ 退役 | luosky / XiaBei / Hengle / lsy-404 / UPON | 旧版备份或测试服子集,内容被 rmxlinux 覆盖 |
 | ❌ 退役 | mikunyaaa / ef-frontend-v1 | 仓库内无数据(纯代码),端点已文档化 |
+| ❌ 退役(二轮) | ak-endfield-api-archive(182MB) | 版本监控已由 fffdan /version 覆盖,manifest 可用 4n3u 替代 |
+| ❌ 退役(二轮) | zmdgraph(31MB) | 养成数据为解包衍生品,交叉验证可随时重克隆 |
 
 退役源保留在 `config/sources.json` 的 `git.retired`(含复克隆所需信息),需要时可随时恢复。
 
@@ -127,9 +124,9 @@ graph TD
 | **配方耗时/电力** | **P0 endfield-calc**(git,最活跃,craftingTime 精校)→ P1 rmxlinux totalProgress(换算待实测) |
 | **技能数值(DPS)** | **P0 rmxlinux SkillPatchTable**(509 技能,待加工);参考 endfield-calc 模拟器实现 |
 | **敌人中文名** | **P0 jei-web「威胁」分区**(git);备选 Skport wiki 目录(HTTP) |
-| **养成数值验证** | **P0 zmdgraph js/data.js**(git 内嵌);P1 本表成长曲线自洽校验 |
+| **养成数值验证** | P2 重克隆 CaffuChin0/zmdgraph(见 git.retired);P1 本表成长曲线自洽校验 |
 | **版本监控** | **P0 rmxlinux main 提交**;P1 fffdan `/version`(HTTP);P2 4n3u manifest |
-| **公告/卡池** | **P0 BiologyHazard archive**(git)→ R Skport API |
+| **公告/卡池** | **P0 BiologyHazard archive**(git,需要时克隆);P2 ak-archive(已退役,可恢复) |
 | **玩家个人数据** | R Skport API(无 git,唯一渠道,需用户凭据) |
 
 ## 三、数据类别 × 来源 × 渠道
@@ -150,12 +147,12 @@ graph TD
 
 ## 四、统计(2026-09-15)
 
-### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-15 审查后
+### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-15 两轮审查后
 
 | 指标 | 值 |
 |---|---|
-| 仓库总数 | **6**(审查前 13,退役 7) |
-| 总体积 | **约 299 MB**(大仓库全部 partial 克隆,rmxlinux 1.5GB 仅占 18MB) |
+| 仓库总数 | **4**(审查前 13,累计退役 9) |
+| 总体积 | **约 87 MB**(rmxlinux 1.5GB 经 partial 克隆仅占 18MB) |
 | 主源核心表本地可直读 | **24/24(100%,零网络)** |
 | partial 懒取实测 | 首次 13s(经代理)→ 之后 0.02s(纯本地) |
 
