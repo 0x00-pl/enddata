@@ -1,0 +1,33 @@
+{
+  "target": {
+    "id": "item_copper_cmpt",
+    "qty": 10.0
+  },
+  "steps": [
+    {
+      "item": "item_copper_cmpt",
+      "station": "machine",
+      "recipeId": "component_copper_cmpt_1",
+      "crafts": 10,
+      "craftTimeSec": 2,
+      "totalTimeSec": 20.0
+    },
+    {
+      "item": "item_copper_nugget",
+      "station": "machine",
+      "recipeId": "furnance_copper_nugget_1",
+      "crafts": 10,
+      "craftTimeSec": 2,
+      "totalTimeSec": 20.0
+    }
+  ],
+  "rawMaterials": [
+    [
+      "item_copper_ore",
+      10.0
+    ]
+  ],
+  "totalTimeSec": 40.0,
+  "unresolved": [],
+  "targetName": "赤铜零件"
+}
