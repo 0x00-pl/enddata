@@ -28,8 +28,9 @@
 统一 CLI(子命令见 `poetry run enddata --help`):
 
 ```bash
-# 数据采集:原始表抓取 + 各产物数据集(产物隐式依赖 fetch,缺原始表自动补抓)
+# 数据采集:原始表按需自动补抓 + 各产物数据集
 poetry run enddata collection clone                      # 更新 sources/ 下数据源仓库
+poetry run enddata collection fetch                      # 更新仓库 + 刷新构建号 + 预热原始表
 poetry run enddata collection characters --force         # 强制重抓干员依赖的原始表
 poetry run enddata collection items                      # 只生成 items 数据集(缺原始表自动补抓)
 poetry run enddata collection all                        # 依赖全部 collection,产出所有数据集与报告
@@ -38,11 +39,15 @@ poetry run enddata collection all                        # 依赖全部 collecti
 python3 -m http.server 8321 --bind 127.0.0.1
 # 打开 http://127.0.0.1:8321/site/
 
-# 辅助:宏山档案局构建号监控
-poetry run enddata version --record
+# 进阶分析:产线规划(倒推原材料/制造步骤/耗时)
+poetry run enddata analysis plan 赤铜零件 10
+poetry run enddata analysis plan item_copper_cmpt 5 --station machine
+
+# 辅助:版本报告(读取 data/versions.json,离线可用)
+poetry run enddata version
 ```
 
-导入采用规范的包内绝对导入(`from tools.enddata_http import ...`),不做任何 sys.path 修改,
+导入采用规范的包内绝对导入(`from tools.datasource import ...`),不做任何 sys.path 修改,
 因此请在 Poetry 虚拟环境内运行(`poetry run`/`poetry shell`,需先 `poetry install`)。
 
 ## 目录结构
@@ -52,31 +57,31 @@ enddata/
 ├── pyproject.toml          # Poetry 项目定义与命令行入口
 ├── poetry.lock
 ├── config/
-│   └── sources.json        # 数据源注册表(git 仓库清单/核心表/官方 API 端点/资源路径模板)
+│   └── sources.json        # 数据源注册表(git 仓库清单/产物依赖表/官方 API 端点/资源路径模板)
 ├── docs/                   # 项目文档
 │   ├── sources.md          # 数据源调研报告
 │   ├── data-model.md       # 原始表 → 数据集的流水线与字段说明
 │   └── data-lineage.md     # 来源血缘关系、追溯规则与统计
 ├── src/                    # 功能代码
+│   ├── enddata/            #   CLI 入口(poetry run enddata <子命令>)
+│   │   └── cli.py              # collection {clone,fetch,all,<产物>} / version
 │   ├── collection/         #   ① 数据采集:原始数据的收集 + 初步处理(按产物一个模块)
-│   │   ├── fetch.py            # 数据源仓库同步(sources/)+ 原始表抓取到 data/raw/
+│   │   ├── fetch.py            # 数据源仓库同步(sources/)+ 原始表按需加载
 │   │   ├── characters.py items.py recipes.py weapons.py equips.py enemies.py
 │   │   └── build_all.py        # 统一入口:全部产物 + meta + 构建报告
-│   └── analysis/           #   ② 进阶分析(概率/DPS/产线规划等,见其 README)
-│       └── README.md
-├── tools/                  # 工具库:抓取公共库 + 共享初步处理工具 + 版本监控
-│   ├── enddata_http.py     #   抓取公共库:本地git → 缓存 → jsdelivr → raw → COS → API
-│   ├── common.py           #   i18n 反查/属性枚举/vfs 链接等共享工具
-│   └── version.py          #   项目/数据源版本报告
-├── sources/                # 数据源(6 个本地 git 克隆,gitignore,约 299MB,经血统审查裁剪)
-├── data/
-│   ├── raw/                # 采集好的数据(原始快照 + manifest 抓取清单)
-│   ├── processed/          # 生成的数据集(构建产物,gitignore)
-│   └── ...                 # 版本记录等
-├── reports/                # 生成的报告(build-report.md 等,入库)
+│   ├── analysis/           #   ② 进阶分析(概率/DPS/产线规划等,见其 README)
+│   │   ├── planner.py          # 产线规划器:原材料倒推/制造步骤/耗时估算
+│   │   └── README.md
+│   └── tools/              #   工具库
+│       ├── datasource.py       # 数据源访问:本地git → jsdelivr → raw → API 多级回退
+│       ├── tables.py           # 表加载 + i18n 反查 + 属性枚举 + vfs 链接
+│       └── versions.py         # data/versions.json 读写 + enddata version 报告
+├── sources/                # 数据源(4 个本地 git 克隆,gitignore,约 87MB,经血统审查)
+├── data/                   # 生成的数据:各产物数据集 + meta + versions.json(数据集 gitignore)
+├── reports/                # 生成的报告(build-report.md,入库)
 └── site/                   # ③ 报告的网页展示
-    ├── index.html          #   总览/干员/武器/物品/配方/敌人 六个分页
-    └── assets/             #   style.css / app.js(读取 /data/processed/)
+    ├── index.html          #   总览/干员/武器/装备/物品/配方/敌人 七个分页
+    └── assets/             #   style.css / app.js(读取 /data/)
 ```
 
 ## 数据来源与致谢

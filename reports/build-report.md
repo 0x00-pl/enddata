@@ -1,8 +1,7 @@
 # 构建报告
 
-- 构建时间:2026-09-15T08:14:55+00:00(UTC)
-- 数据源:rmxlinux/EndfieldData@main(抓取于 2026-09-15T08:05:03+00:00)
-- 抓取渠道分布:{"git": 1}
+- 构建时间:2026-09-16T01:52:41+00:00(UTC)
+- 数据源:rmxlinux/EndfieldData@main
 - i18n 未命中:0
 
 ## 数据集规模
@@ -18,5 +17,5 @@
 
 ## 产物位置
 
-- 数据集:`data/processed/*.json`(网页展示由 `site/` 消费)
+- 数据集:`data/*.json`(网页展示由 `site/` 消费)
 - 本报告:`reports/build-report.md`

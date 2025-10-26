@@ -6,14 +6,14 @@
 
 > **原则:同一数据优先追溯到 git 项目;没有 git 项目的,才允许网页/HTTP 渠道。**
 
-实际解析顺序(`tools/enddata_http.py` 统一实现):
+实际解析顺序(`tools/datasource.py` 统一实现):
 
 ```
-1. sources/ 本地 git 克隆      ← 零网络,首选(src/collection/fetch.py 维护)
-2. data/raw/ 历史缓存             ← 零网络
-3. jsdelivr / raw.githubusercontent ← 无配额 HTTP(git 项目文件的网页形态)
-4. 一图流 COS(TableCfg 专用)     ← 无 git 的 HTTP 镜像,备源
-5. GitHub API blob                ← 有配额,最后兜底
+1. sources/ 本地 git 克隆      ← 零网络,首选(src/collection/fetch.py 维护;
+                                  缺失 blob 由 git 按需懒取并落本地对象库)
+2. jsdelivr / raw.githubusercontent ← 无配额 HTTP(git 项目文件的网页形态)
+3. 一图流 COS(TableCfg 专用)     ← 无 git 的 HTTP 镜像,开服版应急备源
+4. GitHub API blob                ← 有配额,最后兜底
 ```
 
 注册表:`config/sources.json`(`git.clone` 列出全部 git 源;`sources.*` 记录各源角色与验证状态)。
@@ -54,10 +54,9 @@ graph TD
     CALC -.->|"craftingTime/电力参考"| ENDDATA
     SKPORT -.->|"玩家数据(规划:用户自选导入)"| ENDDATA
     BHAZ -.->|"公告/卡池(规划)"| ENDDATA
-    ARCHIVE -.->|"版本资源 manifest(规划)"| ENDDATA
 
     subgraph ENDDATA[EndData 本项目]
-        FETCH[fetch.py] --> BUILD[collection/build_all.py] --> SITE[data/processed/*.json]
+        FETCH[fetch.py] --> BUILD[collection/build_all.py] --> SITE[data/*.json + reports/build-report.md]
     end
 
     GAME -.->|"同源旁证:两站消费同一份解包"| FFFDAN_SPA[宏山档案局/天师工具箱<br>消费同一 vfs 后端]
@@ -102,7 +101,6 @@ graph TD
 | ✅ 保留 | rmxlinux/EndfieldData | 唯一跟版(33 角色/725 表),血统最优 |
 | ✅ 保留 | jei-web | 森空岛 Wiki 血统(与解包互补):敌人中文名、物品包 |
 | ✅ 保留 | endfield-calc | 人工精校(耗时/电力),近 90 天 16 次提交最活跃 |
-| ✅ 保留 | ak-endfield-api-archive | 官方 API/资源 manifest 存档(版本监控) |
 | ✅ 保留 | skport-api-docs | API 文档(236KB,玩家数据功能需要) |
 | ❌ 退役 | luosky / XiaBei / Hengle / lsy-404 / UPON | 旧版备份或测试服子集,内容被 rmxlinux 覆盖 |
 | ❌ 退役 | mikunyaaa / ef-frontend-v1 | 仓库内无数据(纯代码),端点已文档化 |
@@ -141,7 +139,7 @@ graph TD
 | **技能/Buff 数值** | rmxlinux SkillPatchTable(509 技能,已抓取) | — | 本地 git | ⏳ 已取未加工 |
 | **敌人中文名** | 无(解包哈希为 0) | jei-web 森空岛包「威胁」分区(git) | 本地 git | ⏳ 待接入 |
 | **养成数值交叉验证** | zmdgraph(git,数据内嵌 js) | — | 本地 git | 参考 |
-| **版本更新监控** | rmxlinux main 提交 + 4n3u manifest(git) | 宏山档案局 /version(HTTP);`enddata version` 报告 | 本地 git + HTTP | ✅ 在用 |
+| **版本更新监控** | rmxlinux main 提交(git) | 宏山档案局 /version(HTTP);P2 4n3u manifest | 本地 git + HTTP | ✅ 在用(`enddata version`) |
 | **公告/卡池资讯** | BiologyHazard/endfield-archive-library(git) | — | 本地 git | ⏳ 规划 |
 | **玩家个人数据**(练度/抽卡) | 无 git(Skport 官方 API) | skport-api-docs 仅为文档(git) | HTTP+签名 | ⏳ 规划(用户自选导入) |
 
@@ -158,15 +156,12 @@ graph TD
 
 | 仓库 | 体积 | 角色 |
 |---|---|---|
-| daydreamer-json/ak-endfield-api-archive | 182M | 官方 API 存档 |
-| JamboChen/endfield-calc | 69M | 产线精校数据 |
-| CaffuChin0/zmdgraph | 31M | 养成计算器 |
-| lsy-404/EndfieldGameData | 20M | 测试服历史 |
-| Arknights-yituliu/ef-frontend-v1 | 14M | 一图流前端 |
-| rmxlinux/EndfieldData | 6.6M | **主源**(partial) |
-| 其余 7 个 | <1.1M | 历史对照/文档/工具 |
+| JamboChen/endfield-calc | 69M | 产线精校数据(craftingTime/电力) |
+| rmxlinux/EndfieldData | 18M | **主源**(partial,1.5GB 仓库按需懒取) |
+| AixLnyt/skport-api-docs | 0.24M | 官方 API 文档 |
+| AndreaFrederica/jei-web | 0.24M | 森空岛 Wiki 包(敌人中文名,规划) |
 
-### 数据集产出(`data/processed/`,构建于 rmxlinux@main 2026-09-08)
+### 数据集产出(`data/`,构建于 rmxlinux@main 2026-09-08)
 
 | 数据集 | 条数 |
 |---|---|
@@ -174,6 +169,7 @@ graph TD
 | 物品(含图标直链) | 2829(2808 有图标链接) |
 | 生产配方 | 427 |
 | 武器 | 79 |
+| 装备(词条/套装) | 258 + 24 套装 |
 | 敌人(抗性/韧性/霸体) | 381 |
 
 ### 渠道健康度
@@ -192,5 +188,5 @@ graph TD
    `config/sources.json` 标注 `note` 说明原因。
 2. 同一数据出现多个来源时,以「跟版最新 > 结构完整 > 可本地化」排序,其余降级为
    历史对照(参考现有主源/镜像分层)。
-3. 更新流程:`python3 -m collection.fetch`(更新所有 git 源 + 抓表)
-   (本地直读)→ `collection/build_all.py` → 提交 `reports/` 变更。
+3. 更新流程:`enddata collection clone`(更新 git 源)→ `enddata collection all`
+   (按需读表并产出全部数据集与报告)→ 提交 `reports/` 变更。

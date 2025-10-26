@@ -1,0 +1,33 @@
+{
+  "repos": {
+    "rmxlinux/EndfieldData": {
+      "branch": "main",
+      "sha": "ef902ef",
+      "date": "2026-09-08",
+      "subject": "Update 9/8"
+    },
+    "AndreaFrederica/jei-web": {
+      "branch": "master",
+      "sha": "ee35c64",
+      "date": "2026-08-06",
+      "subject": "feat(planner): 支持数据包声明式规划场景（档案/特性/约束/机器上限/外部输入）"
+    },
+    "JamboChen/endfield-calc": {
+      "branch": "master",
+      "sha": "17dc84d",
+      "date": "2026-09-04",
+      "subject": "pump version to v0.10.0 (#115)"
+    },
+    "AixLnyt/skport-api-docs": {
+      "branch": "main",
+      "sha": "54fd90c",
+      "date": "2026-06-18",
+      "subject": "更新中文版 README.md"
+    }
+  },
+  "updatedAt": "2026-09-16T01:52:42+00:00",
+  "game": {
+    "build": "initial_10024360-6_main_10024360-6",
+    "checkedAt": "2026-09-16T01:52:42+00:00"
+  }
+}
