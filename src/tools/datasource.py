@@ -1,10 +1,9 @@
 """共享的 GitHub 文件抓取工具:本地 git 仓库 → jsdelivr CDN → raw → GitHub API blob 多级回退。
 
 GitHub API 匿名配额为 60 次/小时,因此优先级为:
-    1. sources/ 下的本地克隆(collection/fetch.py 维护)——零网络
-    2. data/raw/ 的历史缓存——零网络
-    3. jsdelivr / raw(无配额限制的渠道)
-    4. GitHub API blob(有配额,仅兜底)
+    1. sources/ 下的本地 git 克隆(collection/fetch.py 维护)——零网络
+    2. jsdelivr / raw.githubusercontent(无配额限制的渠道)
+    3. GitHub API blob(有配额,仅兜底)
 """
 
 from __future__ import annotations
@@ -19,8 +18,7 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-PROJECT_ROOT = Path(__file__).resolve().parents[2]  # src/collection/ → 仓库根
-RAW_DIR = PROJECT_ROOT / "data" / "raw"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]  # src/tools/ → 仓库根
 REPOS_DIR = PROJECT_ROOT / "sources"
 
 USER_AGENT = "enddata-collector (fan-made game data aggregator)"
@@ -124,32 +122,6 @@ def fetch_gh_file(repo: str, branch: str, path: str, use_api_fallback: bool = Tr
     if use_api_fallback:
         return _via_blob(repo, branch, path), "api-blob"
     raise FetchError(f"所有渠道均失败: {repo}@{branch}/{path}")
-
-
-def cache_path(source: str, repo: str, branch: str, *parts: str) -> Path:
-    safe_repo = repo.replace("/", "__")
-    return RAW_DIR / source / safe_repo / branch / Path(*parts)
-
-
-def fetch_to_cache(source: str, repo: str, branch: str, remote_path: str, local_name: str | None = None,
-                   force: bool = False) -> tuple[Path, str]:
-    """抓取文件并缓存到 data/raw/<source>/<repo>/<branch>/,已存在则直接返回。
-    渠道优先级:cache → 本地 git 仓库 → jsdelivr → raw → GitHub API blob。"""
-    name = local_name or Path(remote_path).name
-    dest = cache_path(source, repo, branch, name)
-    if dest.exists() and not force:
-        return dest, "cache"
-    data = read_from_git(repo, remote_path)
-    if data is not None:
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
-        channel = "git"
-    else:
-        data, channel = fetch_gh_file(repo, branch, remote_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_bytes(data)
-    print(f"  [{channel}] {remote_path} -> {dest.relative_to(PROJECT_ROOT)} ({len(data)/1024:.0f} KB)")
-    return dest, channel
 
 
 def load_json(path: Path):

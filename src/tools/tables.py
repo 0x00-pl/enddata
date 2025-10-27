@@ -1,13 +1,13 @@
-"""采集与初步处理的共享工具:i18n 反查、属性枚举、vfs 资源链接、原始表加载与输出。"""
+"""原始表加载与初步处理共享工具:i18n 反查、属性枚举翻译、vfs 资源链接、数据集输出。"""
 
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
-from tools.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
+from tools.datasource import PROJECT_ROOT, fetch_gh_file, info, load_json, read_from_git
 
-PROCESSED_DIR = PROJECT_ROOT / "data" / "processed"
+DATA_DIR = PROJECT_ROOT / "data"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 
 ATTRACTIONS_OF_INTEREST = ["MaxHp", "Atk", "Def", "Str", "Agi", "Wisd", "Will"]
@@ -98,18 +98,33 @@ def load_vfs_config() -> None:
     vfs_url.patterns = cfg["paths"]
 
 
-def raw_tables_dir() -> Path:
-    cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
-    return RAW_DIR / "tablecfg" / cfg["repo"].replace("/", "__") / cfg["branch"]
+def _tablecfg() -> dict:
+    return load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
 
 
-def load_raw_tables() -> dict:
-    """加载主源全部已抓取的原始表,按表名索引。"""
-    return {p.stem: load_json(p) for p in raw_tables_dir().glob("*.json")}
+def load_table(name: str, force: bool = False) -> dict:
+    """读取单张原始表(已解析 JSON)。
+
+    优先本地 sources/ git 仓库(git cat-file,首读会按需懒取 blob);
+    force=True 时跳过本地仓库直接走网络(jsdelivr → raw → API)。
+    """
+    cfg = _tablecfg()
+    repo, branch = cfg["repo"], cfg["branch"]
+    remote = f"{cfg.get('table_dir', 'TableCfg')}/{name}.json"
+    data = None
+    if not force:
+        data = read_from_git(repo, remote)
+    if data is None:
+        data, _channel = fetch_gh_file(repo, branch, remote)
+    return json.loads(data)
+
+
+def load_tables(names: list[str], force: bool = False) -> dict:
+    """批量加载原始表,按表名索引。"""
+    return {name: load_table(name, force=force) for name in names}
 
 
 def dump(name: str, payload):
-    PROCESSED_DIR.mkdir(parents=True, exist_ok=True)
-    dest = PROCESSED_DIR / f"{name}.json"
+    dest = DATA_DIR / f"{name}.json"
     dest.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     info(f"  -> {dest.relative_to(PROJECT_ROOT)} ({dest.stat().st_size/1024:.0f} KB, {len(payload) if isinstance(payload, list) else '...'} 条)")
