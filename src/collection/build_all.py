@@ -1,4 +1,4 @@
-"""统一采集入口:运行全部产物脚本,生成 data/processed/*.json、meta.json 与 reports/build-report.md。
+"""统一采集入口:运行全部产物脚本,生成 data/*.json、meta.json 与 reports/build-report.md。
 
 用法:
     poetry run enddata collection all
@@ -10,33 +10,36 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 
-from collection import characters, enemies, equips, fetch, items, recipes, weapons
-from tools.common import (
+from collection import characters, enemies, equips, items, recipes, weapons
+from tools import versions
+from tools.tables import (
     I18n,
-    PROCESSED_DIR,
     REPORTS_DIR,
     dump,
-    load_raw_tables,
+    load_tables,
     load_vfs_config,
 )
-from tools.enddata_http import PROJECT_ROOT, RAW_DIR, info, load_json
+from tools.datasource import PROJECT_ROOT, info, load_json
 
 PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies)
 
 
 def run(force: bool = False) -> None:
-    required = sorted({t for m in PRODUCT_MODULES for t in m.REQUIRED_TABLES})
-    fetch.ensure_tables(required, force=force)
     t0 = datetime.now(timezone.utc)
+    versions.record_repo_heads()
+    versions.refresh_game_build()
     load_vfs_config()
-    raw = load_raw_tables()
-    info(f"加载原始表: {len(raw)} 张")
-    t = I18n(raw["I18nTextTable_CN"])
 
     payloads: dict[str, object] = {}
+    t = None
     for mod in PRODUCT_MODULES:
+        raw = load_tables(mod.REQUIRED_TABLES, force=force)  # 直读本地 git 仓库
+        t = I18n(raw["I18nTextTable_CN"])
         payloads[mod.PRODUCT] = mod.build(raw, t)
-        dump(mod.PRODUCT, payloads[mod.PRODUCT])
+        if hasattr(mod, "write"):  # 自定义产物写法(如 characters 目录化)
+            mod.write(payloads[mod.PRODUCT])
+        else:
+            dump(mod.PRODUCT, payloads[mod.PRODUCT])
 
     equips_payload = payloads["equips"]
     meta = {
@@ -60,24 +63,17 @@ def run(force: bool = False) -> None:
 
 def _source_info() -> dict:
     cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
-    return {"repo": cfg["repo"], "branch": cfg["branch"],
-            "fetchedAt": load_json(RAW_DIR / "tablecfg" / "manifest.json")["fetched_at"]}
+    return {"repo": cfg["repo"], "branch": cfg["branch"]}
 
 
 def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None:
-    manifest = load_json(RAW_DIR / "tablecfg" / "manifest.json")
-    channels: dict[str, int] = {}
-    for f in manifest.get("files", {}).values():
-        ch = f.get("channel", "?")
-        channels[ch] = channels.get(ch, 0) + 1
     items = payloads["items"]
     icon_items = sum(1 for i in items if i.get("iconUrl"))
     c = meta["counts"]
     report = f"""# 构建报告
 
 - 构建时间:{t0.isoformat(timespec="seconds")}(UTC)
-- 数据源:{meta["source"]["repo"]}@{meta["source"]["branch"]}(抓取于 {meta["source"]["fetchedAt"]})
-- 抓取渠道分布:{json.dumps(channels, ensure_ascii=False)}
+- 数据源:{meta["source"]["repo"]}@{meta["source"]["branch"]}
 - i18n 未命中:{misses}
 
 ## 数据集规模
@@ -93,7 +89,7 @@ def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None
 
 ## 产物位置
 
-- 数据集:`data/processed/*.json`(网页展示由 `site/` 消费)
+- 数据集:`data/*.json`(网页展示由 `site/` 消费)
 - 本报告:`reports/build-report.md`
 """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)
