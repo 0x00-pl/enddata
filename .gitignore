@@ -1,13 +1,9 @@
-# 原始快照体积大、可再生,不入库;仅保留抓取清单
-data/raw/tablecfg/*
-!data/raw/tablecfg/manifest.json
-
 # 本地克隆的数据源仓库(体积大,可再生)
 sources/
 
-# 生成的数据集可再生,保留目录占位(构建报告 reports/ 入库)
-data/processed/*
-!data/processed/.gitkeep
+# 生成的数据集可再生,不入库;versions.json 版本记录入库
+data/*
+!data/versions.json
 
 # Python
 __pycache__/
