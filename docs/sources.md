@@ -19,10 +19,10 @@
 | [4n3u/EndfieldResourceData](https://github.com/4n3u/EndfieldResourceData)(7★) | 活跃 | 各版本资源 manifest(1.0.14 → 1.5.3) | **版本更新监控**用 |
 | [BiologyHazard/endfield-archive-library](https://github.com/BiologyHazard/endfield-archive-library) | 每日活跃 | 官方公告/卡池(up-recruit)等 API 响应存档 | 活动与卡池资讯数据,非数值表 |
 
-**版本跟进方式**:所有 git 数据源已统一克隆到本地 `sources/`(`collection/clone_sources.py`
-维护,重跑即更新到远端最新);抓取脚本的渠道优先级为 **本地 git 仓库 → data/raw 缓存 →
-jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库(blob:none)的 blob
-首次读取会经仓库配置里的代理懒取,之后即本地缓存。
+**版本跟进方式**:所有 git 数据源已统一克隆到本地 `sources/`(`src/collection/fetch.py`
+维护,`enddata collection clone` 即更新到远端最新);读取渠道优先级为 **本地 git 仓库 →
+jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时零网络。partial 仓库
+(blob:none)的 blob 首次读取会经仓库配置里的代理懒取,之后即本地缓存。
 
 ### 已验证的关键表(战斗)
 
@@ -64,8 +64,8 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 
 - **主机故障转移**(前端按序重试):`endfield-assets.fffdan.com` → `cn/cn2/cn3.endfield.fffdan.com`;
   该 CDN 间歇性抖动,请求需带重试
-- **版本端点**:`GET /version` → 官方构建号(如 `initial_10024360-6_main_10024360-6`),
-  `enddata version --record` 做更新监控(记录基线,再跑即对比)
+- **版本端点**:`GET /version` → 游戏构建号(如 `initial_10024360-6_main_10024360-6`,镜像自官方版本信息;注意该站为粉丝项目,非官方),
+  构建号基线由 collection 域命令自动写入 data/versions.json,`enddata version` 读取对比
 - **资源直取**:`GET /vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites/<路径>`(WebP)。
 
 | 资源 | 路径模板 | 对应字段 | 验证 |
@@ -95,7 +95,7 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 - ⚠️ **实测为开服版快照**(25 角色,落后 rmxlinux 8 个角色,与 XiaBei 同世代,2026-09-15 逐项对比):
   仅作 git 源全部失效时的应急备源,不作跟版源
 - 开源生态:前端 [Arknights-yituliu/ef-frontend-v1](https://github.com/Arknights-yituliu/ef-frontend-v1)
-  (已克隆,数据端点权威参考)、后端 `endfield-yituliu-backend`(Java)、资产仓库 `ef-yituliu-frontend-assets`
+  (已退役,端点已文档化;后端 `endfield-yituliu-backend`、资产仓库可按需克隆)
 - 子站:`factory.ef.yituliu.cn`(量化计算器)、`ef.yituliu.cn/resources/essence-recognizer`(基质识别器)
 
 ### 工具站与 Wiki(参考生态,暂不采集)
@@ -103,8 +103,8 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 | 站点 | 类型 | 备注 |
 |---|---|---|
 | [endfieldtools.dev](https://endfieldtools.dev) | 英文数据库+工具 | Next.js SSR,API 未公开文档化 |
-| [caffuchin0/zmdgraph](https://caffuchin0.github.io/zmdgraph) | 养成规划计算器 | **已克隆**;数据内嵌于 `js/data.js`(干员中文名/养成数值,可交叉验证) |
-| [mikunyaaa/endfield-calculator](https://mikunyaaa.github.io/endfield-calculator) | 产线分流计算器 | **已克隆**;数据运行时远程加载 |
+| [caffuchin0/zmdgraph](https://caffuchin0.github.io/zmdgraph) | 养成规划计算器 | 已退役(2026-09-15 审查,可重克隆);数据内嵌于 `js/data.js`(养成数值交叉验证) |
+| [mikunyaaa/endfield-calculator](https://mikunyaaa.github.io/endfield-calculator) | 产线分流计算器 | 已退役(仓库内无数据,运行时远程加载) |
 | [maaend.com](https://maaend.com) | 自动化助手 | MaaEnd 智能自动化,数据无关 |
 | [end.canmoe.com](https://end.canmoe.com) | CEP 规划器 | 原终末地基质规划器(Next.js) |
 | [dige.aunly.cn](https://dige.aunly.cn) | 工厂设计器 | D.I.G.E. 能源生产/存储系统设计 |
@@ -150,16 +150,16 @@ jsdelivr → raw → GitHub API blob**,本地命中时零网络。partial 仓库
 5. **生产系统深度数据**:电力、物流带、流派加成表已可从 rmxlinux 抓取,尚未加工;
    机器配方的 `totalProgress/progressRound` 与实际秒数的换算待实测(endfield-calc 用手工维护的 craftingTime)。
 6. **战斗属性枚举**:新版 `attrType` 为整数(AttributeMetaTable 可反查图标名),
-   `src/tools/common.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
+   `src/tools/tables.py` 已内置核心 15 项映射,扩展数值系统时需同步补全。
 
 ## 六、本机网络备忘(采集脚本环境)
 
 - 本机 git 全局配置含 `url.git@github.com:.insteadOf=https://github.com/`,会把 https 改写成 SSH 导致克隆失败;
-  脚本化克隆需 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` 绕过(`enddata_http.git_env` 已内置)。
+  脚本化克隆需 `GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null` 绕过(`datasource.git_env` 已内置)。
 - GitHub 直连不稳定,代理为 `http://10.1.20.20:7890`(/etc/proxychains4.conf 同源):
   - git 用 `-c http.proxy=...`(libcurl 原生代理)最稳;proxychains4 的 LD_PRELOAD 层会让 git 长连接卡死。
   - 文件下载走 `cdn.jsdelivr.net/gh/<repo>@<branch>/<path>`(20MB 内),大文件用 GitHub API blob 兜底。
   - 克隆大仓库务必加 `--depth 1` 与低速熔断(`http.lowSpeedLimit/lowSpeedTime`,注意它们是 git 配置而非环境变量)。
-- **数据源本地化**:git 形态的源统一克隆在 `sources/`(已 gitignore),由 `collection/clone_sources.py`
+- **数据源本地化**:git 形态的源统一克隆在 `sources/`(已 gitignore),由 `src/collection/fetch.py`
   克隆/更新;大仓库一律 partial 克隆(`--filter=blob:none --no-checkout`)。
   ⚠️ partial 仓库更新后**不要** `reset --hard`(会触发全量 blob 懒取),用 `git update-ref` 移动分支引用。
