@@ -97,7 +97,8 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
     item_name = {iid: t(it.get("name")) for iid, it in raw["ItemTable"].items() if t(it.get("name"))}
 
     def resolve_side(entries: list[dict]) -> list[dict]:
-        """原料/产物条目 → [{count, options:[{id,name}]}];机器配方的 group 是可替代原料组。"""
+        """原料/产物条目 → [{count, options:[{id,name}]}];机器配方的同组 options
+        为同槽原料,游戏内同时消耗(如灌装=空瓶+溶液,非可替代项)。"""
         out = []
         for e in entries or []:
             if "group" in e:
