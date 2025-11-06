@@ -14,6 +14,5 @@
 - 产物写回 `data/analysis/` 或 `reports/`
 - 复杂分析脚本建议一个主题一个文件,并以 `analysis.<topic>` 可导入形式组织
 
-已落地:
-- `planner.py` 产线规划器:`enddata analysis plan <物品> [数量]`,
-  基于 data/recipes.json(含 endfield-calc 精校耗时)倒推原材料与制造步骤
+暂无落地脚本。初版产线规划器(planner.py)因配方图环依赖处理有误已移除;
+后续做产线/材料规划时建议基于线性规划重做,参考 endfield-calc 的 LP 求解器。

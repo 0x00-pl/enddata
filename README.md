@@ -39,10 +39,6 @@ poetry run enddata collection all                        # 依赖全部 collecti
 python3 -m http.server 8321 --bind 127.0.0.1
 # 打开 http://127.0.0.1:8321/site/
 
-# 进阶分析:产线规划(倒推原材料/制造步骤/耗时)
-poetry run enddata analysis plan 赤铜零件 10
-poetry run enddata analysis plan item_copper_cmpt 5 --station machine
-
 # 辅助:版本报告(读取 data/versions.json,离线可用)
 poetry run enddata version
 ```
@@ -69,8 +65,7 @@ enddata/
 │   │   ├── fetch.py            # 数据源仓库同步(sources/)+ 原始表按需加载
 │   │   ├── characters.py items.py recipes.py weapons.py equips.py enemies.py
 │   │   └── build_all.py        # 统一入口:全部产物 + meta + 构建报告
-│   ├── analysis/           #   ② 进阶分析(概率/DPS/产线规划等,见其 README)
-│   │   ├── planner.py          # 产线规划器:原材料倒推/制造步骤/耗时估算
+│   ├── analysis/           #   ② 进阶分析(概率/DPS/产线规划等,规划中,见其 README)
 │   │   └── README.md
 │   └── tools/              #   工具库
 │       ├── datasource.py       # 数据源访问:本地git → jsdelivr → raw → API 多级回退

@@ -35,7 +35,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="EndData · 明日方舟:终末地 战斗与生产数据采集/分析工具集",
     )
     sub = parser.add_subparsers(dest="command", required=True,
-                                metavar="{collection,analysis,version}")
+                                metavar="{collection,version}")
 
     coll = sub.add_parser(
         "collection",
@@ -60,25 +60,12 @@ def build_parser() -> argparse.ArgumentParser:
         pp = coll_sub.add_parser(name, help=f"生成 {name}.json(缺原始表时自动补抓)")
         pp.add_argument("--force", action="store_true", help="强制重抓该产物依赖的原始表")
 
-    ana = sub.add_parser("analysis", help="进阶分析(概率/DPS/产线规划)")
-    ana_sub = ana.add_subparsers(dest="topic", required=True, metavar="{plan}")
-    plan_p = ana_sub.add_parser("plan", help="产线规划:倒推原材料、制造步骤与耗时")
-    plan_p.add_argument("item", help="目标物品 ID 或名称")
-    plan_p.add_argument("qty", nargs="?", default="1", help="目标数量(默认 1)")
-    plan_p.add_argument("--station", choices=["machine", "manual", "spaceship"], default=None,
-                        help="优先制造站点")
-
     sub.add_parser("version", help="项目版本与数据源版本报告(读取 data/versions.json)")
     return parser
 
 
 def main(argv=None) -> None:
     args = build_parser().parse_args(argv)
-
-    if args.command == "analysis":
-        from analysis import planner
-        planner.run(args.item, float(args.qty), args.station)
-        return
 
     if args.command == "version":
         versions.run()
