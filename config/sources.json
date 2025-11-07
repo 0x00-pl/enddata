@@ -8,13 +8,13 @@
       {
         "repo": "rmxlinux/EndfieldData",
         "branch": "main",
-        "partial": true,
-        "role": "tablecfg 主源(1.5GB,必须 partial)"
+        "partial": false,
+        "role": "tablecfg 主源(1.5GB 完整克隆,含 TableCfg 725 表+i18n+Lua+关卡)"
       },
       {
         "repo": "AndreaFrederica/jei-web",
-        "partial": true,
-        "role": "森空岛 Wiki 配方/物品包"
+        "partial": false,
+        "role": "森空岛 Wiki 干员/威胁/物品包(完整克隆)"
       },
       {
         "repo": "JamboChen/endfield-calc",

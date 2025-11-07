@@ -2,7 +2,7 @@
   "repos": {
     "rmxlinux/EndfieldData": {
       "branch": "main",
-      "sha": "ef902ef",
+      "sha": "ef902ef1c",
       "date": "2026-09-08",
       "subject": "Update 9/8"
     },
@@ -25,9 +25,9 @@
       "subject": "更新中文版 README.md"
     }
   },
-  "updatedAt": "2026-09-16T01:52:42+00:00",
+  "updatedAt": "2026-09-16T03:33:19+00:00",
   "game": {
     "build": "initial_10024360-6_main_10024360-6",
-    "checkedAt": "2026-09-16T01:52:42+00:00"
+    "checkedAt": "2026-09-16T03:33:19+00:00"
   }
 }
