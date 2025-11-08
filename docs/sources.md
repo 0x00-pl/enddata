@@ -161,5 +161,9 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
   - 文件下载走 `cdn.jsdelivr.net/gh/<repo>@<branch>/<path>`(20MB 内),大文件用 GitHub API blob 兜底。
   - 克隆大仓库务必加 `--depth 1` 与低速熔断(`http.lowSpeedLimit/lowSpeedTime`,注意它们是 git 配置而非环境变量)。
 - **数据源本地化**:git 形态的源统一克隆在 `sources/`(已 gitignore),由 `src/collection/fetch.py`
-  克隆/更新;大仓库一律 partial 克隆(`--filter=blob:none --no-checkout`)。
+  维护(`enddata collection clone`)。rmxlinux/jei-web 已完整本地化(2026-09-16,proxychains 实测 11MB/s);
+  今后新仓库默认 partial 克隆(`--filter=blob:none --no-checkout`)按需懒取即可。
   ⚠️ partial 仓库更新后**不要** `reset --hard`(会触发全量 blob 懒取),用 `git update-ref` 移动分支引用。
+- **速度实测(2026-09-16)**:`proxychains4 -q git clone` + `GIT_CONFIG_GLOBAL=/dev/null`(绕过 insteadOf)
+  为最优路径——jei-web 114MB/10s、rmxlinux 1.5GB 约 12 分钟完整克隆成功;远快于 git 原生
+  `http.proxy`(170KB/s 且长传输易断流)。
