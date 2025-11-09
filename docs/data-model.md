@@ -47,7 +47,8 @@ reports/build-report.md                                            ← 人类可
   "lv1":   { "MaxHp": 500, "Atk": 30, "Def": 0, "Str": 10.8, "Agi": 20.6, "Wisd": 8.9, "Will": 9.7 },
   "lvMax": { "...": "同上结构,最终突破满级面板" },
   "skills": [ { "skillId": "chr_0005_chen_attack1", "name": null, "desc": null,
-                "coolDown": 0.0, "costType": 0, "costValue": 0.0,
+                "coolDown": 0.0, "costType": 0, "costValue": 0.0, "castCost": 8,
+                "buffs": ["buff_chr_0005_chen_…"],
                 "levels": [ { "level": 1, "blackboard": { "atk_scale": 0.1 } },
                             { "level": 2, "blackboard": { "…": "…" } } ] } ],
   "wiki":  { "itemId": "12", "rarityStars": 5, "icon": "https://bbs.hycdn.cn/….png",
@@ -65,6 +66,7 @@ reports/build-report.md                                            ← 人类可
                                       "combo": 1, "ultimate": 1 } } ],
   "potentials": [ { "level": 1, "name": "绝影",
                     "desc": "对生命值少于{hp_remain:0%}的敌人造成的伤害+{extra_dmg:0%}。",
+                    "values": { "extra_dmg": 0.0, "hp_remain": 0.5 },
                     "effectId": "chr_0005_chen_talent_1_1",
                     "materials": [ { "id": "item_charpotentialup_chr_0005_chen", "count": 1 } ],
                     "skills": [] } ],
@@ -80,6 +82,10 @@ reports/build-report.md                                            ← 人类可
   PotentialTalentEffectTable(效果描述 165/165 全可读,富文本标签已剥离;
   `{键:0%}` 占位符对应 blackboard/属性键,由游戏运行时填充)
 - `icon`/`professionIcon` 为宏山档案局 vfs 直链
+- `potentials.values` 与技能 `castCost`/`buffs` 来自 rmxlinux 的
+  `Json/BuffData`、`Json/SkillData`(表现层定义):potentials 描述中的
+  `{键:0%}` 占位符数值即 `values` 的键值;`castCost` 为技能真实消耗
+  (如终结技 8 点)
 - `weapon`/`recommendedWeapons` 来自 defaultWeaponId 与 CharWpnRecommendTable(join 武器表名称)
 - `stationTags` 派驻标签描述来自 CharacterTagDesTable(基建加成全文,i18n 已反查)
 - `breakStages` 为突破阶段的各技能等级上限(CharBreakStageTable)

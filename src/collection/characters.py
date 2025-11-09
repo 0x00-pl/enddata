@@ -143,6 +143,25 @@ def extract_wiki_detail(wiki_json: dict) -> dict:
     return {"chapters": chapters_out}
 
 
+def _repo_json(repo: str, relpath: str) -> dict | None:
+    """直读本地克隆工作树中的 JSON 文件(完整克隆已物化),缺失返回 None。"""
+    f = repo_dir(repo) / relpath
+    if not f.is_file():
+        return None
+    try:
+        return json.loads(f.read_text(encoding="utf-8"))
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _blackboard_values(buff_json: dict | None) -> dict:
+    """BuffData 的 blackboard → {key: value}(潜能描述占位符的真实数值)。"""
+    if not buff_json:
+        return {}
+    return {x.get("key"): x.get("valueDouble", x.get("value"))
+            for x in buff_json.get("blackboard") or []}
+
+
 def _char_id_of(skill_id: str) -> str:
     """技能 ID 前三段即干员 ID(如 chr_0005_chen_xxx → chr_0005_chen)。"""
     return "_".join(skill_id.split("_")[:3])
@@ -252,10 +271,13 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             skills_hit = sorted({(d.get("attachSkill") or {}).get("skillId")
                                  for d in effect.get("dataList") or []
                                  if (d.get("attachSkill") or {}).get("skillId")})
+            buff_json = _repo_json("rmxlinux/EndfieldData",
+                                   f"Json/BuffData/buff_{cid}_potential_{b.get('level')}.json")
             potentials.append({
                 "level": b.get("level"),
                 "name": t(b.get("name")),
                 "desc": desc or None,
+                "values": _blackboard_values(buff_json) or None,
                 "effectId": effect_id,
                 "materials": materials,
                 "skills": skills_hit,
@@ -288,6 +310,16 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                                          "combo": b.get("comboSkillLevel"),
                                          "ultimate": b.get("ultimateSkillLevel")}}
                         for b in (raw["CharBreakStageTable"] or {}).values()]
+
+        # 表现层数据:SkillData 的施法消耗与关联 Buff(本地 Json/SkillData)
+        for sk in skills_by_char.get(cid, []):
+            sd = _repo_json("rmxlinux/EndfieldData", f"Json/SkillData/{sk['skillId']}.json")
+            if sd:
+                cost = ((sd.get("castData") or {}).get("costData") or {}).get("costValue")
+                if cost:
+                    sk["castCost"] = cost
+                if sd.get("buffs"):
+                    sk["buffs"] = sd.get("buffs")
 
         characters.append({
             "id": cid,
