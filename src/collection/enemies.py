@@ -38,6 +38,14 @@ WIKI_REPO = "AndreaFrederica/jei-web"
 WIKI_PACK_DIR = "public/packs/aef-skland/items/终末地百科/威胁"
 
 
+def _pack_file(repo: str, pack_dir: str, name: str) -> bytes | None:
+    """优先直读工作区已检出的文件;partial 克隆缺失时回退 git cat-file。"""
+    f = repo_dir(repo) / pack_dir / name
+    if f.is_file():
+        return f.read_bytes()
+    return _git_bytes(repo, "cat-file", "blob", f"HEAD:{pack_dir}/{name}")
+
+
 def _git_bytes(repo: str, *args, timeout: int = 300) -> bytes | None:
     d = repo_dir(repo)
     r = subprocess.run(["git", "-C", str(d), *args],
@@ -60,8 +68,7 @@ def load_wiki_threats() -> dict[str, dict]:
     for f in files:
         raw = None
         for attempt in range(3):
-            raw = _git_bytes(WIKI_REPO, "cat-file", "blob", f"HEAD:{WIKI_PACK_DIR}/{f}",
-                             timeout=120)
+            raw = _pack_file(WIKI_REPO, WIKI_PACK_DIR, f)
             if raw:
                 break
             time.sleep(2 * (attempt + 1))
