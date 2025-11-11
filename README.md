@@ -72,7 +72,7 @@ enddata/
 │       ├── tables.py           # 表加载 + i18n 反查 + 属性枚举 + vfs 链接
 │       └── versions.py         # data/versions.json 读写 + enddata version 报告
 ├── sources/                # 数据源(4 个本地 git 克隆,gitignore,约 87MB,经血统审查)
-├── data/                   # 生成的数据:各产物数据集 + meta + versions.json(数据集 gitignore)
+├── data/                   # 生成的数据:各产物目录(每条一个 <id>.json + index.json)+ meta + versions.json(数据集 gitignore)
 ├── reports/                # 生成的报告(build-report.md,入库)
 └── site/                   # ③ 报告的网页展示
     ├── index.html          #   总览/干员/武器/装备/物品/配方/敌人 七个分页

@@ -128,3 +128,28 @@ def dump(name: str, payload):
     dest = DATA_DIR / f"{name}.json"
     dest.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
     info(f"  -> {dest.relative_to(PROJECT_ROOT)} ({dest.stat().st_size/1024:.0f} KB, {len(payload) if isinstance(payload, list) else '...'} 条)")
+
+
+# 目录化产物中非条目文件(清理旧文件时保留,每次构建整体覆盖)
+_DIR_RESERVED = ("index.json", "_global.json")
+
+
+def dump_dir(name: str, entries: list[dict], exclude_index: tuple[str, ...] = ()) -> None:
+    """数据集目录化输出(characters 格式):每条一个 <id>.json + 轻量索引 index.json。
+
+    exclude_index 列出的重字段(长文本/嵌套详情)只进单条文件,索引里剔除;
+    目录内已不在本次产物中的旧条目文件会被清理。
+    """
+    out_dir = DATA_DIR / name
+    out_dir.mkdir(parents=True, exist_ok=True)
+    for old in out_dir.glob("*.json"):
+        if old.name not in _DIR_RESERVED:
+            old.unlink()
+    index = []
+    for e in entries:
+        (out_dir / f"{e['id']}.json").write_text(
+            json.dumps(e, ensure_ascii=False, indent=2), encoding="utf-8")
+        index.append({k: v for k, v in e.items() if k not in exclude_index})
+    index_path = out_dir / "index.json"
+    index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
+    info(f"  -> {out_dir.relative_to(PROJECT_ROOT)}/ ({len(entries)} 条 + index.json)")

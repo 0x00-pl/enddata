@@ -56,7 +56,7 @@ graph TD
     BHAZ -.->|"公告/卡池(规划)"| ENDDATA
 
     subgraph ENDDATA[EndData 本项目]
-        FETCH[fetch.py] --> BUILD[collection/build_all.py] --> SITE[data/*.json + reports/build-report.md]
+        FETCH[fetch.py] --> BUILD[collection/build_all.py] --> SITE[data/ 数据集目录 + reports/build-report.md]
     end
 
     GAME -.->|"同源旁证:两站消费同一份解包"| FFFDAN_SPA[宏山档案局/天师工具箱<br>消费同一 vfs 后端]

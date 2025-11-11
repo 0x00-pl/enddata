@@ -1,4 +1,6 @@
-/* EndData 前端:加载 site/data/*.json 并渲染各分页。无框架、无构建。 */
+/* EndData 前端:加载 site/data 数据集并渲染各分页。无框架、无构建。
+   数据布局:每个产物一个目录 data/<产物>/(每条一个 <id>.json + 轻量索引 index.json),
+   列表页只读 index.json;套装/强化全局配置在 data/equips/_global.json。 */
 
 const main = document.getElementById("main");
 const tabs = document.getElementById("tabs");
@@ -13,13 +15,18 @@ const state = {
 const FORMATTER = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 
 async function loadData() {
-  const names = ["meta", "characters", "weapons", "equips", "items", "recipes", "enemies"];
-  const results = await Promise.allSettled(
-    names.map(async (n) => (await fetch(`/data/${n}.json`)).json())
-  );
-  names.forEach((n, i) => {
-    if (results[i].status === "fulfilled") state.data[n] = results[i].value;
-  });
+  const folders = ["characters", "weapons", "equips", "items", "recipes", "enemies"];
+  const results = await Promise.allSettled([
+    (await fetch("/data/meta.json")).json(),
+    ...folders.map((n) => fetch(`/data/${n}/index.json`).then((r) => r.json())),
+    (await fetch("/data/equips/_global.json")).json(),
+  ]);
+  const put = (i, key) => {
+    if (results[i].status === "fulfilled") state.data[key] = results[i].value;
+  };
+  put(0, "meta");
+  folders.forEach((n, i) => put(i + 1, n));
+  put(folders.length + 1, "equipsGlobal");
 }
 
 /* ---------- 通用渲染工具 ---------- */
@@ -164,12 +171,12 @@ function renderRecipes() {
 }
 
 function renderEquips() {
-  const data = state.data.equips ?? { equips: [], suits: [] };
+  const equips = state.data.equips ?? [];
+  const suits = (state.data.equipsGlobal ?? {}).suits ?? [];
   const q = state.search.equips ?? "";
   const part = state.filters.equips ?? "";
   const suit = state.filters.equipSuit ?? "";
-  const suits = data.suits ?? [];
-  const list = (data.equips ?? [])
+  const list = equips
     .filter((e) => (!part || e.part === part) && (!suit || e.suit === suit)
       && (match(e.name, q) || match(e.suit, q)));
   const PART = { body: "躯体", hand: "手部", edc: "挂载" };

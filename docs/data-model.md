@@ -12,9 +12,11 @@ collection/<产物>.py 按需读取原始表
         ▼
         │  i18n 反查、表间 join、attrType 枚举翻译
         ▼
-data/{meta,characters,weapons,items,recipes,equips,enemies}.json   ← 生成的数据集,由 site/ 消费
-data/versions.json                                                 ← 游戏构建号与各仓库 HEAD
-reports/build-report.md                                            ← 人类可读构建报告
+data/<产物>/          ← 生成的数据集目录(每条一个 <id>.json + 轻量索引 index.json,
+        │               套装/强化全局配置在 data/equips/_global.json),由 site/ 消费
+        ▼
+data/meta.json / data/versions.json   ← 构建信息 / 游戏构建号与各仓库 HEAD
+reports/build-report.md               ← 人类可读构建报告
 ```
 
 ## 文本引用规则
@@ -93,13 +95,17 @@ reports/build-report.md                                            ← 人类可
   按章节输出 干员资料表格(代号/性别/生日/种族)、战斗技能卡(名称/类型/描述/正文)、
   天赋阵列正文。⚠️ 天赋无独立名称字段(游戏内为图标),名称含于正文首词
 
-### items.json — 物品(生产)
+### items/ — 物品(生产)
+目录化输出:`index.json` 为轻量列表(不含 desc/obtainWays/配方关联,列表页用);
+每件物品一个完整文件 `data/items/<itemId>.json`,字段:
 `{id, name, type, typeName, rarity, showingType, desc, icon, iconUrl, obtainWays, usedInRecipes, producedBy}`;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 - `obtainWays`:`ItemTable.obtainWayIds` → `SystemJumpTable` 的 `desc` 经 i18n 反查的获取途径文案数组(保序去重),无登记时为 null
 - `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 可替代组按"任选其一"逐组员计入;无关联时为 null
 注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 
-### recipes.json — 生产配方
+### recipes/ — 生产配方
+目录化输出(原料/产物是配方身份字段,`index.json` 保留,仅省略 `craftTimeSec`/`facility`);
+每条配方一个完整文件 `data/recipes/<recipeId>.json`:
 ```json
 {
   "id": "thickener_originium_enr_powder_1",
@@ -118,7 +124,9 @@ reports/build-report.md                                            ← 人类可
 仅机器配方命中(317/317),手工/飞船及 calc 数据缺失时为 null。
 产率/分钟 = 产物数量 × 60 ÷ craftTimeSec。
 
-### weapons.json — 武器(多数据源综合)
+### weapons/ — 武器(多数据源综合)
+目录化输出:`index.json` 为轻量列表(不含潜能/天赋/升级/突破详情,列表页用);
+每把武器一个完整文件 `data/weapons/<weaponId>.json`:
 ```json
 {
   "id": "wpn_claym_0003", "name": "Industry 0.1",
@@ -147,7 +155,10 @@ reports/build-report.md                                            ← 人类可
   累计经验与龙门币);`breakthrough` 为突破档位(消耗与技能等级区间)
 - `potentialUpItems` 非空表示潜能可用道具提升;当前 79 把武器四类模板键全部命中
 
-### equips.json — 装备与套装(战斗/养成)
+### equips/ — 装备与套装(战斗/养成)
+目录化输出:每件装备一个完整文件 `data/equips/<equipId>.json`(索引不含
+formula/enhancePity 详情);套装与强化规则为全局配置,整体在 `data/equips/_global.json`
+(`{"suits": [...], "enhance": {...}}`):
 ```json
 {
   "equips": [ { "id": "item_equip_t0_parts_tundra01_body_01", "name": "简易护甲",
@@ -172,7 +183,9 @@ reports/build-report.md                                            ← 人类可
 `enhancePity` 为词条引用的强化保底规则 id,定义在顶层 `enhance.guaranteeRules`
 (强化消耗为全局配置)。套装效果仅登记件数与被动技能 ID,技能描述文本待接入技能表。
 
-### enemies.json — 敌人(战斗)
+### enemies/ — 敌人(战斗)
+目录化输出:`index.json` 为轻量列表(不含描述/能力/击杀提示/出没区域,列表页用);
+每个敌人一个完整文件 `data/enemies/<enemyId>.json`:
 ```json
 {
   "id": "eny_0007_mimicw", "templateId": "eny_0007_mimicw", "name": "eny_0007_mimicw",
@@ -181,7 +194,7 @@ reports/build-report.md                                            ← 人类可
   "lvMax": { "MaxHp": 552167, "Atk": 9877, "Def": 1200 }
 }
 ```
-> **enemies**(381 条,`data/enemies.json`):EnemyTable 全量敌人,经 `templateId` 关联
+> **enemies**(381 条,`data/enemies/`):EnemyTable 全量敌人,经 `templateId` 关联
 > EnemyTemplateDisplayInfoTable 获得中文名/昵称/档案描述(覆盖率 374/381)、`displayType`
 > 分类(普通/精英/领袖/进阶/头目)、出没区域(DistributionInfoTable)与特殊能力
 > (EnemyAbilityDescTable);经中文名精确 join 森空岛 Wiki「威胁」分区(56/56 命中,

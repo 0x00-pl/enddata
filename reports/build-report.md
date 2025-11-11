@@ -1,6 +1,6 @@
 # 构建报告
 
-- 构建时间:2026-09-16T03:33:18+00:00(UTC)
+- 构建时间:2026-09-16T04:35:02+00:00(UTC)
 - 数据源:rmxlinux/EndfieldData@main
 - i18n 未命中:0
 
@@ -17,5 +17,5 @@
 
 ## 产物位置
 
-- 数据集:`data/*.json`(网页展示由 `site/` 消费)
+- 数据集:`data/<产物>/` 目录(每条一个 `<id>.json` + 轻量索引 `index.json`,网页展示由 `site/` 消费)
 - 本报告:`reports/build-report.md`

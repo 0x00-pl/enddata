@@ -1,4 +1,4 @@
-"""采集+初步处理:生产配方数据集 → data/recipes.json。
+"""采集+初步处理:生产配方数据集 → data/recipes/ 目录。
 
 来源表:FactoryManualCraftTable × FactoryMachineCraftTable × SpaceshipManufactureFormulaTable
         × ItemTable(原料/产物命名) × I18nTextTable_CN
@@ -14,7 +14,7 @@ from __future__ import annotations
 import re
 
 from tools.datasource import info, read_from_git
-from tools.tables import I18n, dump, load_tables
+from tools.tables import I18n, dump_dir, load_tables
 
 PRODUCT = "recipes"
 
@@ -146,10 +146,19 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
     return recipes
 
 
+def write(payload: list[dict]) -> None:
+    """每条配方一个独立文件 + 轻量索引 index.json。
+
+    原料/产物是配方的身份字段(列表页直接渲染),索引保留;
+    仅省略 calc join 的耗时/设施两个展示外字段。
+    """
+    dump_dir(PRODUCT, payload, exclude_index=("craftTimeSec", "facility"))
+
+
 def main(force: bool = False) -> None:
     raw = load_tables(REQUIRED_TABLES, force=force)
     calc = load_calc_recipes()
-    dump(PRODUCT, build(raw, I18n(raw["I18nTextTable_CN"]), calc))
+    write(build(raw, I18n(raw["I18nTextTable_CN"]), calc))
 
 
 if __name__ == "__main__":

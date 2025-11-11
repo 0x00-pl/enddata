@@ -1,4 +1,4 @@
-"""采集+初步处理(多数据源综合):敌人数据集 → data/enemies.json。
+"""采集+初步处理(多数据源综合):敌人数据集 → data/enemies/ 目录。
 
 数据来源与贡献:
     - rmxlinux@TableCfg(本地 git):
@@ -24,7 +24,7 @@ import subprocess
 import time
 
 from tools.datasource import PROJECT_ROOT, git_env, info, repo_dir
-from tools.tables import I18n, attr_map, dump, load_tables
+from tools.tables import I18n, attr_map, dump_dir, load_tables
 
 PRODUCT = "enemies"
 
@@ -152,11 +152,16 @@ def build(raw: dict, t: I18n, wiki_threats: dict[str, dict] | None = None) -> li
     return enemies
 
 
+def write(payload: list[dict]) -> None:
+    """每个敌人一个独立文件 + 轻量索引 index.json(列表页用,不含描述/能力/出没区域)。"""
+    dump_dir(PRODUCT, payload, exclude_index=("desc", "abilities", "deathTips", "distributions"))
+
+
 def main(force: bool = False) -> None:
     raw = load_tables(REQUIRED_TABLES, force=force)
     threats = load_wiki_threats()
     payload = build(raw, I18n(raw["I18nTextTable_CN"]), threats)
-    dump(PRODUCT, payload)
+    write(payload)
     n_cn = sum(1 for x in payload if x["cnName"])
     n_icon = sum(1 for x in payload if x["icon"])
     info(f"  中文名 {n_cn}/{len(payload)} 条,Wiki 威胁 join {n_icon}/{len(payload)} 条"

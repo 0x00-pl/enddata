@@ -57,7 +57,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_p = coll_sub.add_parser("all", help="全部产物数据集 + meta + 构建报告")
     all_p.add_argument("--force", action="store_true", help="重新抓取全部依赖的原始表")
     for name, mod in PRODUCT_MODULES.items():
-        pp = coll_sub.add_parser(name, help=f"生成 {name}.json(缺原始表时自动补抓)")
+        pp = coll_sub.add_parser(name, help=f"生成 {name} 数据集目录(缺原始表时自动补抓)")
         pp.add_argument("--force", action="store_true", help="强制重抓该产物依赖的原始表")
 
     sub.add_parser("version", help="项目版本与数据源版本报告(读取 data/versions.json)")

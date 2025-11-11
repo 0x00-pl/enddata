@@ -1,4 +1,6 @@
-"""采集+初步处理(多数据源综合):装备与套装数据集 → data/equips.json。
+"""采集+初步处理(多数据源综合):装备与套装数据集 → data/equips/ 目录。
+
+(装备逐件一个文件,套装与强化全局配置在 _global.json,轻量索引 index.json)
 
 数据来源与贡献:
     - rmxlinux@TableCfg:EquipTable × EquipSuitTable × ItemTable(命名/稀有度/图标)
@@ -19,7 +21,9 @@
 
 from __future__ import annotations
 
-from tools.tables import I18n, attr_name, dump, load_tables, load_vfs_config, vfs_url
+import json
+
+from tools.tables import DATA_DIR, I18n, attr_name, dump_dir, load_tables, load_vfs_config, vfs_url
 
 PRODUCT = "equips"
 
@@ -187,10 +191,21 @@ def build(raw: dict, t: I18n) -> dict:
     return {"equips": equips, "suits": suits, "enhance": build_enhance(raw, t)}
 
 
+def write(payload: dict) -> None:
+    """每件装备一个独立文件 + 轻量索引 index.json(不含 formula/enhancePity 详情)。
+
+    套装与强化规则是全局配置(非逐件实体),整体写入 _global.json。
+    """
+    dump_dir(PRODUCT, payload["equips"], exclude_index=("formula", "enhancePity"))
+    dest = DATA_DIR / PRODUCT / "_global.json"
+    dest.write_text(json.dumps({"suits": payload["suits"], "enhance": payload["enhance"]},
+                               ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def main(force: bool = False) -> None:
     load_vfs_config()
     raw = load_tables(REQUIRED_TABLES, force=force)
-    dump(PRODUCT, build(raw, I18n(raw["I18nTextTable_CN"])))
+    write(build(raw, I18n(raw["I18nTextTable_CN"])))
 
 
 if __name__ == "__main__":

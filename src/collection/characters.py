@@ -1,4 +1,4 @@
-"""采集+初步处理(多数据源综合):干员数据集 → data/characters.json。
+"""采集+初步处理(多数据源综合):干员数据集 → data/characters/ 目录。
 
 数据来源与贡献:
     - rmxlinux/EndfieldData@TableCfg(本地 git):身份、职业、稀有度、
@@ -19,14 +19,14 @@ import time
 
 from tools.tables import (
     ATTRACTIONS_OF_INTEREST,
-    DATA_DIR,
     I18n,
+    dump_dir,
     flat_attrs,
     load_tables,
     load_vfs_config,
     vfs_url,
 )
-from tools.datasource import PROJECT_ROOT, info, repo_dir
+from tools.datasource import repo_dir
 
 PRODUCT = "characters"
 
@@ -362,19 +362,7 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
 
 def write(payload: list[dict]) -> None:
     """每名干员一个独立文件 + 轻量索引 index.json(列表页用,不含技能详情)。"""
-    out_dir = DATA_DIR / PRODUCT
-    out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob("*.json"):
-        if old.name != "index.json":
-            old.unlink()
-    index = []
-    for c in payload:
-        (out_dir / f"{c['id']}.json").write_text(
-            json.dumps(c, ensure_ascii=False, indent=2), encoding="utf-8")
-        index.append({k: v for k, v in c.items() if k not in ("skills", "potentials", "wiki", "sources")})
-    index_path = out_dir / "index.json"
-    index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
-    info(f"  -> {out_dir.relative_to(PROJECT_ROOT)}/ ({len(payload)} 名干员 + index.json)")
+    dump_dir(PRODUCT, payload, exclude_index=("skills", "potentials", "wiki", "sources"))
 
 
 def main(force: bool = False) -> None:

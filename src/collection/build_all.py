@@ -1,4 +1,4 @@
-"""统一采集入口:运行全部产物脚本,生成 data/*.json、meta.json 与 reports/build-report.md。
+"""统一采集入口:运行全部产物脚本,生成 data/ 各数据集目录、meta.json 与 reports/build-report.md。
 
 用法:
     poetry run enddata collection all
@@ -7,7 +7,6 @@
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 
 from collection import characters, enemies, equips, items, recipes, weapons
@@ -36,10 +35,7 @@ def run(force: bool = False) -> None:
         raw = load_tables(mod.REQUIRED_TABLES, force=force)  # 直读本地 git 仓库
         t = I18n(raw["I18nTextTable_CN"])
         payloads[mod.PRODUCT] = mod.build(raw, t)
-        if hasattr(mod, "write"):  # 自定义产物写法(如 characters 目录化)
-            mod.write(payloads[mod.PRODUCT])
-        else:
-            dump(mod.PRODUCT, payloads[mod.PRODUCT])
+        mod.write(payloads[mod.PRODUCT])  # 各产物统一目录化(每条一个文件 + index.json)
 
     equips_payload = payloads["equips"]
     meta = {
@@ -89,7 +85,7 @@ def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None
 
 ## 产物位置
 
-- 数据集:`data/*.json`(网页展示由 `site/` 消费)
+- 数据集:`data/<产物>/` 目录(每条一个 `<id>.json` + 轻量索引 `index.json`,网页展示由 `site/` 消费)
 - 本报告:`reports/build-report.md`
 """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

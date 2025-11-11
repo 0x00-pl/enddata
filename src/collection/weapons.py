@@ -1,4 +1,4 @@
-"""采集+初步处理(多数据源综合):武器数据集 → data/weapons.json。
+"""采集+初步处理(多数据源综合):武器数据集 → data/weapons/ 目录。
 
 数据来源与贡献(rmxlinux/EndfieldData@TableCfg,本地 git 直读):
     - WeaponBasicTable:身份、名称/武器描述(i18n 反查)、稀有度、类型、
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-from tools.tables import I18n, dump, load_tables
+from tools.tables import I18n, dump_dir, load_tables
 
 PRODUCT = "weapons"
 
@@ -185,9 +185,15 @@ def build(raw: dict, t: I18n) -> list[dict]:
     return weapons
 
 
+def write(payload: list[dict]) -> None:
+    """每把武器一个独立文件 + 轻量索引 index.json(列表页用,不含潜能/天赋/升级/突破详情)。"""
+    dump_dir(PRODUCT, payload,
+             exclude_index=("potentialSkill", "talent", "upgrade", "breakthrough", "sources"))
+
+
 def main(force: bool = False) -> None:
     raw = load_tables(REQUIRED_TABLES, force=force)
-    dump(PRODUCT, build(raw, I18n(raw["I18nTextTable_CN"])))
+    write(build(raw, I18n(raw["I18nTextTable_CN"])))
 
 
 if __name__ == "__main__":

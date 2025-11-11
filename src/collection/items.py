@@ -1,9 +1,9 @@
-"""采集+初步处理(多数据源综合):物品数据集 → data/items.json。
+"""采集+初步处理(多数据源综合):物品数据集 → data/items/ 目录。
 
 数据来源与贡献:
     - rmxlinux/EndfieldData@TableCfg(本地 git):身份、类型、稀有度、描述、图标
       (ItemTable × ItemTypeTable × I18nTextTable_CN)
-    - rmxlinux@TableCfg 配方关联统计(直读原始表,不经 recipes.json):
+    - rmxlinux@TableCfg 配方关联统计(直读原始表,不经 recipes 数据集):
       FactoryManualCraftTable / FactoryMachineCraftTable / SpaceshipManufactureFormulaTable
       → usedInRecipes(作原料)/ producedBy(作产物),按站点 manual/machine/spaceship 计数
     - 获取途径:ItemTable.obtainWayIds → SystemJumpTable(游戏内跳转表)desc 经 i18n 反查
@@ -11,7 +11,7 @@
 
 from __future__ import annotations
 
-from tools.tables import I18n, dump, load_tables, load_vfs_config, vfs_url
+from tools.tables import I18n, dump_dir, load_tables, load_vfs_config, vfs_url
 
 PRODUCT = "items"
 
@@ -107,10 +107,16 @@ def build(raw: dict, t: I18n) -> list[dict]:
     return items
 
 
+def write(payload: list[dict]) -> None:
+    """每件物品一个独立文件 + 轻量索引 index.json(列表页用,不含描述/途径/配方关联)。"""
+    dump_dir(PRODUCT, payload,
+             exclude_index=("desc", "icon", "obtainWays", "usedInRecipes", "producedBy"))
+
+
 def main(force: bool = False) -> None:
     load_vfs_config()
     raw = load_tables(REQUIRED_TABLES, force=force)
-    dump(PRODUCT, build(raw, I18n(raw["I18nTextTable_CN"])))
+    write(build(raw, I18n(raw["I18nTextTable_CN"])))
 
 
 if __name__ == "__main__":
