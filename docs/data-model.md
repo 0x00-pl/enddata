@@ -180,8 +180,9 @@ formula/enhancePity 详情);套装与强化规则为全局配置,整体在 `data
 `part` 自装备 id 解析(body/hand/edc),`name`/`rarity`/`icon` 经 itemId join ItemTable;
 `formula` 按 outcomeEquipId 反查(ReverseTable 索引),`level` 为合成档位,`craftOptions`
 为该档位可选加工链(调度券 gold + 材料 materials,图纸条目含工艺名与解锁主线);
-`enhancePity` 为词条引用的强化保底规则 id,定义在顶层 `enhance.guaranteeRules`
-(强化消耗为全局配置)。套装效果仅登记件数与被动技能 ID,技能描述文本待接入技能表。
+`enhancePity` 为词条引用的强化保底规则 id,定义在 `enhance.guaranteeRules`
+(强化消耗为全局配置)。套装效果按件数分档,描述经 SkillPatchTable 反查
+(24/24 可解析,富文本已剥离,`{键:fmt}`/`{1-键:fmt}` 占位符按 blackboard 回填)。
 
 ### enemies/ — 敌人(战斗)
 目录化输出:`index.json` 为轻量列表(不含描述/能力/击杀提示/出没区域,列表页用);

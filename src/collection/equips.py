@@ -5,6 +5,8 @@
 数据来源与贡献:
     - rmxlinux@TableCfg:EquipTable × EquipSuitTable × ItemTable(命名/稀有度/图标)
       → 身份、部位、所属套装、词条(attrType 枚举翻译)、基础属性
+    - rmxlinux@TableCfg/SkillPatchTable:套装被动技能描述(24/24 可 i18n 反查,
+      富文本标签已剥离,{键:fmt}/{1-键:fmt} 占位符按 blackboard 回填)
     - rmxlinux@TableCfg/EquipFormulaTable(+ReverseTable 反查):合成公式
       (formulaId、合成档位 level、所属装备组 packId、解锁条件 unlock*)
     - rmxlinux@TableCfg/EquipFormulaChainTable × EquipCostMaterialTable:
@@ -15,13 +17,14 @@
 产物:
     - equips:部位(自 id 解析 body/hand/edc)、所属套装、词条、基础属性,
       另有 formula(合成公式/档位/装备组/解锁/可选加工链材料)、enhancePity(引用的保底规则)
-    - suits:套装名称、成员数、按件数分档的被动技能
+    - suits:套装名称、成员数、按件数分档的被动技能(描述经 SkillPatchTable 反查并回填数值)
     - enhance:全局强化消耗与保底规则定义(逐件装备仅引用,不重复展开)
 """
 
 from __future__ import annotations
 
 import json
+import re
 
 from tools.tables import DATA_DIR, I18n, attr_name, dump_dir, load_tables, load_vfs_config, vfs_url
 
@@ -32,7 +35,85 @@ REQUIRED_TABLES = [
     "EquipFormulaTable", "EquipFormulaReverseTable", "EquipFormulaChainTable",
     "EquipCostMaterialTable", "EquipPackTable",
     "EquipEnhanceCostTable", "EquipEnhanceGuaranteeTimesRuleTable",
+    "SkillPatchTable",
 ]
+
+# 套装被动描述占位符:{键:fmt}、裸 {键},以及 {1-键:0%} 型表达式(项为数字/键,可 * 连乘)
+_PLACEHOLDER_RE = re.compile(r"\{\s*([^{}:]+?)\s*(?::\s*([^{}]+))?\}")
+_TAG_RE = re.compile(r"<[^>]+>")
+_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
+
+
+def _fmt_value(value: float, spec: str | None) -> str:
+    """按占位符格式说明渲染:'0.0%'/'0%'→百分比,'0'/'0.0'→定点小数,无 spec→整数。"""
+    if spec and spec.endswith("%"):
+        num = spec[:-1]
+        decimals = len(num.split(".")[-1]) if "." in num else 0
+        return f"{value * 100:.{decimals}f}%"
+    decimals = len(spec.split(".")[-1]) if spec and "." in spec else 0
+    return f"{value:.{decimals}f}"
+
+
+def _eval_expr(expr: str, blackboard: dict) -> float | None:
+    """占位符表达式 → 数值:项为数字或 blackboard 键(* 连乘),项间 +/- 求和。
+
+    键查不到(含表内带尾随空格的脏键)返回 None,由调用方保留占位符原样。
+    """
+    total, sign = 0.0, 1.0
+    for term in re.split(r"([+-])", expr):
+        term = term.strip()
+        if not term:
+            continue
+        if term == "+":
+            continue
+        if term == "-":
+            sign = -1.0
+            continue
+        v = 1.0
+        for k in term.split("*"):
+            k = k.strip()
+            if _NUM_RE.fullmatch(k):
+                v *= float(k)
+                continue
+            x = blackboard.get(k, blackboard.get(k.strip()))
+            if not isinstance(x, (int, float)):
+                return None
+            v *= x
+        total += sign * v
+        sign = 1.0
+    return total
+
+
+def _fill_desc(text: str | None, blackboard: dict) -> str | None:
+    """剥离富文本标签(<@ba.vup> 着色、<#ba.*> 状态图标引用),并回填数值占位符。"""
+    if not text:
+        return None
+
+    def sub(m: re.Match) -> str:
+        v = _eval_expr(m.group(1), blackboard)
+        return _fmt_value(v, m.group(2)) if v is not None else m.group(0)
+
+    return _PLACEHOLDER_RE.sub(sub, _TAG_RE.sub("", text)).strip()
+
+
+def suit_effects(raw: dict, t: I18n, tiers: list[dict]) -> list[dict]:
+    """EquipSuitTable 各件数档的被动效果,描述 join SkillPatchTable(等级恒为 1)。
+
+    patch 按 skillLv 匹配,缺失回退首条;占位符按该等级 blackboard 回填。
+    """
+    out = []
+    for x in tiers or []:
+        sid = x.get("skillID")
+        patches = (raw["SkillPatchTable"].get(sid) or {}).get("SkillPatchDataBundle") or []
+        patch = next((p for p in patches if p.get("level") == x.get("skillLv")), patches[0] if patches else None)
+        bb = {b.get("key"): b.get("value") for b in (patch or {}).get("blackboard") or []}
+        out.append({
+            "count": x.get("equipCnt"),
+            "skill": sid,
+            "lv": x.get("skillLv"),
+            "desc": _fill_desc(t((patch or {}).get("description")), bb),
+        })
+    return out
 
 
 def cost_item(raw: dict, t: I18n, iid: str | None, count) -> dict | None:
@@ -184,8 +265,7 @@ def build(raw: dict, t: I18n) -> dict:
             "name": t((tiers[0] if tiers else {}).get("suitName")) or sid,
             "logo": (tiers[0] if tiers else {}).get("suitLogoName"),
             "members": len(s.get("equipList") or []),
-            "effects": [{"count": x.get("equipCnt"), "skill": x.get("skillID"), "lv": x.get("skillLv")}
-                        for x in tiers],
+            "effects": suit_effects(raw, t, tiers),
         })
     suits.sort(key=lambda x: x["id"])
     return {"equips": equips, "suits": suits, "enhance": build_enhance(raw, t)}

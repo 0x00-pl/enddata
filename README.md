@@ -1,7 +1,7 @@
 # EndData · 明日方舟:终末地 数据站
 
 收集《明日方舟:终末地》的**战斗**与**生产**数据,加工成报告并以网页展示。
-项目按三大功能组织:**数据采集(collection)→ 数据分析(analysis)→ 数据展示(site)**。
+项目按两大功能组织:**数据采集(collection)→ 数据展示(site)**。
 
 零框架、零构建:Python 标准库采集 + 原生 HTML/CSS/JS 展示。
 
@@ -65,8 +65,6 @@ enddata/
 │   │   ├── fetch.py            # 数据源仓库同步(sources/)+ 原始表按需加载
 │   │   ├── characters.py items.py recipes.py weapons.py equips.py enemies.py
 │   │   └── build_all.py        # 统一入口:全部产物 + meta + 构建报告
-│   ├── analysis/           #   ② 进阶分析(概率/DPS/产线规划等,规划中,见其 README)
-│   │   └── README.md
 │   └── tools/              #   工具库
 │       ├── datasource.py       # 数据源访问:本地git → jsdelivr → raw → API 多级回退
 │       ├── tables.py           # 表加载 + i18n 反查 + 属性枚举 + vfs 链接
@@ -74,7 +72,7 @@ enddata/
 ├── sources/                # 数据源(4 个本地 git 克隆,gitignore,约 87MB,经血统审查)
 ├── data/                   # 生成的数据:各产物目录(每条一个 <id>.json + index.json)+ meta + versions.json(数据集 gitignore)
 ├── reports/                # 生成的报告(build-report.md,入库)
-└── site/                   # ③ 报告的网页展示
+└── site/                   # ② 报告的网页展示
     ├── index.html          #   总览/干员/武器/装备/物品/配方/敌人 七个分页
     └── assets/             #   style.css / app.js(读取 /data/)
 ```

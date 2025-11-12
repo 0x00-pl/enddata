@@ -60,7 +60,7 @@ function match(text, q) {
 
 function renderOverview() {
   const m = state.data.meta;
-  if (!m) return `<div class="error-state">未找到 site/data/meta.json —— 请先运行 scripts/build_dataset.py</div>`;
+  if (!m) return `<div class="error-state">未找到 data/meta.json —— 请先运行 poetry run enddata collection all</div>`;
   const c = m.counts;
   return `
     <div class="kpis">
@@ -71,11 +71,11 @@ function renderOverview() {
       <div class="kpi"><div class="n">${c.recipes}</div><div class="l">生产配方</div></div>
       <div class="kpi"><div class="n">${c.enemies}</div><div class="l">敌人</div></div>
     </div>
-    <p class="note">数据源:${esc(m.source.repo)}@${esc(m.source.branch)} · 抓取于 ${esc(m.source.fetchedAt)} · 构建于 ${esc(m.generatedAt)} (UTC)</p>
+    <p class="note">数据源:${esc(m.source.repo)}@${esc(m.source.branch)} · 构建于 ${esc(m.generatedAt)} (UTC) · 点击列表条目查看详情</p>
     <table><tbody>
       <tr><td class="dim">战斗数据</td><td>干员等级成长曲线、职业、武器类型、敌人属性模板(生命/攻击/防御、抗性、霸体)已入库;技能数值(SkillPatchTable)已抓取,待加工。</td></tr>
-      <tr><td class="dim">生产数据</td><td>手工配方 ${c.recipes ? "" : ""}(大世界烹饪)、机器配方(工厂产线)、飞船制造已入库;电力/物流/流派加成待扩展。</td></tr>
-      <tr><td class="dim">计划中</td><td>技能与 Buff 数值解析、产线规划器、敌人名字补全(森空岛 Wiki「威胁」分区)、配方产物图标。</td></tr>
+      <tr><td class="dim">生产数据</td><td>手工配方(大世界烹饪)、机器配方(工厂产线)、飞船制造已入库;电力/物流/流派加成待扩展。</td></tr>
+      <tr><td class="dim">计划中</td><td>技能与 Buff 数值解析、配方产物图标。</td></tr>
     </tbody></table>`;
 }
 
@@ -92,7 +92,7 @@ function renderCharacters() {
   return `
     ${toolbar("characters", "搜索干员名 / 职业…")}
     <div class="cards">${list.map((c) => `
-      <div class="card">
+      <div class="card clickable" data-detail="characters" data-id="${esc(c.id)}">
         <h3>${c.icon ? `<img class="avatar" src="${esc(c.icon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(c.name)} ${rarityTag(c.rarity)}</h3>
         <div class="sub">${c.professionIcon ? `<img class="icon-sm" src="${esc(c.professionIcon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(c.professionName ?? c.profession)} · 武器:${esc(c.weaponType ?? "—")}
           ${c.cv ? ` · CV:${esc(c.cv)}` : ""} · 满级 ${c.maxLevel}</div>
@@ -109,7 +109,7 @@ function renderWeapons() {
   return `
     ${toolbar("weapons", "搜索武器名 / 类型…")}
     <table><thead><tr><th>武器</th><th>稀有度</th><th>类型</th><th>满级</th></tr></thead><tbody>
-    ${list.map((w) => `<tr>
+    ${list.map((w) => `<tr class="clickable" data-detail="weapons" data-id="${esc(w.id)}">
       <td>${esc(w.name)}</td><td>${rarityTag(w.rarity)}</td>
       <td>${esc(w.weaponType ?? "—")}</td><td class="num">${w.maxLevel ?? "—"}</td>
     </tr>`).join("")}
@@ -129,7 +129,7 @@ function renderItems() {
         ${types.map((t) => `<option ${t === type ? "selected" : ""}>${esc(t)}</option>`).join("")}
       </select>`)}
     <table><thead><tr><th>物品</th><th>稀有度</th><th>类型</th><th>堆叠</th></tr></thead><tbody>
-    ${list.slice(0, 500).map((i) => `<tr>
+    ${list.slice(0, 500).map((i) => `<tr class="clickable" data-detail="items" data-id="${esc(i.id)}">
       <td>${i.iconUrl ? `<img class="icon-sm" src="${esc(i.iconUrl)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(i.name ?? i.id)} <span class="dim">${esc(i.id)}</span></td>
       <td>${rarityTag(i.rarity)}</td><td>${esc(i.typeName ?? i.type ?? "—")}</td>
     </tr>`).join("")}
@@ -161,7 +161,7 @@ function renderRecipes() {
     <table><thead><tr><th>产物</th><th>配方</th><th>站点</th></tr></thead><tbody>
     ${list.map((r) => {
       const out = r.outcomes[0]?.options[0];
-      return `<tr>
+      return `<tr class="clickable" data-detail="recipes" data-id="${esc(r.id)}">
         <td>${esc(out?.name ?? r.id)} ×${out?.count ?? 1}</td>
         <td><div class="recipe-line">${recipeSide(r.ingredients) || '<span class="opt">—</span>'}</div></td>
         <td><span class="badge ${r.station}">${{ manual: "手工", machine: "工厂", spaceship: "飞船" }[r.station]}</span></td>
@@ -190,11 +190,11 @@ function renderEquips() {
         <option value="">全部套装</option>
         ${suits.map((x) => `<option value="${esc(x.id)}" ${x.id === suit ? "selected" : ""}>${esc(x.name)}</option>`).join("")}
       </select>`)}
-    <p class="note">套装效果(件数 → 被动技能 ID;技能描述待接入技能表):
-      ${suits.map((x) => `<span class="badge">${esc(x.name)}(${x.effects.map((e2) => e2.count + "件").join("/")})</span>`).join(" ")}
+    <p class="note">套装被动效果(悬停查看描述,详见装备详情页):
+      ${suits.map((x) => `<span class="badge" title="${esc(x.effects.map((e2) => `${e2.count}件:${e2.desc ?? "—"}`).join("\n"))}">${esc(x.name)}(${x.effects.map((e2) => e2.count + "件").join("/")})</span>`).join(" ")}
     </p>
     <table><thead><tr><th>装备</th><th>稀有度</th><th>部位</th><th>套装</th><th>词条</th></tr></thead><tbody>
-    ${list.map((e) => `<tr>
+    ${list.map((e) => `<tr class="clickable" data-detail="equips" data-id="${esc(e.id)}">
       <td>${e.icon ? `<img class="icon-sm" src="${esc(e.icon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(e.name)} <span class="dim">${esc(e.id)}</span></td>
       <td>${rarityTag(e.rarity)}</td><td>${PART[e.part] ?? e.part ?? "—"}</td>
       <td>${e.suit ? `<span class="badge machine">${esc((suits.find((x) => x.id === e.suit) ?? {}).name ?? e.suit)}</span>` : "—"}</td>
@@ -206,24 +206,229 @@ function renderEquips() {
 function renderEnemies() {
   const q = state.search.enemies ?? "";
   const list = (state.data.enemies ?? []).filter(
-    (e) => match(e.name, q) || match(e.templateId, q)
+    (e) => match(e.cnName ?? e.name, q) || match(e.nickname, q) || match(e.id, q)
   );
   return `
-    ${toolbar("enemies", "搜索敌人 ID…")}
-    <p class="note">解包表中暂无敌人显示名,当前以模板 ID 展示;名字待接入森空岛 Wiki 数据补全。</p>
-    <table><thead><tr><th>敌人</th><th>威胁</th><th>初始霸体</th><th>韧性</th><th>满级生命</th><th>满级攻击</th><th>抗性</th></tr></thead><tbody>
-    ${list.slice(0, 400).map((e) => `<tr>
-      <td>${esc(e.name ?? e.id)} <span class="dim">${esc(e.id)}</span></td>
+    ${toolbar("enemies", "搜索敌人名 / ID…")}
+    <p class="note">显示名来自解包 EnemyTemplateDisplayInfoTable(374/381,缺失以 ID 兜底),
+      图标来自森空岛 Wiki「威胁」分区;点击行查看档案(描述/特殊能力/出没区域)。</p>
+    <table><thead><tr><th>敌人</th><th>类型</th><th>威胁</th><th>初始霸体</th><th>韧性</th><th>满级生命</th><th>满级攻击</th><th>抗性</th></tr></thead><tbody>
+    ${list.slice(0, 400).map((e) => {
+      const nm = e.cnName || e.nickname || e.name || e.id;
+      return `<tr class="clickable" data-detail="enemies" data-id="${esc(e.id)}">
+      <td>${e.icon ? `<img class="icon-sm" src="${esc(e.icon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(nm)} <span class="dim">${esc(e.id)}</span></td>
+      <td>${esc(e.typeName ?? "—")}</td>
       <td>${e.dangerous ? '<span class="rarity r6">精英</span>' : "—"}</td>
       <td class="num">${e.superArmor ?? "—"}</td>
       <td class="num">${e.maxResilience ?? "—"}</td>
       <td class="num">${num(e.lvMax?.MaxHp)}</td><td class="num">${num(e.lvMax?.Atk)}</td>
       <td class="dim">${Object.entries(e.resists ?? {}).filter(([, v]) => v)
-        .map(([k, v]) => `${{ physical: "物理", fire: "火", pulse: "脉冲", cryst: "结晶", natural: "自然", ether: "以太" }[k] ?? k} ${Math.round(v * 100)}%`).join(", ") || "—"}</td>
-    </tr>`).join("")}
+        .map(([k, v]) => `${RESIST_CN[k] ?? k} ${Math.round(v * 100)}%`).join(", ") || "—"}</td>
+    </tr>`;
+    }).join("")}
     </tbody></table>
     ${list.length > 400 ? `<p class="note">仅显示前 400 / ${list.length} 条。</p>` : ""}`;
 }
+
+/* ---------- 详情浮层:点击列表条目,懒加载 data/<产物>/<id>.json ---------- */
+
+const RESIST_CN = { physical: "物理", fire: "火", pulse: "脉冲", cryst: "结晶", natural: "自然", ether: "以太" };
+const PART_CN = { body: "躯体", hand: "手部", edc: "挂载" };
+
+const trimN = (v) => (typeof v === "number" ? Math.round(v * 10000) / 10000 : v);
+const fmtBB = (bb) => Object.entries(bb ?? {}).map(([k, v]) =>
+  `<span class="bb">${esc(k)} <b>${typeof v === "number" ? trimN(v) : esc(v)}</b></span>`).join(" ");
+const sec = (title, inner) => `<h4>${esc(title)}</h4>${inner}`;
+const kvTable = (rows) => `<table><tbody>${rows.map(([k, v]) =>
+  `<tr><td class="k">${esc(k)}</td><td>${v}</td></tr>`).join("")}</tbody></table>`;
+const itemRef = (id, name, extra = "") =>
+  `<span class="link" data-detail="items" data-id="${esc(id)}" title="${esc(id)}">${esc(name || id)}</span>${extra}`;
+const dimP = `<p class="desc dim">—</p>`;
+
+function detailCharacters(d) {
+  const statRow = (k) =>
+    `<tr><td class="k">${k}</td><td class="num">${num(d.lv1?.[k])}</td><td class="num">${num(d.lvMax?.[k])}</td></tr>`;
+  return `
+    <h3>${d.icon ? `<img class="avatar" src="${esc(d.icon)}" alt="" onerror="this.remove()">` : ""}${esc(d.name)} ${rarityTag(d.rarity)}</h3>
+    <div class="sub">${esc(d.enName ?? "")} · ${esc(d.professionName ?? d.profession)} · 武器:${esc(d.weaponType ?? "—")}${d.cv ? ` · CV:${esc(d.cv)}` : ""} · 满级 ${d.maxLevel ?? "—"}</div>
+    ${sec("面板(1 级 → 满级)", `<table><thead><tr><th>属性</th><th>1 级</th><th>满级</th></tr></thead><tbody>
+      ${["MaxHp", "Atk", "Def", "Str", "Agi", "Wisd", "Will"].map(statRow).join("")}</tbody></table>`)}
+    ${sec("技能", (d.skills ?? []).map((sk) => `
+      <div class="block"><h5>${esc(sk.name ?? "(未命名)")}</h5>
+        <div class="sub">${esc(sk.skillId)}${sk.castCost ? ` · 终结点消耗 ${sk.castCost}` : ""}${sk.coolDown ? ` · 冷却 ${trimN(sk.coolDown)}s` : ""}${sk.costValue ? ` · 费用 ${trimN(sk.costValue)}` : ""}</div>
+        ${sk.desc ? `<p class="desc">${esc(sk.desc)}</p>` : ""}
+        <div class="bb-line">${(sk.levels ?? []).map((l) =>
+          `<span class="bb">Lv${l.level ?? "?"}:${fmtBB(l.blackboard) || "—"}</span>`).join("")}</div>
+      </div>`).join("") || dimP)}
+    ${sec("潜能 / 天赋", (d.potentials ?? []).map((p) => `
+      <div class="block"><h5>${esc(p.name ?? `潜能 ${p.level}`)}</h5>
+        ${p.desc ? `<p class="desc">${esc(p.desc)}</p>` : ""}
+        ${p.values ? `<div class="bb-line">${fmtBB(p.values)}</div>` : ""}
+        ${(p.materials ?? []).length ? `<div class="sub">解锁材料:${p.materials.map((m2) => itemRef(m2.id, m2.name, ` ×${m2.count}`)).join("、")}</div>` : ""}
+      </div>`).join("") || dimP)}
+    ${sec("武器", d.weapon ? kvTable([
+      ["专武", `${esc(d.weapon.name)} ${rarityTag(d.weapon.rarity)}`],
+      ["推荐武器(1/2/3 阶)", Object.values(d.recommendedWeapons ?? {}).map((arr) => arr.map(esc).join("、") || "—").join(" / ")],
+    ]) : dimP)}
+    ${sec("突破阶段", `<table><thead><tr><th>阶段</th><th>干员等级上限</th><th>技能等级上限(普攻/战技/连携/终结)</th></tr></thead><tbody>
+      ${(d.breakStages ?? []).map((b) => `<tr><td>${b.stage}</td><td class="num">${b.maxLevel ?? "—"}</td>
+        <td class="num">${["normalAttack", "normal", "combo", "ultimate"].map((k) => b.skillLevels?.[k] ?? "—").join(" / ")}</td></tr>`).join("")}
+      </tbody></table>`)}
+    ${(d.battleTags ?? []).length || (d.stationTags ?? []).length ? sec("标签", `<div class="sub">
+      ${(d.battleTags ?? []).map((t2) => `<span class="badge">${esc(t2)}</span>`).join(" ")}
+      ${(d.stationTags ?? []).map((t2) => `<span class="badge" title="${esc(t2.desc ?? "")}">派驻:${esc(t2.tag)}</span>`).join(" ")}</div>`) : ""}
+    ${d.wiki ? sec("Wiki 百科", `<div class="sub">森空岛条目 ${esc(d.wiki.itemId ?? "—")}${d.wiki.illustration ? ` · <a href="${esc(d.wiki.illustration)}" target="_blank">立绘</a>` : ""}</div>
+      ${(d.wiki.detail?.chapters ?? []).map((ch) => `<h5>${esc(ch.title ?? "")}</h5>
+        ${(ch.widgets ?? []).map((w) => `<div class="block"><h5>${esc(w.title ?? "")}</h5>
+          ${(w.table ?? []).length ? `<table><tbody>${w.table.map((r) =>
+            `<tr><td class="k">${esc(r.label ?? "")}</td><td>${esc(r.value ?? "")}</td></tr>`).join("")}</tbody></table>` : ""}
+          ${(w.tabs ?? []).map((t2) => `<div class="block"><h5>${esc(t2.name ?? "")}${t2.type ? ` <span class="badge">${esc(t2.type)}</span>` : ""}</h5>
+            ${t2.imgUrl ? `<img class="wiki-img" src="${esc(t2.imgUrl)}" loading="lazy" alt="" onerror="this.remove()">` : ""}
+            ${t2.desc ? `<p class="desc">${esc(t2.desc)}</p>` : ""}
+            ${t2.text ? `<p class="desc">${esc(t2.text)}</p>` : ""}</div>`).join("")}
+        </div>`).join("")}`).join("")}`) : ""}`;
+}
+
+function detailWeapons(d) {
+  return `
+    <h3>${esc(d.name)} ${rarityTag(d.rarity)}</h3>
+    <div class="sub">${esc(d.weaponType ?? "—")} · 满级 ${d.maxLevel ?? "—"} · ${esc(d.id)}</div>
+    ${d.desc ? `<p class="desc">${esc(d.desc)}</p>` : ""}
+    ${sec("升级曲线", d.upgrade ? kvTable([
+      ["1 级攻击", num(d.upgrade.baseAtkLv1)], ["满级攻击", num(d.upgrade.baseAtkMax)],
+      ["满级累计经验", num(d.upgrade.totalExp)], ["满级累计龙门币", num(d.upgrade.totalGold)],
+    ]) : dimP)}
+    ${sec("潜能技能", d.potentialSkill ? `
+      <div class="block"><h5>${esc(d.potentialSkill.name ?? d.potentialSkill.skillId)}</h5>
+        <p class="desc">${esc(d.potentialSkill.desc ?? "")}</p>
+        <div class="bb-line">${(d.potentialSkill.levels ?? []).map((l) =>
+          `<span class="bb">Lv${l.level}:${fmtBB(l.blackboard) || "—"}${l.desc ? `(${esc(l.desc)})` : ""}</span>`).join("")}</div>
+      </div>` : dimP)}
+    ${sec("天赋(技能位等级加成)", d.talent ? `<table><thead><tr><th>天赋等级</th><th>各技能位区间</th></tr></thead><tbody>
+      ${(d.talent.levels ?? []).map((l) => `<tr><td>Lv${l.talentLv}</td><td>${(l.skillLevelExtraBounds ?? []).map((b) =>
+        b.skill ? `${esc(b.skill)}:${b.lowerBound}~${b.upperBound}` : null).filter(Boolean).join("<br>") || "—"}</td></tr>`).join("")}
+      </tbody></table>` : dimP)}
+    ${sec("突破", d.breakthrough ? `<table><thead><tr><th>阶段</th><th>需武器等级</th><th>龙门币</th><th>材料</th><th>技能位等级区间</th></tr></thead><tbody>
+      ${(d.breakthrough.stages ?? []).map((s) => `<tr><td class="num">${s.stage}</td><td class="num">${s.level ?? "—"}</td><td class="num">${num(s.gold)}</td>
+        <td>${(s.materials ?? []).map((m2) => itemRef(m2.id, null, ` ×${m2.count}`)).join("<br>") || "—"}</td>
+        <td>${(s.skillLevelBounds ?? []).map((b) => b.skill ? `${esc(b.skill)}:${b.lowerBound}~${b.upperBound}` : null).filter(Boolean).join("<br>") || "—"}</td></tr>`).join("")}
+      </tbody></table>` : dimP)}
+    ${(d.potentialUpItems ?? []).length ? sec("潜能道具", d.potentialUpItems.map((i) => itemRef(i.id ?? i, null)).join("、")) : ""}`;
+}
+
+function detailItems(d) {
+  const statView = (s) => s ? `<table><thead><tr><th>站点</th><th>配方数</th></tr></thead><tbody>
+    ${[["total", "合计"], ["manual", "手工"], ["machine", "工厂"], ["spaceship", "飞船"]].map(([k, label]) =>
+      `<tr><td class="k">${label}</td><td class="num">${s[k] ?? 0}</td></tr>`).join("")}</tbody></table>` : dimP;
+  return `
+    <h3>${d.iconUrl ? `<img class="avatar" src="${esc(d.iconUrl)}" alt="" onerror="this.remove()">` : ""}${esc(d.name ?? d.id)} ${rarityTag(d.rarity)}</h3>
+    <div class="sub">${esc(d.typeName ?? d.type ?? "—")} · ${esc(d.id)}</div>
+    ${d.desc ? `<p class="desc">${esc(d.desc)}</p>` : ""}
+    ${(d.obtainWays ?? []).length ? sec("获取途径", `<ul>${d.obtainWays.map((o) => `<li>${esc(o)}</li>`).join("")}</ul>`) : ""}
+    ${sec("作为原料出现的配方数(按站点)", statView(d.usedInRecipes))}
+    ${sec("作为产物的配方数(按站点)", statView(d.producedBy))}`;
+}
+
+function detailRecipes(d) {
+  const st = { manual: "手工", machine: "工厂", spaceship: "飞船" }[d.station];
+  return `
+    <h3>${esc(d.outcomes?.[0]?.options?.[0]?.name ?? d.id)}</h3>
+    <div class="sub"><span class="badge ${d.station}">${st ?? d.station}</span> · ${esc(d.id)}</div>
+    ${sec("原料", `<div class="recipe-line">${recipeSide(d.ingredients) || '<span class="opt">—</span>'}</div>`)}
+    ${sec("产物", `<div class="recipe-line">${recipeSide(d.outcomes)}</div>`)}
+    ${kvTable([
+      ["制造耗时", d.craftTimeSec ? `${d.craftTimeSec} 秒` : "—"],
+      ["生产设施", d.facility ? itemRef(d.facility) : "—"],
+      ["稀有度", d.rarity ?? "—"],
+    ])}`;
+}
+
+function detailEquips(d) {
+  const suits = (state.data.equipsGlobal ?? {}).suits ?? [];
+  const suit = suits.find((s) => s.id === d.suit);
+  return `
+    <h3>${d.icon ? `<img class="avatar" src="${esc(d.icon)}" alt="" onerror="this.remove()">` : ""}${esc(d.name)} ${rarityTag(d.rarity)}</h3>
+    <div class="sub">${PART_CN[d.part] ?? d.part ?? "—"}${suit ? ` · ${esc(suit.name)}` : " · 无套装"} · 穿戴等级 ${d.minWearLv ?? "—"} · ${esc(d.id)}</div>
+    ${d.baseAttr ? sec("基础属性", kvTable([[esc(d.baseAttr.type ?? ""), `+${num(d.baseAttr.value)}`]])) : ""}
+    ${sec("词条", `<table><thead><tr><th>类型</th><th>数值</th></tr></thead><tbody>
+      ${(d.attrs ?? []).map((a) => `<tr><td class="k">${esc(a.type)}</td><td class="num">+${num(a.value)}</td></tr>`).join("")}
+      </tbody></table>`)}
+    ${suit ? sec(`套装效果 · ${esc(suit.name)}(成员 ${suit.members} 件)`, `<ul>${(suit.effects ?? []).map((e) =>
+      `<li><b>${e.count} 件</b>${e.desc ? `:${esc(e.desc)}` : ""}</li>`).join("")}</ul>`) : ""}
+    ${d.formula ? sec("合成公式", kvTable([
+      ["档位", esc(d.formula.level ?? "—")],
+      ["装备组", esc(d.formula.packName ?? d.formula.packId ?? "—")],
+      ["解锁", d.formula.unlock ? `${esc(d.formula.unlock.type)} ${esc(d.formula.unlock.key ?? "")} ${esc(d.formula.unlock.value ?? "")}` : "—"],
+    ]) + (d.formula.craftOptions ?? []).map((c) => `
+      <div class="block"><h5>加工链 ${c.chainId}${c.isDefault ? " <span class=\"badge\">默认</span>" : ""}${c.discount != null && c.discount !== 1 ? ` · 代币 ${Math.round(c.discount * 100 / 10) / 10} 折` : ""}</h5>
+        <div class="sub">${c.gold ? `${esc(c.gold.name)} ×${c.gold.count}` : ""}${(c.materials ?? []).length ? ` + ${(c.materials ?? []).map((m2) => itemRef(m2.id, m2.name, ` ×${m2.count}`)).join(" + ")}` : ""}</div>
+      </div>`).join("")) : dimP}
+    ${(d.enhancePity ?? []).length ? sec("强化保底规则", `<span class="dim">${esc(d.enhancePity.join(", "))}</span>`) : ""}`;
+}
+
+function detailEnemies(d) {
+  return `
+    <h3>${d.icon ? `<img class="avatar" src="${esc(d.icon)}" alt="" onerror="this.remove()">` : ""}${esc(d.cnName ?? d.nickname ?? d.name ?? d.id)}
+      ${d.dangerous ? '<span class="rarity r6">精英</span>' : ""}</h3>
+    <div class="sub">${[d.nickname, d.typeName, d.id].filter(Boolean).map((x) => esc(x)).join(" · ")}</div>
+    ${d.desc ? `<p class="desc">${esc(d.desc)}</p>` : ""}
+    ${sec("档案", kvTable([
+      ["初始霸体", d.superArmor ?? "—"], ["韧性", d.maxResilience ?? "—"],
+      ["满级生命", num(d.lvMax?.MaxHp)], ["满级攻击", num(d.lvMax?.Atk)], ["满级防御", num(d.lvMax?.Def)],
+      ["抗性", Object.entries(d.resists ?? {}).filter(([, v]) => v)
+        .map(([k, v]) => `${RESIST_CN[k] ?? k} ${Math.round(v * 100)}%`).join(", ") || "—"],
+    ]))}
+    ${(d.abilities ?? []).length ? sec("特殊能力", `<ul>${d.abilities.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>`) : ""}
+    ${(d.deathTips ?? []).length ? sec("击杀提示", `<ul>${d.deathTips.map((a) => `<li>${esc(a)}</li>`).join("")}</ul>`) : ""}
+    ${(d.distributions ?? []).length ? sec("出没区域", esc(d.distributions.join("、"))) : ""}`;
+}
+
+const DETAIL_RENDERERS = {
+  characters: detailCharacters, weapons: detailWeapons, items: detailItems,
+  recipes: detailRecipes, equips: detailEquips, enemies: detailEnemies,
+};
+
+function ensureModal() {
+  let box = document.getElementById("detail-modal");
+  if (box) return box;
+  box = document.createElement("div");
+  box.id = "detail-modal";
+  box.className = "modal-backdrop";
+  box.addEventListener("click", (e) => { if (e.target === box) closeDetail(); });
+  document.body.appendChild(box);
+  window.addEventListener("keydown", (e) => { if (e.key === "Escape") closeDetail(); });
+  return box;
+}
+
+function closeDetail() {
+  const box = document.getElementById("detail-modal");
+  if (box) {
+    box.style.display = "none";
+    box.innerHTML = "";
+  }
+}
+
+async function openDetail(product, id) {
+  const box = ensureModal();
+  box.innerHTML = `<div class="modal"><button class="modal-close" title="关闭 (Esc)">✕</button>
+    <div class="modal-body"><div class="empty-state">加载中…</div></div></div>`;
+  box.style.display = "block";
+  box.querySelector(".modal-close").addEventListener("click", closeDetail);
+  try {
+    const d = await (await fetch(`/data/${product}/${id}.json`)).json();
+    const render = DETAIL_RENDERERS[product] ?? ((x) => `<pre>${esc(JSON.stringify(x, null, 2))}</pre>`);
+    box.querySelector(".modal-body").innerHTML = render(d);
+  } catch {
+    box.querySelector(".modal-body").innerHTML =
+      '<div class="error-state">详情加载失败(缺少 data/' + esc(product) + "/" + esc(id) + '.json?)</div>';
+  }
+}
+
+/* 列表与浮层内统一走事件委托:[data-detail="<产物>"] data-id="<id>" */
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-detail]");
+  if (el) openDetail(el.dataset.detail, el.dataset.id);
+});
 
 const RENDERERS = {
   overview: renderOverview, characters: renderCharacters, weapons: renderWeapons,
