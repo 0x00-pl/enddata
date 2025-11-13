@@ -15,11 +15,12 @@ const state = {
 const FORMATTER = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 
 async function loadData() {
-  const folders = ["characters", "weapons", "equips", "items", "recipes", "enemies"];
+  const folders = ["characters", "weapons", "equips", "items", "enemies"];
   const results = await Promise.allSettled([
     (await fetch("/data/meta.json")).json(),
     ...folders.map((n) => fetch(`/data/${n}/index.json`).then((r) => r.json())),
     (await fetch("/data/equips/_global.json")).json(),
+    (await fetch("/data/recipes/index.json")).json(),
   ]);
   const put = (i, key) => {
     if (results[i].status === "fulfilled") state.data[key] = results[i].value;
@@ -27,6 +28,7 @@ async function loadData() {
   put(0, "meta");
   folders.forEach((n, i) => put(i + 1, n));
   put(folders.length + 1, "equipsGlobal");
+  put(folders.length + 2, "recipeIds"); // 配方清单:按站点分组的 id 列表
 }
 
 /* ---------- 通用渲染工具 ---------- */
@@ -145,25 +147,79 @@ function recipeSide(side) {
   }).join(" + ");
 }
 
+const recipeCategory = (r) => r.showingName ?? r.machineName ?? null;
+
+let recipeDetailsLoading = false;
+
+/* index.json 只是清单,配方内容按清单批量拉取子文件(载入一次后缓存)。
+   任务为 thunk(延迟发起),worker 池限制真实并发,避免请求洪峰。 */
+async function loadRecipeDetails() {
+  if (state.data.recipes || recipeDetailsLoading) return;
+  recipeDetailsLoading = true;
+  const groups = state.data.recipeIds ?? {};
+  const jobs = Object.entries(groups).flatMap(([st, ids]) =>
+    (ids ?? []).map((id) => async () => {
+      const r = await fetch(`/data/recipes/${st}/${id}.json`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      return r.json();
+    }));
+  const out = [];
+  const CONCURRENCY = 8;
+  let next = 0;
+  async function worker() {
+    while (next < jobs.length) {
+      const k = next++;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          out[k] = await jobs[k]();
+          break;
+        } catch {
+          if (attempt) console.warn("配方加载失败,已跳过:", k);
+        }
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+  state.data.recipes = out.filter(Boolean);
+  recipeDetailsLoading = false;
+  render();
+}
+
 function renderRecipes() {
+  if (!state.data.recipes) {
+    loadRecipeDetails();
+    return `<div class="empty-state">正在按 data/recipes/index.json 清单加载配方…</div>`;
+  }
   const q = state.search.recipes ?? "";
   const st = state.filters.recipes ?? "";
-  const list = (state.data.recipes ?? [])
-    .filter((r) => (!st || r.station === st) && match(r.outcomes.map((o) => o.options[0].name).join(), q));
+  const cat = state.filters.recipeCat ?? "";
+  const byStation = state.data.recipes.filter((r) => !st || r.station === st);
+  const cats = [...new Set(byStation.map(recipeCategory).filter(Boolean))].sort();
+  const catEff = cats.includes(cat) ? cat : "";
+  const hit = (r) => match(r.name, q) || match(r.formulaDesc, q)
+    || match(r.outcomes.map((o) => o.options[0].name).join(), q);
+  const list = byStation.filter((r) => (!catEff || recipeCategory(r) === catEff) && hit(r));
   return `
-    ${toolbar("recipes", "搜索产物名…", `
+    ${toolbar("recipes", "搜索配方 / 产物名…", `
       <select onchange="window.__filter('recipes', this.value)">
         <option value="">全部站点</option>
         <option value="manual" ${st === "manual" ? "selected" : ""}>手工制作</option>
         <option value="machine" ${st === "machine" ? "selected" : ""}>工厂机器</option>
         <option value="spaceship" ${st === "spaceship" ? "selected" : ""}>飞船制造</option>
+      </select>
+      <select onchange="window.__filter('recipeCat', this.value)">
+        <option value="">全部分类</option>
+        ${cats.map((c) => `<option ${c === catEff ? "selected" : ""}>${esc(c)}</option>`).join("")}
       </select>`)}
-    <table><thead><tr><th>产物</th><th>配方</th><th>站点</th></tr></thead><tbody>
+    <p class="note">手工配方按游戏内分类(精制食药/应急食药/随身装置/种植调配/素材转化),
+      工业配方按生产设施;data/recipes/ 按站点(manual/machine/spaceship)分子目录存放。</p>
+    <table><thead><tr><th>产物</th><th>配方</th><th>分类</th><th>站点</th></tr></thead><tbody>
     ${list.map((r) => {
       const out = r.outcomes[0]?.options[0];
-      return `<tr class="clickable" data-detail="recipes" data-id="${esc(r.id)}">
-        <td>${esc(out?.name ?? r.id)} ×${out?.count ?? 1}</td>
+      return `<tr class="clickable" data-detail="recipes" data-sub="${esc(r.station)}" data-id="${esc(r.id)}">
+        <td>${esc(r.name || (out?.name ?? r.id))} ×${out?.count ?? 1}</td>
         <td><div class="recipe-line">${recipeSide(r.ingredients) || '<span class="opt">—</span>'}</div></td>
+        <td class="dim">${esc(recipeCategory(r) ?? "—")}</td>
         <td><span class="badge ${r.station}">${{ manual: "手工", machine: "工厂", spaceship: "飞船" }[r.station]}</span></td>
       </tr>`;
     }).join("")}
@@ -332,13 +388,15 @@ function detailItems(d) {
 function detailRecipes(d) {
   const st = { manual: "手工", machine: "工厂", spaceship: "飞船" }[d.station];
   return `
-    <h3>${esc(d.outcomes?.[0]?.options?.[0]?.name ?? d.id)}</h3>
+    <h3>${esc(d.name || d.formulaDesc || (d.outcomes?.[0]?.options?.[0]?.name ?? d.id))}</h3>
     <div class="sub"><span class="badge ${d.station}">${st ?? d.station}</span> · ${esc(d.id)}</div>
     ${sec("原料", `<div class="recipe-line">${recipeSide(d.ingredients) || '<span class="opt">—</span>'}</div>`)}
     ${sec("产物", `<div class="recipe-line">${recipeSide(d.outcomes)}</div>`)}
     ${kvTable([
+      ["分类", esc(recipeCategory(d) ?? "—")],
+      ...(d.formulaGroupId ? [["配方组", `${esc(d.formulaDesc ?? "")} <span class="dim">${esc(d.formulaGroupId)}</span>`]] : []),
       ["制造耗时", d.craftTimeSec ? `${d.craftTimeSec} 秒` : "—"],
-      ["生产设施", d.facility ? itemRef(d.facility) : "—"],
+      ["生产设施", d.facility ? esc(d.facility) : "—"],
       ["稀有度", d.rarity ?? "—"],
     ])}`;
 }
@@ -408,26 +466,27 @@ function closeDetail() {
   }
 }
 
-async function openDetail(product, id) {
+async function openDetail(product, id, sub = "") {
   const box = ensureModal();
   box.innerHTML = `<div class="modal"><button class="modal-close" title="关闭 (Esc)">✕</button>
     <div class="modal-body"><div class="empty-state">加载中…</div></div></div>`;
   box.style.display = "block";
   box.querySelector(".modal-close").addEventListener("click", closeDetail);
   try {
-    const d = await (await fetch(`/data/${product}/${id}.json`)).json();
+    const d = await (await fetch(`/data/${product}/${sub ? sub + "/" : ""}${id}.json`)).json();
     const render = DETAIL_RENDERERS[product] ?? ((x) => `<pre>${esc(JSON.stringify(x, null, 2))}</pre>`);
     box.querySelector(".modal-body").innerHTML = render(d);
   } catch {
     box.querySelector(".modal-body").innerHTML =
-      '<div class="error-state">详情加载失败(缺少 data/' + esc(product) + "/" + esc(id) + '.json?)</div>';
+      `<div class="error-state">详情加载失败(缺少 data/${esc(product)}/${sub ? esc(sub) + "/" : ""}${esc(id)}.json?)</div>`;
   }
 }
 
-/* 列表与浮层内统一走事件委托:[data-detail="<产物>"] data-id="<id>" */
+/* 列表与浮层内统一走事件委托:[data-detail="<产物>"] data-id="<id>"
+   data-sub 为可选分类子目录(如配方数据集) */
 document.addEventListener("click", (e) => {
   const el = e.target.closest("[data-detail]");
-  if (el) openDetail(el.dataset.detail, el.dataset.id);
+  if (el) openDetail(el.dataset.detail, el.dataset.id, el.dataset.sub ?? "");
 });
 
 const RENDERERS = {

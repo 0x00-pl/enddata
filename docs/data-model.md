@@ -103,22 +103,34 @@ reports/build-report.md               ← 人类可读构建报告
 - `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 可替代组按"任选其一"逐组员计入;无关联时为 null
 注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 
-### recipes/ — 生产配方
-目录化输出(原料/产物是配方身份字段,`index.json` 保留,仅省略 `craftTimeSec`/`facility`);
-每条配方一个完整文件 `data/recipes/<recipeId>.json`:
+### recipes/ — 生产配方(按站点分 子目录)
+每条配方一个完整文件 `data/recipes/<station>/<recipeId>.json`(manual/machine/spaceship);
+`index.json` 只是**清单**:按站点分组的配方 id 列表(`{"manual": [...], "machine": [...],
+"spaceship": [...]}`),告知"有哪些配方、在哪个子目录";名称/分类/原料/产物/耗时等
+一切内容都在对应子文件里,索引中不做任何重复。
+分类字段仅随条目输出、不做目录层级:
+- 手工/飞船:`showingType` → `showingName` 中文名(精制食药/应急食药/随身装置/种植调配/
+  素材转化/干员经验素材/武器经验素材,来自 `FactoryCraftShowingTypeTable`);
+  手工另有 `craftFilterType`(0=普通手工,素材转化按 1/2/3 细分)与 `name` 配方名(102/102 可反查)
+- 机器:无 showingType,以生产设施为分类(`machineId` → `machineName`,来自
+  `FactoryBuildingTable`,灌装机/拆解机/精炼炉等 18 种),并带 `formulaGroupId`/
+  `formulaDesc` 配方组(317/317 可反查)
+
 ```json
 {
-  "id": "thickener_originium_enr_powder_1",
-  "station": "manual | machine | spaceship",
-  "machineId": "thickener_1",
-  "rarity": null,
-  "ingredients": [ { "count": 2, "options": [ { "id": "item_originium_powder", "name": "源石粉末", "count": 2 },
-                                                { "id": "item_plant_moss_powder_3", "name": "砂叶粉末", "count": 1 } ] } ],
+  "id": "handwork_bottled_flower1spc_1", "station": "manual",
+  "name": "小瓶荞复锭剂",
+  "showingType": 19, "showingName": "精制食药", "craftFilterType": 0,
+  "rarity": 4, "domainId": "domain_1", "sortId": 21,
+  "ingredients": [ { "count": 5, "options": [ { "id": "item_plant_moss_spc_powder_1", "name": "荞愈药粉", "count": 5 } ] },
+                   { "count": 5, "options": [ { "id": "item_glass_bottle", "name": "紫晶质瓶", "count": 5 } ] } ],
   "outcomes": [ ... ]
 }
 ```
-机器配方的 `options` 是**可替代原料组**(任选其一);手工配方 options 长度恒为 1;
-飞船制造表只登记产物,`ingredients` 为空数组。
+机器配方条目另有 `machineId`/`machineName`/`formulaGroupId`/`formulaDesc`(如
+`filling_bottled_copper_acid` → 灌装机 / 沉积酸(灌装))。机器配方的 `options` 是**可替代
+原料组**(任选其一);手工配方 options 长度恒为 1;飞船制造表只登记产物,`ingredients`
+为空数组。
 `craftTimeSec`(制造耗时,秒)与 `facility`(生产设施 ID)来自 JamboChen/endfield-calc
 (本地克隆,其常量展开后与 TableCfg 同一套小写 ID,按配方 ID join);
 仅机器配方命中(317/317),手工/飞船及 calc 数据缺失时为 null。

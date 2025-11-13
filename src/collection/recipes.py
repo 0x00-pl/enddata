@@ -1,12 +1,17 @@
-"""采集+初步处理:生产配方数据集 → data/recipes/ 目录。
+"""采集+初步处理:生产配方数据集 → data/recipes/ 目录(按分类分 子目录)。
 
 来源表:FactoryManualCraftTable × FactoryMachineCraftTable × SpaceshipManufactureFormulaTable
         × ItemTable(原料/产物命名) × I18nTextTable_CN
+        × FactoryCraftShowingTypeTable(展示分类中文名:精制食药/应急食药/…)
+        × FactoryBuildingTable(生产设施中文名:灌装机/拆解机/…)
         × JamboChen/endfield-calc(本地 git:制造耗时 craftingTime 与生产设施 facilityId;
           其 recipes.ts 里的 RecipeId/ItemId/FacilityId 常量展开后与 rmxlinux TableCfg
           是同一套小写游戏 ID,可直接按配方 ID join)
-产物:按站点(manual/machine/spaceship)合并的配方;机器配方的可替代原料组保留为 options;
-      calc 命中的条目补充 craftTimeSec(制造耗时,秒)与 facility(生产设施 ID),未命中留空。
+分类:手工/飞船配方带 showingType(→ showingName 中文名),手工另有 craftFilterType
+      (0=普通手工,素材转化按 1/2/3 细分)与配方名 name;机器配方无 showingType,
+      以生产设施为分类(machineName),并带 formulaDesc/formulaGroupId 配方组。
+目录:data/recipes/<station>/<recipeId>.json(manual/machine/spaceship),
+      展示分类与设施等字段保留在条目与索引中,不做目录层级。
 """
 
 from __future__ import annotations
@@ -19,7 +24,8 @@ from tools.tables import I18n, dump_dir, load_tables
 PRODUCT = "recipes"
 
 REQUIRED_TABLES = ["FactoryManualCraftTable", "FactoryMachineCraftTable",
-                                 "SpaceshipManufactureFormulaTable", "ItemTable", "I18nTextTable_CN"]
+                                 "SpaceshipManufactureFormulaTable", "ItemTable", "I18nTextTable_CN",
+                                 "FactoryCraftShowingTypeTable", "FactoryBuildingTable"]
 
 CALC_REPO = "JamboChen/endfield-calc"
 CALC_CONSTANTS_TS = "src/types/constants.ts"  # RecipeId/ItemId/FacilityId 常量 → 字符串值
@@ -95,6 +101,9 @@ def _parse_calc_recipes(recipes_ts: str, consts: dict[str, str]) -> dict[str, di
 
 def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]:
     item_name = {iid: t(it.get("name")) for iid, it in raw["ItemTable"].items() if t(it.get("name"))}
+    # 展示分类中文名(手工/飞船按 showingType)与设施名(机器按 machineId)
+    showing = {int(k): t(v.get("name")) for k, v in raw["FactoryCraftShowingTypeTable"].items()}
+    building_name = {bid: t(b.get("name")) for bid, b in raw["FactoryBuildingTable"].items()}
 
     def resolve_side(entries: list[dict]) -> list[dict]:
         """原料/产物条目 → [{count, options:[{id,name}]}];机器配方的同组 options
@@ -111,23 +120,33 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
 
     recipes = []
     for rid, r in raw["FactoryManualCraftTable"].items():
+        sh_name = showing.get(int(r["showingType"])) if r.get("showingType") is not None else None
         recipes.append({
             "id": rid, "station": "manual",
-            "rarity": r.get("rarity"), "domainId": r.get("domainId"),
+            "name": t(r.get("name")),
+            "showingType": r.get("showingType"), "showingName": sh_name,
+            "craftFilterType": r.get("craftFilterType"),
+            "rarity": r.get("rarity"), "domainId": r.get("domainId"), "sortId": r.get("sortId"),
             "ingredients": resolve_side(r.get("ingredients")),
             "outcomes": resolve_side(r.get("outcomes")),
         })
     for rid, r in raw["FactoryMachineCraftTable"].items():
         recipes.append({
-            "id": rid, "station": "machine", "machineId": r.get("machineId"),
-            "rarity": r.get("rarity"),
+            "id": rid, "station": "machine",
+            "machineId": r.get("machineId"),
+            "machineName": building_name.get(r.get("machineId")),
+            "formulaGroupId": r.get("formulaGroupId"),
+            "formulaDesc": t(r.get("formulaDesc")),
+            "rarity": r.get("rarity"), "sortId": r.get("sortId"),
             "ingredients": resolve_side(r.get("ingredients")),
             "outcomes": resolve_side(r.get("outcomes")),
         })
     for rid, r in raw["SpaceshipManufactureFormulaTable"].items():
+        sh_name = showing.get(int(r["showingType"])) if r.get("showingType") is not None else None
         recipes.append({
             "id": rid, "station": "spaceship",
-            "rarity": r.get("rarity"),
+            "showingType": r.get("showingType"), "showingName": sh_name,
+            "rarity": r.get("rarity"), "sortId": r.get("sortId"),
             "ingredients": [],
             "outcomes": resolve_side([{"id": r["outcomeItemId"], "count": r.get("perCapacity", 1)}]),
         })
@@ -147,12 +166,19 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
 
 
 def write(payload: list[dict]) -> None:
-    """每条配方一个独立文件 + 轻量索引 index.json。
+    """每条配方一个独立文件,按站点子目录存放(manual/machine/spaceship)。
 
-    原料/产物是配方的身份字段(列表页直接渲染),索引保留;
-    仅省略 calc join 的耗时/设施两个展示外字段。
+    index.json 只是清单:按站点分组的配方 id 列表(告知"有哪些配方、在哪个目录"),
+    名称/分类/原料/产物等一切内容都在子文件里,不在索引中重复。
     """
-    dump_dir(PRODUCT, payload, exclude_index=("craftTimeSec", "facility"))
+    def finalize(_rows: list, entries: list[dict]) -> dict:
+        grouped: dict[str, list] = {"manual": [], "machine": [], "spaceship": []}
+        for e in entries:
+            grouped[e["station"]].append(e["id"])
+        return grouped
+
+    dump_dir(PRODUCT, payload, subdir=lambda r: r["station"],
+             index_map=lambda r: r["id"], index_finalize=finalize)
 
 
 def main(force: bool = False) -> None:

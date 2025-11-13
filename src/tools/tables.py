@@ -134,22 +134,37 @@ def dump(name: str, payload):
 _DIR_RESERVED = ("index.json", "_global.json")
 
 
-def dump_dir(name: str, entries: list[dict], exclude_index: tuple[str, ...] = ()) -> None:
-    """数据集目录化输出(characters 格式):每条一个 <id>.json + 轻量索引 index.json。
+def dump_dir(name: str, entries: list[dict], exclude_index: tuple[str, ...] = (),
+             subdir=None, index_map=None, index_finalize=None) -> None:
+    """数据集目录化输出(characters 格式):每条一个 <id>.json + index.json。
 
     exclude_index 列出的重字段(长文本/嵌套详情)只进单条文件,索引里剔除;
-    目录内已不在本次产物中的旧条目文件会被清理。
+    subdir 为可选 entry → 子目录相对路径(如 'manual'),按分类分层存放;
+    index_map 为可选 entry → 索引条目的自定义映射(默认取整条剔除重字段);
+    index_finalize 为可选(索引列表, entries) → 最终序列化对象,如按站点分组的 id 清单;
+    重建时清理目录内全部旧条目文件与空子目录。
     """
     out_dir = DATA_DIR / name
     out_dir.mkdir(parents=True, exist_ok=True)
-    for old in out_dir.glob("*.json"):
-        if old.name not in _DIR_RESERVED:
-            old.unlink()
-    index = []
+    for old in out_dir.rglob("*.json"):
+        if old.parent == out_dir and old.name in _DIR_RESERVED:
+            continue
+        old.unlink()
+    for d in sorted((p for p in out_dir.rglob("*") if p.is_dir()),
+                    key=lambda p: len(p.parts), reverse=True):
+        d.rmdir()  # 条目文件已清空,自底向上删空目录
     for e in entries:
-        (out_dir / f"{e['id']}.json").write_text(
-            json.dumps(e, ensure_ascii=False, indent=2), encoding="utf-8")
-        index.append({k: v for k, v in e.items() if k not in exclude_index})
+        dest = out_dir / (subdir(e) if subdir else "") / f"{e['id']}.json"
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_text(json.dumps(e, ensure_ascii=False, indent=2), encoding="utf-8")
+    if index_map is not None:
+        index = [index_map(e) for e in entries]
+    else:
+        index = [{k: v for k, v in e.items() if k not in exclude_index} for e in entries]
+    if index_finalize is not None:
+        index = index_finalize(index, entries)
     index_path = out_dir / "index.json"
     index_path.write_text(json.dumps(index, ensure_ascii=False, indent=2), encoding="utf-8")
-    info(f"  -> {out_dir.relative_to(PROJECT_ROOT)}/ ({len(entries)} 条 + index.json)")
+    cats = len({subdir(e) for e in entries}) if subdir else 0
+    info(f"  -> {out_dir.relative_to(PROJECT_ROOT)}/ ({len(entries)} 条 + index.json"
+         + (f",{cats} 个分类子目录" if cats else "") + ")")
