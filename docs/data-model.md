@@ -96,9 +96,14 @@ reports/build-report.md               ← 人类可读构建报告
   天赋阵列正文。⚠️ 天赋无独立名称字段(游戏内为图标),名称含于正文首词
 
 ### items/ — 物品(生产)
-目录化输出:`index.json` 为轻量列表(不含 desc/obtainWays/配方关联,列表页用);
-每件物品一个完整文件 `data/items/<itemId>.json`,字段:
-`{id, name, type, typeName, rarity, showingType, desc, icon, iconUrl, obtainWays, usedInRecipes, producedBy}`;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
+目录化输出:每件物品一个完整文件 `data/items/<typeSlug>/<itemId>.json`——子目录为
+物品类型的 EN slug(`ItemTable.type` → `ItemTypeTable.name` 经 `I18nTextTable_EN`
+反查后转小写下划线,如 `currency`/`engraved_medal`,共 77 个;`typeSlug` 字段与
+目录同名)。`index.json` 只是按 typeSlug 分组的 id 清单,内容不做重复。
+条目字段:`{id, name, type, typeSlug, typeName, rarity, showingType, desc, icon,
+iconUrl, obtainWays, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable_CN`
+反查的中文名;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版
+`showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 - `obtainWays`:`ItemTable.obtainWayIds` → `SystemJumpTable` 的 `desc` 经 i18n 反查的获取途径文案数组(保序去重),无登记时为 null
 - `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 可替代组按"任选其一"逐组员计入;无关联时为 null
 注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。

@@ -15,12 +15,13 @@ const state = {
 const FORMATTER = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 
 async function loadData() {
-  const folders = ["characters", "weapons", "equips", "items", "enemies"];
+  const folders = ["characters", "weapons", "equips", "enemies"];
   const results = await Promise.allSettled([
     (await fetch("/data/meta.json")).json(),
     ...folders.map((n) => fetch(`/data/${n}/index.json`).then((r) => r.json())),
     (await fetch("/data/equips/_global.json")).json(),
     (await fetch("/data/recipes/index.json")).json(),
+    (await fetch("/data/items/index.json")).json(),
   ]);
   const put = (i, key) => {
     if (results[i].status === "fulfilled") state.data[key] = results[i].value;
@@ -29,6 +30,12 @@ async function loadData() {
   folders.forEach((n, i) => put(i + 1, n));
   put(folders.length + 1, "equipsGlobal");
   put(folders.length + 2, "recipeIds"); // 配方清单:按站点分组的 id 列表
+  put(folders.length + 3, "itemIds");   // 物品清单:按类型 slug 分组的 id 列表
+  // id → 子目录 映射,供详情浮层定位物品子文件
+  if (state.data.itemIds) {
+    state.itemSlug = Object.fromEntries(Object.entries(state.data.itemIds)
+      .flatMap(([slug, ids]) => (ids ?? []).map((id) => [id, slug])));
+  }
 }
 
 /* ---------- 通用渲染工具 ---------- */
@@ -119,10 +126,14 @@ function renderWeapons() {
 }
 
 function renderItems() {
+  if (!state.data.items) {
+    loadItemDetails();
+    return `<div class="empty-state">正在按 data/items/index.json 清单加载物品(2829 条)…</div>`;
+  }
   const q = state.search.items ?? "";
   const type = state.filters.items ?? "";
-  const types = [...new Set((state.data.items ?? []).map((i) => i.typeName).filter(Boolean))].sort();
-  const list = (state.data.items ?? [])
+  const types = [...new Set(state.data.items.map((i) => i.typeName).filter(Boolean))].sort();
+  const list = state.data.items
     .filter((i) => (!type || i.typeName === type) && (match(i.name, q) || match(i.id, q)));
   return `
     ${toolbar("items", "搜索物品名 / ID…", `
@@ -130,8 +141,10 @@ function renderItems() {
         <option value="">全部类型</option>
         ${types.map((t) => `<option ${t === type ? "selected" : ""}>${esc(t)}</option>`).join("")}
       </select>`)}
+    <p class="note">data/items/ 按物品类型 EN slug 分子目录存放(typeSlug),
+      index.json 为按类型分组的 id 清单。</p>
     <table><thead><tr><th>物品</th><th>稀有度</th><th>类型</th><th>堆叠</th></tr></thead><tbody>
-    ${list.slice(0, 500).map((i) => `<tr class="clickable" data-detail="items" data-id="${esc(i.id)}">
+    ${list.slice(0, 500).map((i) => `<tr class="clickable" data-detail="items" data-sub="${esc(i.typeSlug ?? "")}" data-id="${esc(i.id)}">
       <td>${i.iconUrl ? `<img class="icon-sm" src="${esc(i.iconUrl)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(i.name ?? i.id)} <span class="dim">${esc(i.id)}</span></td>
       <td>${rarityTag(i.rarity)}</td><td>${esc(i.typeName ?? i.type ?? "—")}</td>
     </tr>`).join("")}
@@ -151,15 +164,15 @@ const recipeCategory = (r) => r.showingName ?? r.machineName ?? null;
 
 let recipeDetailsLoading = false;
 
-/* index.json 只是清单,配方内容按清单批量拉取子文件(载入一次后缓存)。
+/* 清单式数据集(recipes/items)通用:按清单批量拉取子文件,载入一次后缓存。
    任务为 thunk(延迟发起),worker 池限制真实并发,避免请求洪峰。 */
-async function loadRecipeDetails() {
-  if (state.data.recipes || recipeDetailsLoading) return;
-  recipeDetailsLoading = true;
-  const groups = state.data.recipeIds ?? {};
-  const jobs = Object.entries(groups).flatMap(([st, ids]) =>
+async function bulkLoadDetails(manifest, pathOf, key) {
+  if (state.data[key] || state.loading?.[key]) return;
+  state.loading = state.loading ?? {};
+  state.loading[key] = true;
+  const jobs = Object.entries(manifest ?? {}).flatMap(([sub, ids]) =>
     (ids ?? []).map((id) => async () => {
-      const r = await fetch(`/data/recipes/${st}/${id}.json`);
+      const r = await fetch(pathOf(sub, id));
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       return r.json();
     }));
@@ -174,16 +187,22 @@ async function loadRecipeDetails() {
           out[k] = await jobs[k]();
           break;
         } catch {
-          if (attempt) console.warn("配方加载失败,已跳过:", k);
+          if (attempt) console.warn(`${key} 子文件加载失败,已跳过:`, k);
         }
       }
     }
   }
   await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-  state.data.recipes = out.filter(Boolean);
-  recipeDetailsLoading = false;
+  state.data[key] = out.filter(Boolean);
+  state.loading[key] = false;
   render();
 }
+
+const loadRecipeDetails = () =>
+  bulkLoadDetails(state.data.recipeIds, (st, id) => `/data/recipes/${st}/${id}.json`, "recipes");
+
+const loadItemDetails = () =>
+  bulkLoadDetails(state.data.itemIds, (slug, id) => `/data/items/${slug}/${id}.json`, "items");
 
 function renderRecipes() {
   if (!state.data.recipes) {
@@ -467,6 +486,8 @@ function closeDetail() {
 }
 
 async function openDetail(product, id, sub = "") {
+  // 物品子目录按类型 slug 分层:未显式给出时经 id→slug 映射解析
+  if (product === "items" && !sub) sub = (state.itemSlug ?? {})[id] ?? "";
   const box = ensureModal();
   box.innerHTML = `<div class="modal"><button class="modal-close" title="关闭 (Esc)">✕</button>
     <div class="modal-body"><div class="empty-state">加载中…</div></div></div>`;
