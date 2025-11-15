@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-from tools.tables import I18n, dump_dir, load_tables
+from tools.tables import I18n, dump_dir, i18n_table, load_tables
 
 PRODUCT = "weapons"
 
@@ -193,7 +193,7 @@ def write(payload: list[dict]) -> None:
 
 def main(force: bool = False) -> None:
     raw = load_tables(REQUIRED_TABLES, force=force)
-    write(build(raw, I18n(raw["I18nTextTable_CN"])))
+    write(build(raw, I18n(raw[i18n_table()])))
 
 
 if __name__ == "__main__":

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 
-from tools.tables import I18n, dump_dir, load_tables, load_vfs_config, vfs_url
+from tools.tables import I18n, dump_dir, i18n_table, load_tables, load_vfs_config, vfs_url
 
 PRODUCT = "items"
 
@@ -144,7 +144,7 @@ def write(payload: list[dict]) -> None:
 def main(force: bool = False) -> None:
     load_vfs_config()
     raw = load_tables(REQUIRED_TABLES, force=force)
-    write(build(raw, I18n(raw["I18nTextTable_CN"])))
+    write(build(raw, I18n(raw[i18n_table()])))
 
 
 if __name__ == "__main__":

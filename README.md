@@ -33,6 +33,7 @@ poetry run enddata collection clone                      # 更新 sources/ 下�
 poetry run enddata collection fetch                      # 更新仓库 + 刷新构建号 + 预热原始表
 poetry run enddata collection characters --force         # 强制重抓干员依赖的原始表
 poetry run enddata collection items                      # 只生成 items 数据集(缺原始表自动补抓)
+poetry run enddata collection all --lang en              # 指定默认翻译语言构建(可选 CN/TC/EN/JP/KR/FR/DE/IT/MX/BR/RU/ID/TH/VN)
 poetry run enddata collection all                        # 依赖全部 collection,产出所有数据集与报告
 
 # 数据展示:本地预览(从仓库根目录起服务)

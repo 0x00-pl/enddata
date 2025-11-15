@@ -11,10 +11,12 @@ from datetime import datetime, timezone
 
 from collection import characters, enemies, equips, items, recipes, weapons
 from tools import versions
+from tools import tables
 from tools.tables import (
     I18n,
     REPORTS_DIR,
     dump,
+    i18n_table,
     load_tables,
     load_vfs_config,
 )
@@ -33,7 +35,7 @@ def run(force: bool = False) -> None:
     t = None
     for mod in PRODUCT_MODULES:
         raw = load_tables(mod.REQUIRED_TABLES, force=force)  # 直读本地 git 仓库
-        t = I18n(raw["I18nTextTable_CN"])
+        t = I18n(raw[i18n_table()])
         payloads[mod.PRODUCT] = mod.build(raw, t)
         mod.write(payloads[mod.PRODUCT])  # 各产物统一目录化(每条一个文件 + index.json)
 
@@ -41,6 +43,7 @@ def run(force: bool = False) -> None:
     meta = {
         "generatedAt": t0.isoformat(timespec="seconds"),
         "source": _source_info(),
+        "lang": tables.DEFAULT_LANG,
         "i18nMisses": t.misses,
         "counts": {
             "characters": len(payloads["characters"]),
@@ -70,6 +73,7 @@ def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None
 
 - 构建时间:{t0.isoformat(timespec="seconds")}(UTC)
 - 数据源:{meta["source"]["repo"]}@{meta["source"]["branch"]}
+- 默认翻译语言:{tables.DEFAULT_LANG}
 - i18n 未命中:{misses}
 
 ## 数据集规模

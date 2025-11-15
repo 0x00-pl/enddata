@@ -21,6 +21,7 @@ from tools.tables import (
     ATTRACTIONS_OF_INTEREST,
     I18n,
     dump_dir,
+    i18n_table,
     flat_attrs,
     load_tables,
     load_vfs_config,
@@ -369,7 +370,7 @@ def main(force: bool = False) -> None:
     load_vfs_config()
     raw = load_tables(REQUIRED_TABLES, force=force)
     wiki_ops = load_wiki_operators()
-    write(build(raw, I18n(raw["I18nTextTable_CN"]), wiki_ops))
+    write(build(raw, I18n(raw[i18n_table()]), wiki_ops))
 
 
 if __name__ == "__main__":

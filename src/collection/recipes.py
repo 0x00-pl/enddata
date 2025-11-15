@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 
 from tools.datasource import info, read_from_git
-from tools.tables import I18n, dump_dir, load_tables
+from tools.tables import I18n, dump_dir, i18n_table, load_tables
 
 PRODUCT = "recipes"
 
@@ -184,7 +184,7 @@ def write(payload: list[dict]) -> None:
 def main(force: bool = False) -> None:
     raw = load_tables(REQUIRED_TABLES, force=force)
     calc = load_calc_recipes()
-    write(build(raw, I18n(raw["I18nTextTable_CN"]), calc))
+    write(build(raw, I18n(raw[i18n_table()]), calc))
 
 
 if __name__ == "__main__":

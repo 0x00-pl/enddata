@@ -223,7 +223,8 @@ formula/enhancePity 详情);套装与强化规则为全局配置,整体在 `data
 旧镜像的 `*ResistScalar`(受伤倍率)已在构建时统一换算为减伤比例。
 
 ### meta.json — 构建信息
-`{generatedAt, source{repo,branch}, i18nMisses, counts{...}}`;counts 含 equips/suits。
+`{generatedAt, source{repo,branch}, lang, i18nMisses, counts{...}}`;counts 含 equips/suits;
+`lang` 为本次构建的默认翻译语言(入口 `--lang` 指定,默认 CN,各语言覆盖见 I18nTextTable_<LANG>)。
 
 ## 按需读取、待加工的表
 

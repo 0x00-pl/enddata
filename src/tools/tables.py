@@ -10,6 +10,22 @@ from tools.datasource import PROJECT_ROOT, fetch_gh_file, info, load_json, read_
 DATA_DIR = PROJECT_ROOT / "data"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 
+# 默认翻译语言(表名 I18nTextTable_<LANG>),由入口脚本 --lang 修改;CN 为项目基准
+DEFAULT_LANG = "CN"
+
+# 数据源提供的语言表(rmxlinux@TableCfg/I18nTextTable_<LANG>.json)
+LANGUAGES = ("CN", "TC", "EN", "JP", "KR", "FR", "DE", "IT", "MX", "BR", "RU", "ID", "TH", "VN")
+
+
+def set_default_lang(lang: str) -> None:
+    global DEFAULT_LANG
+    DEFAULT_LANG = lang.upper()
+
+
+def i18n_table() -> str:
+    """当前默认语言的 i18n 表名(load_tables 会把占位表名 I18nTextTable_CN 解析到它)。"""
+    return f"I18nTextTable_{DEFAULT_LANG}"
+
 ATTRACTIONS_OF_INTEREST = ["MaxHp", "Atk", "Def", "Str", "Agi", "Wisd", "Will"]
 
 # rmxlinux 新版把 attrType 从字符串改成了整数枚举(AttributeMetaTable.iconName 反查 + 数值交叉验证)
@@ -120,8 +136,14 @@ def load_table(name: str, force: bool = False) -> dict:
 
 
 def load_tables(names: list[str], force: bool = False) -> dict:
-    """批量加载原始表,按表名索引。"""
-    return {name: load_table(name, force=force) for name in names}
+    """批量加载原始表,按表名索引。
+
+    表名 I18nTextTable_CN 是默认语言表的占位,按 --lang 解析到实际表名;
+    其余语言表(如 items 目录 slug 用的 EN)按显式表名加载。
+    """
+    resolved = list(dict.fromkeys(
+        i18n_table() if n == "I18nTextTable_CN" else n for n in names))
+    return {name: load_table(name, force=force) for name in resolved}
 
 
 def dump(name: str, payload):

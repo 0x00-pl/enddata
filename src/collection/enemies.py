@@ -24,7 +24,7 @@ import subprocess
 import time
 
 from tools.datasource import PROJECT_ROOT, git_env, info, repo_dir
-from tools.tables import I18n, attr_map, dump_dir, load_tables
+from tools.tables import I18n, attr_map, dump_dir, i18n_table, load_tables
 
 PRODUCT = "enemies"
 
@@ -160,7 +160,7 @@ def write(payload: list[dict]) -> None:
 def main(force: bool = False) -> None:
     raw = load_tables(REQUIRED_TABLES, force=force)
     threats = load_wiki_threats()
-    payload = build(raw, I18n(raw["I18nTextTable_CN"]), threats)
+    payload = build(raw, I18n(raw[i18n_table()]), threats)
     write(payload)
     n_cn = sum(1 for x in payload if x["cnName"])
     n_icon = sum(1 for x in payload if x["icon"])
