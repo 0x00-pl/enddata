@@ -1,11 +1,12 @@
 """采集+初步处理(多数据源综合):物品数据集 → data/items/ 目录。
 
-目录按物品类型的 EN slug 分层(如 currency、engraved_medal),中文名
-typeName 保留在条目里;index.json 为按类型分组的 id 清单(纯清单,无内容)。
+目录按物品类型的 EN slug 分层(如 currency、engraved_medal),条目 typeName
+跟随默认语言(--lang);index.json 为按类型分组的 id 清单(纯清单,无内容)。
 
 数据来源与贡献:
     - rmxlinux/EndfieldData@TableCfg(本地 git):身份、类型、稀有度、描述、图标
-      (ItemTable × ItemTypeTable × I18nTextTable_CN/EN,typeName 用 CN,typeSlug 用 EN)
+      (ItemTable × ItemTypeTable × I18nTextTable_CN/EN,typeName 用默认语言,
+      typeSlug 用 EN)
     - rmxlinux@TableCfg 配方关联统计(直读原始表,不经 recipes 数据集):
       FactoryManualCraftTable / FactoryMachineCraftTable / SpaceshipManufactureFormulaTable
       → usedInRecipes(作原料)/ producedBy(作产物),按站点 manual/machine/spaceship 计数
@@ -14,9 +15,7 @@ typeName 保留在条目里;index.json 为按类型分组的 id 清单(纯清单
 
 from __future__ import annotations
 
-import re
-
-from tools.tables import I18n, dump_dir, i18n_table, load_tables, load_vfs_config, vfs_url
+from tools.tables import I18n, dump_dir, i18n_table, load_tables, load_vfs_config, slugify, vfs_url
 
 PRODUCT = "items"
 
@@ -27,14 +26,6 @@ REQUIRED_TABLES = [
 ]
 
 STATIONS = ("manual", "machine", "spaceship")
-
-_SLUG_RE = re.compile(r"[^a-z0-9]+")
-
-
-def _slug(text: str | None, fallback: str) -> str:
-    """EN 名称 → 目录 slug(小写,非字母数字归并为下划线);空名回退 fallback。"""
-    s = _SLUG_RE.sub("_", (text or "").lower()).strip("_")
-    return s or fallback
 
 
 def _side_item_ids(entries: list[dict]) -> set[str]:
@@ -95,7 +86,7 @@ def build(raw: dict, t: I18n) -> list[dict]:
     type_names = {v.get("itemType"): t(v.get("name")) for v in raw["ItemTypeTable"].values()}
     # EN 名称仅用于目录 slug(目录名对文件系统/URL 友好),不替代中文 typeName
     t_en = I18n(raw["I18nTextTable_EN"])
-    type_slugs = {v.get("itemType"): _slug(t_en(v.get("name")), f"type_{v.get('itemType')}")
+    type_slugs = {v.get("itemType"): slugify(t_en(v.get("name")), f"type_{v.get('itemType')}")
                   for v in raw["ItemTypeTable"].values()}
     used, produced = collect_recipe_stats(raw)
     # 获取途径:obtainWayIds → SystemJumpTable desc(游戏内"获取途径"文案即取此处)

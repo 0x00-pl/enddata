@@ -225,7 +225,7 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             lv_max = attrs or lv_max
         _prof_name, _prof_icon = professions.get(c.get("profession"), (None, None))
 
-        # Wiki 关联:名称精确 join;管理员按 charId 后缀(m/f)特判
+        # Wiki 关联:显示名精确 join;管理员按 charId 后缀(m/f)特判
         c_name = t(c.get("name")) or cid
         w = wiki_ops.get(c_name)
         if cid.endswith("endminm"):

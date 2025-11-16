@@ -10,6 +10,16 @@ from tools.datasource import PROJECT_ROOT, fetch_gh_file, info, load_json, read_
 DATA_DIR = PROJECT_ROOT / "data"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 
+import re
+
+_SLUG_RE = re.compile(r"[^a-z0-9]+")
+
+
+def slugify(text: str | None, fallback: str) -> str:
+    """名称 → 目录 slug(小写,非字母数字归并为下划线);空名回退 fallback。"""
+    s = _SLUG_RE.sub("_", (text or "").lower()).strip("_")
+    return s or fallback
+
 # 默认翻译语言(表名 I18nTextTable_<LANG>),由入口脚本 --lang 修改;CN 为项目基准
 DEFAULT_LANG = "CN"
 
@@ -139,7 +149,7 @@ def load_tables(names: list[str], force: bool = False) -> dict:
     """批量加载原始表,按表名索引。
 
     表名 I18nTextTable_CN 是默认语言表的占位,按 --lang 解析到实际表名;
-    其余语言表(如 items 目录 slug 用的 EN)按显式表名加载。
+    其余语言表(如 items/enemies 目录 slug 用的 EN)按显式表名加载。
     """
     resolved = list(dict.fromkeys(
         i18n_table() if n == "I18nTextTable_CN" else n for n in names))

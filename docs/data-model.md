@@ -101,8 +101,8 @@ reports/build-report.md               ← 人类可读构建报告
 反查后转小写下划线,如 `currency`/`engraved_medal`,共 77 个;`typeSlug` 字段与
 目录同名)。`index.json` 只是按 typeSlug 分组的 id 清单,内容不做重复。
 条目字段:`{id, name, type, typeSlug, typeName, rarity, showingType, desc, icon,
-iconUrl, obtainWays, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable_CN`
-反查的中文名;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版
+iconUrl, obtainWays, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
+按默认翻译语言(--lang)反查;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版
 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 - `obtainWays`:`ItemTable.obtainWayIds` → `SystemJumpTable` 的 `desc` 经 i18n 反查的获取途径文案数组(保序去重),无登记时为 null
 - `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 可替代组按"任选其一"逐组员计入;无关联时为 null
@@ -202,23 +202,27 @@ formula/enhancePity 详情);套装与强化规则为全局配置,整体在 `data
 (24/24 可解析,富文本已剥离,`{键:fmt}`/`{1-键:fmt}` 占位符按 blackboard 回填)。
 
 ### enemies/ — 敌人(战斗)
-目录化输出:`index.json` 为轻量列表(不含描述/能力/击杀提示/出没区域,列表页用);
-每个敌人一个完整文件 `data/enemies/<enemyId>.json`:
+目录化输出:每个敌人一个完整文件 `data/enemies/<typeSlug>/<enemyId>.json`——typeSlug
+为分类枚举的 EN slug(`DisplayEnemyTypeTable` 经 `I18nTextTable_EN` 反查:
+common/elite/boss/advanced/alpha,缺展示信息的入 `unknown`,共 6 个;typeSlug 字段
+与目录同名);`index.json` 只是按类型分组的 id 清单。条目 `name`/`typeName` 跟随
+默认翻译语言(--lang),`cnName` 字段已取消:
 ```json
 {
-  "id": "eny_0007_mimicw", "templateId": "eny_0007_mimicw", "name": "eny_0007_mimicw",
+  "id": "eny_0007_mimicw", "templateId": "eny_0007_mimicw", "typeSlug": "advanced",
+  "name": "潜地虬兽", "typeName": "进阶敌人",
   "dangerous": false, "superArmor": 20, "maxResilience": 65,
   "resists": { "cryst": 0.0, "fire": 0.0, "natural": 0.3, "physical": 0.0, "pulse": 0.0 },
   "lvMax": { "MaxHp": 552167, "Atk": 9877, "Def": 1200 }
 }
 ```
 > **enemies**(381 条,`data/enemies/`):EnemyTable 全量敌人,经 `templateId` 关联
-> EnemyTemplateDisplayInfoTable 获得中文名/昵称/档案描述(覆盖率 374/381)、`displayType`
-> 分类(普通/精英/领袖/进阶/头目)、出没区域(DistributionInfoTable)与特殊能力
-> (EnemyAbilityDescTable);经中文名精确 join 森空岛 Wiki「威胁」分区(56/56 命中,
-> 276/381 覆盖)补充条目图标与 Wiki itemId。
+> EnemyTemplateDisplayInfoTable 获得显示名(默认语言)/昵称/档案描述(覆盖率 374/381)、
+> `displayType` 分类(普通/精英/领袖/进阶/头目)、出没区域(DistributionInfoTable)与特殊能力
+> (EnemyAbilityDescTable);经当前语言显示名精确 join 森空岛 Wiki「威胁」分区
+> (CN 构建 56/56 命中,276/381 覆盖;其他语言 Wiki 包无对应译名,相关字段为空)。
 
-注意:`name` 当前以 templateId 兜底(解包表中显示名哈希为 0,见 docs/sources.md 缺口 2);
+注意:显示名缺失时以 templateId 兜底(解包表中显示名哈希为 0,见 docs/sources.md 缺口 2);
 新版 `resists` 为具名抗性(physical/fire/pulse/cryst/natural,值为**减伤比例**,0=无抗性),
 旧镜像的 `*ResistScalar`(受伤倍率)已在构建时统一换算为减伤比例。
 

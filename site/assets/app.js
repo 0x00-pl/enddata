@@ -15,13 +15,14 @@ const state = {
 const FORMATTER = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 
 async function loadData() {
-  const folders = ["characters", "weapons", "equips", "enemies"];
+  const folders = ["characters", "weapons", "equips"];
   const results = await Promise.allSettled([
     (await fetch("/data/meta.json")).json(),
     ...folders.map((n) => fetch(`/data/${n}/index.json`).then((r) => r.json())),
     (await fetch("/data/equips/_global.json")).json(),
     (await fetch("/data/recipes/index.json")).json(),
     (await fetch("/data/items/index.json")).json(),
+    (await fetch("/data/enemies/index.json")).json(),
   ]);
   const put = (i, key) => {
     if (results[i].status === "fulfilled") state.data[key] = results[i].value;
@@ -31,10 +32,13 @@ async function loadData() {
   put(folders.length + 1, "equipsGlobal");
   put(folders.length + 2, "recipeIds"); // 配方清单:按站点分组的 id 列表
   put(folders.length + 3, "itemIds");   // 物品清单:按类型 slug 分组的 id 列表
-  // id → 子目录 映射,供详情浮层定位物品子文件
-  if (state.data.itemIds) {
-    state.itemSlug = Object.fromEntries(Object.entries(state.data.itemIds)
-      .flatMap(([slug, ids]) => (ids ?? []).map((id) => [id, slug])));
+  put(folders.length + 4, "enemyIds");  // 敌人清单:按类型 slug 分组的 id 列表
+  // id → 子目录 映射,供详情浮层定位清单式数据集的子文件
+  const manifests = { items: state.data.itemIds, enemies: state.data.enemyIds };
+  state.slugMap = {};
+  for (const [product, manifest] of Object.entries(manifests)) {
+    state.slugMap[product] = Object.fromEntries(
+      Object.entries(manifest ?? {}).flatMap(([slug, ids]) => (ids ?? []).map((id) => [id, slug])));
   }
 }
 
@@ -204,6 +208,9 @@ const loadRecipeDetails = () =>
 const loadItemDetails = () =>
   bulkLoadDetails(state.data.itemIds, (slug, id) => `/data/items/${slug}/${id}.json`, "items");
 
+const loadEnemyDetails = () =>
+  bulkLoadDetails(state.data.enemyIds, (slug, id) => `/data/enemies/${slug}/${id}.json`, "enemies");
+
 function renderRecipes() {
   if (!state.data.recipes) {
     loadRecipeDetails();
@@ -279,18 +286,22 @@ function renderEquips() {
 }
 
 function renderEnemies() {
+  if (!state.data.enemies) {
+    loadEnemyDetails();
+    return `<div class="empty-state">正在按 data/enemies/index.json 清单加载敌人…</div>`;
+  }
   const q = state.search.enemies ?? "";
-  const list = (state.data.enemies ?? []).filter(
-    (e) => match(e.cnName ?? e.name, q) || match(e.nickname, q) || match(e.id, q)
+  const list = state.data.enemies.filter(
+    (e) => match(e.name, q) || match(e.nickname, q) || match(e.id, q)
   );
   return `
     ${toolbar("enemies", "搜索敌人名 / ID…")}
-    <p class="note">显示名来自解包 EnemyTemplateDisplayInfoTable(374/381,缺失以 ID 兜底),
-      图标来自森空岛 Wiki「威胁」分区;点击行查看档案(描述/特殊能力/出没区域)。</p>
+    <p class="note">显示名来自解包 EnemyTemplateDisplayInfoTable(默认语言,374/381,缺失以 ID 兜底),
+      图标来自森空岛 Wiki「威胁」分区;data/enemies/ 按类型(EN slug)分子目录存放。</p>
     <table><thead><tr><th>敌人</th><th>类型</th><th>威胁</th><th>初始霸体</th><th>韧性</th><th>满级生命</th><th>满级攻击</th><th>抗性</th></tr></thead><tbody>
     ${list.slice(0, 400).map((e) => {
-      const nm = e.cnName || e.nickname || e.name || e.id;
-      return `<tr class="clickable" data-detail="enemies" data-id="${esc(e.id)}">
+      const nm = e.name || e.nickname || e.id;
+      return `<tr class="clickable" data-detail="enemies" data-sub="${esc(e.typeSlug ?? "")}" data-id="${esc(e.id)}">
       <td>${e.icon ? `<img class="icon-sm" src="${esc(e.icon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(nm)} <span class="dim">${esc(e.id)}</span></td>
       <td>${esc(e.typeName ?? "—")}</td>
       <td>${e.dangerous ? '<span class="rarity r6">精英</span>' : "—"}</td>
@@ -445,7 +456,7 @@ function detailEquips(d) {
 
 function detailEnemies(d) {
   return `
-    <h3>${d.icon ? `<img class="avatar" src="${esc(d.icon)}" alt="" onerror="this.remove()">` : ""}${esc(d.cnName ?? d.nickname ?? d.name ?? d.id)}
+    <h3>${d.icon ? `<img class="avatar" src="${esc(d.icon)}" alt="" onerror="this.remove()">` : ""}${esc(d.name ?? d.nickname ?? d.id)}
       ${d.dangerous ? '<span class="rarity r6">精英</span>' : ""}</h3>
     <div class="sub">${[d.nickname, d.typeName, d.id].filter(Boolean).map((x) => esc(x)).join(" · ")}</div>
     ${d.desc ? `<p class="desc">${esc(d.desc)}</p>` : ""}
@@ -486,8 +497,8 @@ function closeDetail() {
 }
 
 async function openDetail(product, id, sub = "") {
-  // 物品子目录按类型 slug 分层:未显式给出时经 id→slug 映射解析
-  if (product === "items" && !sub) sub = (state.itemSlug ?? {})[id] ?? "";
+  // 清单式数据集:未显式给出子目录时经 id→slug 映射解析
+  if (!sub) sub = (state.slugMap?.[product] ?? {})[id] ?? "";
   const box = ensureModal();
   box.innerHTML = `<div class="modal"><button class="modal-close" title="关闭 (Esc)">✕</button>
     <div class="modal-body"><div class="empty-state">加载中…</div></div></div>`;

@@ -1,17 +1,24 @@
 """采集+初步处理(多数据源综合):敌人数据集 → data/enemies/ 目录。
 
+目录按敌人类型 EN slug 分层(DisplayEnemyTypeTable:common/elite/boss/
+advanced/alpha,缺展示信息的入 unknown;typeSlug 字段与目录同名),条目
+typeName/name 跟随默认语言(--lang);index.json 为按类型分组的 id 清单
+(纯清单,无内容)。
+
 数据来源与贡献:
     - rmxlinux@TableCfg(本地 git):
         EnemyTable × EnemyDisplayInfoTable × EnemyAttributeTemplateTable →
           精英标记、初始霸体、韧性、五系抗性(统一为减伤比例)、满级生命/攻击/防御
         EnemyTemplateDisplayInfoTable(按 templateId 关联,374/381 命中)→
-          中文名/昵称/档案描述(哈希可 I18n 反查;EnemyDisplayInfoTable 的哈希全为 0)、
+          显示名/昵称/档案描述(哈希可 I18n 反查;EnemyDisplayInfoTable 的哈希全为 0)、
           displayType 分类、出没区域 distributionIds、特殊能力 abilityDescIds
-        DisplayEnemyTypeTable → 分类枚举(0 普通/1 精英/2 领袖/3 进阶/4 头目)
+        DisplayEnemyTypeTable → 分类枚举(0 普通/1 精英/2 领袖/3 进阶/4 头目;
+          EN 名称经 I18nTextTable_EN 反查作目录 slug)
         DistributionInfoTable → distributionIds 反查出没区域名
         EnemyAbilityDescTable / EnemyRelatedDeathTips → 能力与击杀提示文本
     - AndreaFrederica/jei-web(本地 git,森空岛 Wiki「威胁」分区):条目图标与
-      Wiki itemId。join 键为「I18n 反查后的中文名」精确匹配(56/56 命中,无需规范化)
+      Wiki itemId。join 键为当前语言的显示名(CN 构建 56/56 命中;其他语言 Wiki 包
+      无对应译名,图标/Wiki 字段留空)
 注:EnemyTagTable(5 个枚举)与敌人无可用关联键 —— EnemyTemplateDisplayInfoTable.tags
     全部为空数组,其余表无 tag 引用,故不产出标签字段。
 """
@@ -24,7 +31,7 @@ import subprocess
 import time
 
 from tools.datasource import PROJECT_ROOT, git_env, info, repo_dir
-from tools.tables import I18n, attr_map, dump_dir, i18n_table, load_tables
+from tools.tables import I18n, attr_map, dump_dir, i18n_table, load_tables, slugify
 
 PRODUCT = "enemies"
 
@@ -32,6 +39,7 @@ REQUIRED_TABLES = [
     "EnemyTable", "EnemyDisplayInfoTable", "EnemyAttributeTemplateTable", "I18nTextTable_CN",
     "EnemyTemplateDisplayInfoTable", "DisplayEnemyTypeTable",
     "EnemyAbilityDescTable", "EnemyRelatedDeathTips", "DistributionInfoTable",
+    "I18nTextTable_EN",
 ]
 
 WIKI_REPO = "AndreaFrederica/jei-web"
@@ -90,6 +98,10 @@ def build(raw: dict, t: I18n, wiki_threats: dict[str, dict] | None = None) -> li
     dist_tbl = raw["DistributionInfoTable"]
     tips_tbl = raw["EnemyRelatedDeathTips"]
     type_names = {int(k): t(v.get("name")) for k, v in raw["DisplayEnemyTypeTable"].items()}
+    # EN 名称仅用于目录 slug,条目内 typeName/name 跟随默认语言;缺展示信息的入 unknown
+    t_en = I18n(raw["I18nTextTable_EN"])
+    type_slugs = {int(k): slugify(t_en(v.get("name")), f"type_{k}")
+                  for k, v in raw["DisplayEnemyTypeTable"].items()}
     threats = load_wiki_threats() if wiki_threats is None else wiki_threats
 
     enemies = []
@@ -108,9 +120,9 @@ def build(raw: dict, t: I18n, wiki_threats: dict[str, dict] | None = None) -> li
             elif k.endswith("ResistScalar") and isinstance(v, (int, float)) and v != 1:
                 resists[k.replace("DmgResistScalar", "")] = 1 - v
 
-        # 模板级展示信息:中文名/昵称/档案描述/分类/出没区域/特殊能力
+        # 模板级展示信息:显示名(默认语言)/昵称/档案描述/分类/出没区域/特殊能力
         td = tpl_display.get(template_id, {})
-        cn_name = t(td.get("name"))
+        join_name = t(td.get("name"))
         abilities: list[str] = []
         for aid in (td.get("abilityDescIds") or []) + (d.get("abilityDescIds") or []):
             desc = t((ability_tbl.get(aid) or {}).get("description"))
@@ -125,17 +137,17 @@ def build(raw: dict, t: I18n, wiki_threats: dict[str, dict] | None = None) -> li
                       (t(x) for x in (tips_tbl.get(eid, {}).get("tipContents") or []))
                       if tip]
 
-        # Wiki「威胁」分区:中文名精确 join(实测 56/56 命中)补图标与条目 ID
-        th = threats.get(cn_name) if cn_name else None
+        # Wiki「威胁」分区:显示名精确 join(CN 构建 56/56 命中)补图标与条目 ID
+        th = threats.get(join_name) if join_name else None
 
         enemies.append({
             "id": eid,
             "templateId": template_id,
-            # 解包 EnemyDisplayInfoTable 的显示名哈希均为 0,name 暂以 templateId 兜底
-            "name": t(d.get("name")) or t(d.get("nickname")) or template_id,
-            "cnName": cn_name,
+            # 显示名:模板展示名(默认语言)优先;解包 EnemyDisplayInfoTable 的哈希均为 0
+            "name": t(td.get("name")) or t(d.get("name")) or t(d.get("nickname")) or template_id,
             "nickname": t(td.get("nickname")),
             "typeName": type_names.get(td.get("displayType")),
+            "typeSlug": type_slugs.get(td.get("displayType")) or "unknown",
             "icon": (th or {}).get("icon"),
             "wikiItemId": (th or {}).get("itemId"),
             "desc": re.sub(r"<[^>]+>", "", t(td.get("description")) or "") or None,
@@ -153,8 +165,19 @@ def build(raw: dict, t: I18n, wiki_threats: dict[str, dict] | None = None) -> li
 
 
 def write(payload: list[dict]) -> None:
-    """每个敌人一个独立文件 + 轻量索引 index.json(列表页用,不含描述/能力/出没区域)。"""
-    dump_dir(PRODUCT, payload, exclude_index=("desc", "abilities", "deathTips", "distributions"))
+    """每个敌人一个独立文件,按类型 EN slug 子目录存放(typeSlug 字段 = 子目录名)。
+
+    index.json 只是清单:按 typeSlug 分组的敌人 id 列表;描述/能力/出没区域等
+    一切内容都在子文件里,不在索引中重复。
+    """
+    def finalize(_rows: list, entries: list[dict]) -> dict:
+        grouped: dict[str, list] = {}
+        for e in entries:
+            grouped.setdefault(e["typeSlug"], []).append(e["id"])
+        return dict(sorted(grouped.items()))
+
+    dump_dir(PRODUCT, payload, subdir=lambda e: e["typeSlug"],
+             index_map=lambda e: e["id"], index_finalize=finalize)
 
 
 def main(force: bool = False) -> None:
@@ -162,9 +185,9 @@ def main(force: bool = False) -> None:
     threats = load_wiki_threats()
     payload = build(raw, I18n(raw[i18n_table()]), threats)
     write(payload)
-    n_cn = sum(1 for x in payload if x["cnName"])
+    n_name = sum(1 for x in payload if x["name"] and x["name"] != x["id"])
     n_icon = sum(1 for x in payload if x["icon"])
-    info(f"  中文名 {n_cn}/{len(payload)} 条,Wiki 威胁 join {n_icon}/{len(payload)} 条"
+    info(f"  显示名 {n_name}/{len(payload)} 条,Wiki 威胁 join {n_icon}/{len(payload)} 条"
          f"(威胁分区 {len(threats)} 条)")
 
 
