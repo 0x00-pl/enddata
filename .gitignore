@@ -5,6 +5,9 @@ sources/
 data/*
 !data/versions.json
 
+# 站点构建产物(node site/build.mjs)
+dist/
+
 # Python
 __pycache__/
 *.pyc

@@ -1,7 +1,7 @@
 {
   "$comment": "终末地数据源注册表。branch 为 null 时运行时通过 GitHub API 解析默认分支。",
   "git": {
-    "$comment": "git 形态数据源统一克隆到 sources//,抓取脚本优先读本地;partial=true 用 blob:none 部分克隆(blob 按需懒取,取过即本地缓存)",
+    "$comment": "git 形态数据源统一克隆到 sources//,抓取脚本优先读本地;partial=true 用 blob:none 部分克隆(blob 按需懒取,取过即本地缓存);sparse=[目录…] 在 partial 基础上限定物化范围,checkout/reset 只懒取目录内 blob",
     "repos_dir": "sources",
     "proxy": "http://10.1.20.20:7890",
     "clone": [
@@ -10,6 +10,23 @@
         "branch": "main",
         "partial": false,
         "role": "tablecfg 主源(1.5GB 完整克隆,含 TableCfg 725 表+i18n+Lua+关卡)"
+      },
+      {
+        "repo": "555me/EndfieldAssets",
+        "branch": "main",
+        "partial": true,
+        "sparse": [
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/itemicon/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/charicon/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/charroundicon/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/charprofessionicon/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/attributeicon/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/elementicon/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/talenttreeicon/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/inventory/",
+          "assets/beyond/dynamicassets/gameplay/ui/sprites/factory/"
+        ],
+        "role": "图标资源源(vfs 资源 git 镜像,6.4GB;sparse 只取 9 个图标目录(工作区实测 74MB,含 .git 约 146MB),禁全量克隆)"
       },
       {
         "repo": "AndreaFrederica/jei-web",
@@ -103,7 +120,7 @@
       "i18n_dir": "TableCfg"
     },
     "fffdan_vfs": {
-      "desc": "宏山档案局(end.fffdan.com)与天师工具箱(end-tools.fffdan.com)共用的资源镜像后端:按路径直取游戏资源文件(图标为 WebP),四主机可故障转移",
+      "desc": "宏山档案局(end.fffdan.com)与天师工具箱(end-tools.fffdan.com)共用的资源镜像后端:按路径直取游戏资源文件(图标为 WebP),四主机可故障转移。采集管线已不再生成其直链(数据集只存裸 id,站点构建期经 icon_git 本地化),paths 路径模板保留作 vfs 资源定位参考",
       "site": "https://end.fffdan.com",
       "tools_site": "https://end-tools.fffdan.com",
       "tools_note": "天师工具箱:Blazor WASM(.NET 单文件打包 Database/Gameplay/Web 三模块),数据浏览/战斗模拟器/vfs 资源浏览器;无自有数据 API,其 TableCfg 与图标均从本源 vfs 加载(二进制字符串证实)",
@@ -140,6 +157,27 @@
         "talent_tree_icon",
         "inventory_icon"
       ]
+    },
+    "icon_git": {
+      "desc": "游戏 UI 图标的 git 离线源:555me/EndfieldAssets 与 fffdan vfs 同源(同一套 assets/beyond 解包树),site 的 JS 构建(node web/build.mjs)按 maps 把数据集裸 id 落地为 dist 内本地图标并注入 URL",
+      "repo": "555me/EndfieldAssets",
+      "branch": "main",
+      "sprites_root": "assets/beyond/dynamicassets/gameplay/ui/sprites",
+      "icons_out": "icons/sprites",
+      "url_prefix": "/icons/sprites",
+      "maps": {
+        "characters": [
+          { "url": "icon", "id": "icon", "dir": "charicon" },
+          { "url": "professionIcon", "id": "professionIcon", "dir": "charprofessionicon" }
+        ],
+        "items": [
+          { "url": "iconUrl", "id": "icon", "dir": "itemicon" }
+        ],
+        "equips": [
+          { "url": "icon", "id": "icon", "dir": "itemicon" }
+        ]
+      },
+      "note": "覆盖率实测(2026-09-16,构建 9764758):数据集 1431 个 itemicon id 命中 1400,charicon 32/33;缺的 32 个在 fffdan vfs 同样 404(游戏本无此资源),站点构建时注入 /icons/placeholder.svg 占位并在 dist/data/_icons.json 的 missingIds 标注。仓库按构建号跟版,提交信息即构建号。敌人图标与 wiki 图(bbs.hycdn.cn)无 git 源,保持在线直链。"
     },
     "yituliu_cos": {
       "desc": "终末地一图流的 COS 解包数据镜像:TableCfg 可 HTTP 直取(jsdelivr 失效时的备源),无需 git",

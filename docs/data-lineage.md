@@ -1,6 +1,6 @@
 # 数据来源关系(血缘)与统计
 
-更新:2026-09-15。本文回答三个问题:每类数据从哪来、优先走什么渠道、本地化程度如何。
+更新:2026-09-16。本文回答三个问题:每类数据从哪来、优先走什么渠道、本地化程度如何。
 
 ## 一、追溯规则(渠道解析策略)
 
@@ -30,6 +30,7 @@ graph TD
 
     subgraph GIT1[git:解包数据仓库]
         RMX[rmxlinux/EndfieldData ★主源<br>TableCfg 725表+i18n+Lua+关卡]
+        ICONS[555me/EndfieldAssets ★图标源<br>assets/beyond 解包树 6.4GB<br>sparse 只物化 9 个图标目录(工作区 74MB)]
         XIABEI[XiaBei-cy/EndfieldData 等 5 个<br>历史对照镜像/测试服快照<br>⚠️ 2026-09-15 审查退役]
     end
 
@@ -50,21 +51,27 @@ graph TD
 
     RMX -->|"cat-file 本地直读|懒取"| ENDDATA
     YITULIU_COS -.->|"备源(尺寸与rmxlinux有差异)"| ENDDATA
-    FFFDAN_VFS -->|"icon/iconUrl 直链"| ENDDATA
+    FFFDAN_VFS -.->|"路径模式参考 + 版本监控"| ENDDATA
+    ICONS -->|"图标裸 id → 构建期本地化"| SITEBUILD
     CALC -.->|"craftingTime/电力参考"| ENDDATA
     SKPORT -.->|"玩家数据(规划:用户自选导入)"| ENDDATA
     BHAZ -.->|"公告/卡池(规划)"| ENDDATA
 
     subgraph ENDDATA[EndData 本项目]
-        FETCH[fetch.py] --> BUILD[collection/build_all.py] --> SITE[data/ 数据集目录 + reports/build-report.md]
+        FETCH[fetch.py] --> BUILD[collection/build_all.py] --> SITE[data/ 数据集目录<br>只存图标裸 id] 
+        SITE --> SITEBUILD[web/build.mjs<br>复制图标 + 注入本地 URL] --> DIST[dist/ 零外链站点<br>http.server 服务目录]
     end
 
     GAME -.->|"同源旁证:两站消费同一份解包"| FFFDAN_SPA[宏山档案局/天师工具箱<br>消费同一 vfs 后端]
 ```
 
 **防重复采集说明**:宏山档案局与天师工具箱消费的就是同一份解包 TableCfg(其二进制字符串
-与 rmxlinux 仓库同构),因此本项目**只从 git 源取数值**;fffdan vfs 仅用于取
-**图标资源**(数值表不含贴图,此项无 git 形态,属"无 git 才用网页"的合法情形)。
+与 rmxlinux 仓库同构),因此本项目**只从 git 源取数值**。图标资源(数值表不含贴图)同样
+优先 git 形态:555me/EndfieldAssets 与 fffdan vfs 同源同构(同一棵 assets/beyond 解包树),
+已作为 ★ 图标源接入(partial+sparse 只物化图标目录,工作区 74MB),由站点构建
+(`node web/build.mjs`)落地为本地文件并注入 URL —— dist/ 站点零外链;
+fffdan vfs 降为备源与路径模式参考。敌人图片与 wiki 图(bbs.hycdn.cn,约 500 张)
+暂无 git 形态,属"无 git 才用网页"的合法情形,保持在线直链。
 一图流 COS 同理:其数值表与 rmxlinux 同源同构,仅作 HTTP 备源,不作主源。
 
 ## 二·五、血统确认(2026-09-15 实测)
@@ -117,7 +124,7 @@ graph TD
 |---|---|
 | **数值表 TableCfg** | **P0 rmxlinux(git 本地)** → P1 一图流 COS(HTTP,开服版仅应急)→ P2 luosky/XiaBei(历史) |
 | **中文 i18n** | **P0 rmxlinux**(147,603 条,唯一含最新文本) → P2 XiaBei 独立 i18n |
-| **图标资源**(头像/职业/物品) | **P0 fffdan vfs**(无 git 形态,唯一渠道);P1 jei-web 森空岛物品包(git,备用) |
+| **图标资源**(头像/职业/物品) | **P0 555me/EndfieldAssets**(git,partial+sparse 工作区 74MB,构建期本地化)→ P1 fffdan vfs(HTTP,同构备源)→ P2 jei-web 森空岛物品包(git) |
 | **生产配方结构** | **P0 rmxlinux FactoryCraftTable 家族**(427 条) |
 | **配方耗时/电力** | **P0 endfield-calc**(git,最活跃,craftingTime 精校)→ P1 rmxlinux totalProgress(换算待实测) |
 | **技能数值(DPS)** | **P0 rmxlinux SkillPatchTable**(509 技能,待加工);参考 endfield-calc 模拟器实现 |
@@ -133,7 +140,7 @@ graph TD
 |---|---|---|---|---|
 | **数值表 TableCfg**(战斗+生产) | rmxlinux/EndfieldData@main | 一图流 COS(HTTP);XiaBei/luosky 历史对照 | 本地 git 直读 24/24 核心表 | ✅ 在用 |
 | **中文文本 i18n** | 同上(TableCfg/I18nTextTable_CN,147,603 条) | — | 本地 git | ✅ 在用 |
-| **干员/物品/职业图标** | 无 git 形态 | — | fffdan vfs(HTTP,WebP) | ✅ 在用 |
+| **干员/物品/职业图标** | 555me/EndfieldAssets(git,sparse 只物化图标目录) | fffdan vfs(HTTP,同构) | 本地 git → `node web/build.mjs` 落地 dist/ 并注入 URL;敌人/wiki 图(bbs.hycdn.cn)暂为在线直链 | ✅ 在用(2026-09-16 起) |
 | **生产配方**(手工/工厂/飞船) | rmxlinux(427 条,同数值表) | endfield-calc 精校 320 条(craftingTime 秒数) | 本地 git | ✅ 在用 |
 | **配方制造耗时** | 无解包换算定论 | endfield-calc 手工数据(git) | 本地 git | ⏳ 待校准 |
 | **技能/Buff 数值** | rmxlinux SkillPatchTable(509 技能,已抓取) | — | 本地 git | ⏳ 已取未加工 |
@@ -143,34 +150,40 @@ graph TD
 | **公告/卡池资讯** | BiologyHazard/endfield-archive-library(git) | — | 本地 git | ⏳ 规划 |
 | **玩家个人数据**(练度/抽卡) | 无 git(Skport 官方 API) | skport-api-docs 仅为文档(git) | HTTP+签名 | ⏳ 规划(用户自选导入) |
 
-## 四、统计(2026-09-15)
+## 四、统计(2026-09-16)
 
-### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-15 两轮审查后
+### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-16 图标源接入后
 
 | 指标 | 值 |
 |---|---|
-| 仓库总数 | **4**(审查前 13,累计退役 9) |
-| 总体积 | **约 87 MB**(rmxlinux 1.5GB 经 partial 克隆仅占 18MB) |
+| 仓库总数 | **5**(审查前 13,累计退役 9) |
+| 总体积 | **约 233 MB**(rmxlinux 1.5GB 经 partial 克隆仅占 18MB;555me 6.4GB 经 sparse 工作区仅 74MB,含 .git 约 146MB) |
 | 主源核心表本地可直读 | **24/24(100%,零网络)** |
 | partial 懒取实测 | 首次 13s(经代理)→ 之后 0.02s(纯本地) |
 
 | 仓库 | 体积 | 角色 |
 |---|---|---|
 | JamboChen/endfield-calc | 69M | 产线精校数据(craftingTime/电力) |
+| 555me/EndfieldAssets | 146M | **图标源**(partial+sparse,6.4GB 仓库只物化 9 个图标目录,工作区 74MB) |
 | rmxlinux/EndfieldData | 18M | **主源**(partial,1.5GB 仓库按需懒取) |
 | AixLnyt/skport-api-docs | 0.24M | 官方 API 文档 |
 | AndreaFrederica/jei-web | 0.24M | 森空岛 Wiki 包(敌人中文名,规划) |
 
 ### 数据集产出(`data/`,构建于 rmxlinux@main 2026-09-08)
 
+图标一律只存裸 id,URL 由站点构建期注入(见上表「图标资源」行)。
+
 | 数据集 | 条数 |
 |---|---|
-| 干员(含 1 级/满级面板+图标直链) | 33 |
-| 物品(含图标直链) | 2829(2808 有图标链接) |
+| 干员(icon = `icon_{charId}`,professionIcon = iconId) | 33 |
+| 物品(icon = iconId) | 2829(2808 有图标 id) |
 | 生产配方 | 427 |
 | 武器 | 79 |
-| 装备(词条/套装) | 258 + 24 套装 |
-| 敌人(抗性/韧性/霸体) | 381 |
+| 装备(icon = iconId) | 258 + 24 套装 |
+| 敌人(icon 为 bbs.hycdn.cn 在线直链) | 381 |
+
+站点构建实测(dist/,2026-09-16):落地图标 **1438** 个(items 1400 + equips 252 + characters 38,
+按去重后合计 1438),缺失 32(游戏本无此资源,vfs 同样 404);dist/ 体积约 48MB。
 
 ### 渠道健康度
 
@@ -184,9 +197,10 @@ graph TD
 
 ## 五、维护约定
 
-1. 新增数据源时先找 git 项目;确实无 git 的(如 fffdan vfs)才允许 HTTP,并在
-   `config/sources.json` 标注 `note` 说明原因。
+1. 新增数据源时先找 git 项目;确实无 git 的(如 fffdan vfs、bbs.hycdn.cn wiki 图)才允许
+   HTTP,并在 `config/sources.json` 标注 `note` 说明原因。
 2. 同一数据出现多个来源时,以「跟版最新 > 结构完整 > 可本地化」排序,其余降级为
    历史对照(参考现有主源/镜像分层)。
 3. 更新流程:`enddata collection clone`(更新 git 源)→ `enddata collection all`
-   (按需读表并产出全部数据集与报告)→ 提交 `reports/` 变更。
+   (按需读表并产出全部数据集与报告)→ 仓库根 `npm run build`(生成零外链 dist/)
+   → 提交 `reports/` 变更。采集重跑后 URL 字段还原为裸 id,必须重跑站点构建。

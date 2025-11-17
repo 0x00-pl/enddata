@@ -67,6 +67,7 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 - **版本端点**:`GET /version` → 游戏构建号(如 `initial_10024360-6_main_10024360-6`,镜像自官方版本信息;注意该站为粉丝项目,非官方),
   构建号基线由 collection 域命令自动写入 data/versions.json,`enddata version` 读取对比
 - **资源直取**:`GET /vfs/Bundle/file/assets/beyond/dynamicassets/gameplay/ui/sprites/<路径>`(WebP)。
+  下表路径与 git 图标源(`icon_git`)的 `sprites_root` 内子目录/文件名**一一对应**,可在两个渠道间无损切换。
 
 | 资源 | 路径模板 | 对应字段 | 验证 |
 |---|---|---|---|
@@ -78,11 +79,36 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 | 工厂建筑面板图 | `factory/buildingpanelicon/{icon}.png` | FactoryBuildingTable(精确字段待确认) | 路径来自工具箱代码,文件名未中 |
 | 元素/天赋树/背包图标 | `elementicon`、`talenttreeicon`、`inventory` | 待确认 | 同上 |
 
-  `collection/` 各产物模块据此为 characters/items 数据集生成 `icon`/`iconUrl`/`professionIcon` 直链,
-  前端懒加载渲染;完整路径模板见 `config/sources.json` 的 `fffdan_vfs.paths`
+  采集管线已不再生成 vfs 直链:数据集只存图标裸 id,站点构建(`node web/build.mjs`)按
+  `icon_git` 映射从 git 镜像本地化并注入 URL(见下节「游戏图标 git 离线源」)。路径模板保留于
+  `config/sources.json` 的 `fffdan_vfs.paths`,作 vfs 资源定位的程序化参考
   (以 `paths_verified`/`paths_unverified` 区分验证状态)。
   档案局自身的 `/endfield-update-diff/*` 版本差分接口当前 404(前端仍在调用,恢复后可提供逐表变更清单);
   两站拉取的原始表与我们一致(CharacterTable/SkillPatchTable/ItemTable…),可作数据旁证。
+
+### 游戏图标 git 离线源(已实测验证,已接入 ★)
+
+[555me/EndfieldAssets](https://github.com/555me/EndfieldAssets)(6.4GB)= 游戏 `assets/beyond`
+解包树的 git 转储,与 fffdan vfs **同一套目录结构**(`assets/beyond/dynamicassets/gameplay/ui/sprites/`
+下 125 个图标子目录,charicon/itemicon/attributeicon/factory/talenttreeicon 等全部在位)。
+按构建号跟版(提交信息即构建号,约 1~3 周一更;2026-09-16 实测 HEAD 为构建 9764758,2026-09-02,
+比 rmxlinux 表数据(2026-09-08)落后 6 天,图标资源与数值表版本天然接近)。
+
+- **接入方式**:`partial + sparse`(blob:none + sparse-checkout --no-cone)只物化 9 个图标目录
+  (itemicon 1740 / charicon 61 / charroundicon / charprofessionicon 26 / attributeicon /
+  elementicon / talenttreeicon / inventory / factory),工作区实测 74MB(factory 子目录即占 34MB;对比 6.4GB 全量,禁全量克隆);
+  由 `enddata collection clone` 统一维护,HEAD 自动入 data/versions.json
+- **消费方式**:数据集只存裸 id → `node web/build.mjs` 按映射复制引用到的图标到
+  `dist/icons/sprites/` 并注入 `/icons/sprites/...` 本地 URL(映射与覆盖率注记见
+  `config/sources.json` 的 `icon_git`;构建清单产出 `dist/data/_icons.json`)
+- **覆盖率实测(构建 9764758)**:items 数据集 1431 个 iconId 命中 1400、equips 252 全命中、
+  charicon 32/33;缺的 32 个(itemicon 31 + `icon_chr_9000_endmin`,多为周本奖励等新内容)在
+  fffdan vfs **同样 404** —— 游戏本无此资源,构建时注入 `/icons/placeholder.svg` 占位图
+  (不产生 404 请求),并在 `_icons.json` 的 `missingIds` 逐项标注
+- **备选(不采用)**:`eldritchtools/endfield-assets`(24MB,按英文显示名组织如
+  `Advanced_Cognitive_Carrier.png`,items 仅 170 张、干员 31 张,与 iconId 无法映射,仅作装饰素材);
+  `JamboChen/endfield-calc` 内置约 200 张生产物品图(EN slug 名);敌人图片与 wiki 图
+  (bbs.hycdn.cn,共约 500 张)无 git 源,保持在线直链,待后续寻找 git 静态资源后并入同一构建步骤
 
 已克隆核对(endfield-calc):其配方含 `craftingTime`(秒)字段,而我们的 TableCfg
 `FactoryMachineCraftTable` 对应字段是 `totalProgress=12000 / progressRound=2`,两者换算
@@ -145,8 +171,9 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
    从 jei-web「威胁」分区或 Skport wiki 目录补全。
 3. **技能/Buff 数值**:`SkillPatchTable`(新版 6.5MB)已抓取未加工,是战斗计算(DPS 模拟)的下一块拼图;
    注意新版技能数值可能同样使用整数枚举。
-4. ~~物品图标~~ 已解决:经宏山档案局 vfs 接口直取游戏贴图(见上节),
-   characters/items 数据集已带直链;配方产物图标与敌人图片待接。
+4. ~~物品图标~~ 已解决并升级为离线:git 图标源 555me/EndfieldAssets 已接入,
+   站点构建期本地化,dist/ 站点零外链(见「游戏图标 git 离线源」节);
+   敌人图片(bbs.hycdn.cn,无 git 源)与 32 个双方皆 404 的图标仍待补。
 5. **生产系统深度数据**:电力、物流带、流派加成表已可从 rmxlinux 抓取,尚未加工;
    机器配方的 `totalProgress/progressRound` 与实际秒数的换算待实测(endfield-calc 用手工维护的 craftingTime)。
 6. **战斗属性枚举**:新版 `attrType` 为整数(AttributeMetaTable 可反查图标名),
@@ -163,7 +190,9 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 - **数据源本地化**:git 形态的源统一克隆在 `sources/`(已 gitignore),由 `src/collection/fetch.py`
   维护(`enddata collection clone`)。rmxlinux/jei-web 已完整本地化(2026-09-16,proxychains 实测 11MB/s);
   今后新仓库默认 partial 克隆(`--filter=blob:none --no-checkout`)按需懒取即可。
-  ⚠️ partial 仓库更新后**不要** `reset --hard`(会触发全量 blob 懒取),用 `git update-ref` 移动分支引用。
+  ⚠️ 非 sparse 的 partial 仓库更新后**不要** `reset --hard`(会触发全量 blob 懒取),用 `git update-ref`
+  移动分支引用;配置了 `sparse` 的仓库(555me/EndfieldAssets)reset --hard 只物化 sparse 范围内的
+  blob,可安全使用(fetch 后直接 `reset --hard FETCH_HEAD`)。
 - **速度实测(2026-09-16)**:`proxychains4 -q git clone` + `GIT_CONFIG_GLOBAL=/dev/null`(绕过 insteadOf)
   为最优路径——jei-web 114MB/10s、rmxlinux 1.5GB 约 12 分钟完整克隆成功;远快于 git 原生
   `http.proxy`(170KB/s 且长传输易断流)。

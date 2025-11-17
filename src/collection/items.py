@@ -2,6 +2,7 @@
 
 目录按物品类型的 EN slug 分层(如 currency、engraved_medal),条目 typeName
 跟随默认语言(--lang);index.json 为按类型分组的 id 清单(纯清单,无内容)。
+图标只存 iconId 裸 id,站点 URL 由 JS 构建(node web/build.mjs)注入。
 
 数据来源与贡献:
     - rmxlinux/EndfieldData@TableCfg(本地 git):身份、类型、稀有度、描述、图标
@@ -15,7 +16,7 @@
 
 from __future__ import annotations
 
-from tools.tables import I18n, dump_dir, i18n_table, load_tables, load_vfs_config, slugify, vfs_url
+from tools.tables import I18n, dump_dir, i18n_table, load_tables, slugify
 
 PRODUCT = "items"
 
@@ -107,7 +108,6 @@ def build(raw: dict, t: I18n) -> list[dict]:
             "showingType": it.get("showingType"),
             "desc": t(it.get("desc")),
             "icon": it.get("iconId"),
-            "iconUrl": vfs_url("item_icon", iconId=it.get("iconId")),
             "obtainWays": obtain_ways or None,
             "usedInRecipes": _stat_view(used, iid),
             "producedBy": _stat_view(produced, iid),
@@ -133,7 +133,6 @@ def write(payload: list[dict]) -> None:
 
 
 def main(force: bool = False) -> None:
-    load_vfs_config()
     raw = load_tables(REQUIRED_TABLES, force=force)
     write(build(raw, I18n(raw[i18n_table()])))
 

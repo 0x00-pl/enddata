@@ -99,7 +99,11 @@ class I18n:
 
 
 def vfs_url(kind: str, **params) -> str | None:
-    """按 config/sources.json 的 fffdan_vfs 注册项拼资源 URL(宏山档案局资源镜像,WebP)。"""
+    """按 config/sources.json 的 fffdan_vfs 注册项拼资源 URL(宏山档案局资源镜像,WebP)。
+
+    采集管线已不再生成 vfs 直链(数据集只存裸 id,站点构建期经 icon_git 本地化),
+    本函数保留作 vfs 路径模式的程序化参考。
+    """
     path = vfs_url.patterns.get(kind)
     if vfs_url.base is None or not path:
         return None

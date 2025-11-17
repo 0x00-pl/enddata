@@ -6,8 +6,11 @@
     - partial=true 的仓库用 --filter=blob:none --no-checkout:
       元数据(目录树)本地全量,blob 按需懒取、取过即本地缓存,
       适合 rmxlinux(1.5GB)等大仓库与不稳定的代理网络
+    - sparse=[目录…] 的仓库在 partial 基础上用 sparse-checkout 限定物化范围,
+      checkout/reset 只懒取目录内 blob(适合超大资源仓库,如图标源 555me/EndfieldAssets 6.4GB)
     - 已存在的仓库执行 fetch + 更新引用到远端最新;
-      ⚠️ partial 仓库绝不能 reset --hard(会触发全量 blob 懒取),只移动引用
+      ⚠️ 非 sparse 的 partial 仓库绝不能 reset --hard(会触发全量 blob 懒取),只移动引用;
+      sparse 仓库 reset --hard 只物化 sparse 范围内的 blob,可安全使用
 
 由 `enddata collection clone` 调用;也可程序化使用:
     from collection.fetch import update_repos
@@ -44,6 +47,7 @@ def persist_proxy(dest) -> None:
 
 def clone_one(entry: dict) -> tuple[str, str]:
     repo, branch, partial = entry["repo"], entry.get("branch"), entry.get("partial", False)
+    sparse = entry.get("sparse") or []
     dest = repo_dir(repo)
     if dest.is_dir():
         return "exists", ""
@@ -53,16 +57,26 @@ def clone_one(entry: dict) -> tuple[str, str]:
     if branch:
         args += ["--branch", branch]
     args += [f"https://github.com/{repo}.git", str(dest)]
-    info(f"[clone] {repo}{' (partial)' if partial else ''}")
+    tag = " (partial+sparse)" if sparse else (" (partial)" if partial else "")
+    info(f"[clone] {repo}{tag}")
     code, out = run_git(args, timeout=1800)
     if code != 0:
         return "failed", out
     persist_proxy(dest)
+    if sparse:
+        # 限定物化范围后再 checkout:blob 懒取仅限 sparse 目录(需先 persist_proxy)
+        code, out = run_git(["sparse-checkout", "set", "--no-cone", *sparse], cwd=dest)
+        if code != 0:
+            return "failed", out
+        code, out = run_git(["reset", "--hard", "--quiet"], cwd=dest, timeout=1800)
+        if code != 0:
+            return "failed", out
     return "cloned", ""
 
 
 def update_one(entry: dict) -> tuple[str, str]:
     repo, branch = entry["repo"], entry.get("branch")
+    sparse = entry.get("sparse") or []
     dest = repo_dir(repo)
     if not branch:
         code, out = run_git(["symbolic-ref", "--short", "HEAD"], cwd=dest)
@@ -72,7 +86,16 @@ def update_one(entry: dict) -> tuple[str, str]:
     code, out = run_git(["fetch", "--depth", "1", "--force", "origin", branch], cwd=dest, timeout=1200)
     if code != 0:
         return "fetch-failed", out
-    if entry.get("partial", False):
+    if sparse:
+        # 重应用 sparse 模式(配置里的目录清单可能已变化)+ 物化到 FETCH_HEAD:
+        # blob 懒取仅限 sparse 目录(需先 persist_proxy)
+        code, out = run_git(["sparse-checkout", "set", "--no-cone", *sparse], cwd=dest)
+        if code != 0:
+            return "reset-failed", out
+        code, out = run_git(["reset", "--hard", "FETCH_HEAD", "--quiet"], cwd=dest, timeout=1800)
+        if code != 0:
+            return "reset-failed", out
+    elif entry.get("partial", False):
         # partial 仓库没有工作区:绝不能用 reset --hard(会触发全量 blob 懒取),
         # 只移动分支引用即可
         code, out = run_git(["update-ref", f"refs/heads/{branch}", "FETCH_HEAD"], cwd=dest)
@@ -94,11 +117,6 @@ def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("tables", nargs="*", help="要抓取的表名(不含 .json),缺省为全部产物依赖表")
     parser.add_argument("--force", action="store_true", help="忽略本地缓存强制重新抓取")
     parser.add_argument("--no-update", action="store_true", help="跳过数据源仓库更新(离线时使用)")
-
-
-def configure_clone_parser(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--no-update", action="store_true", help="只克隆缺失的,不更新已有仓库")
-    parser.add_argument("--only", nargs="*", help="只处理指定仓库(如 rmxlinux/EndfieldData)")
 
 
 def fetch_tables(names: list[str], force: bool = False) -> None:

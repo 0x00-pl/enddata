@@ -7,7 +7,8 @@
       (名称/描述经 i18n 反查、冷却、费用、blackboard 数值板)
     - AndreaFrederica/jei-web(本地 git,森空岛 Wiki 干员包):Wiki 条目 ID、
       站外图标、稀有度交叉验证(名称 join,管理员按 charId 后缀特判)
-    - fffdan vfs(HTTP 直链):头像/职业图标
+    - 游戏内图标路径(CharacterTable.charId / CharProfessionTable.iconId):
+      只存裸 id(icon / professionIcon),站点构建期由 icon_git 源本地化注入 URL
 """
 
 from __future__ import annotations
@@ -24,8 +25,6 @@ from tools.tables import (
     i18n_table,
     flat_attrs,
     load_tables,
-    load_vfs_config,
-    vfs_url,
 )
 from tools.datasource import repo_dir
 
@@ -335,8 +334,8 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             "enName": c.get("engName"),
             "profession": c.get("profession"),
             "professionName": _prof_name,
-            "professionIcon": vfs_url("profession_icon", iconId=_prof_icon),
-            "icon": vfs_url("char_icon", id=cid),
+            "professionIcon": _prof_icon,
+            "icon": f"icon_{cid}",
             "rarity": c.get("rarity"),
             "weaponType": c.get("weaponType"),
             "cv": c.get("cvName"),
@@ -367,7 +366,6 @@ def write(payload: list[dict]) -> None:
 
 
 def main(force: bool = False) -> None:
-    load_vfs_config()
     raw = load_tables(REQUIRED_TABLES, force=force)
     wiki_ops = load_wiki_operators()
     write(build(raw, I18n(raw[i18n_table()]), wiki_ops))

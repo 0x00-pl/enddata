@@ -18,7 +18,6 @@ from tools.tables import (
     dump,
     i18n_table,
     load_tables,
-    load_vfs_config,
 )
 from tools.datasource import PROJECT_ROOT, info, load_json
 
@@ -29,7 +28,6 @@ def run(force: bool = False) -> None:
     t0 = datetime.now(timezone.utc)
     versions.record_repo_heads()
     versions.refresh_game_build()
-    load_vfs_config()
 
     payloads: dict[str, object] = {}
     t = None
@@ -67,7 +65,7 @@ def _source_info() -> dict:
 
 def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None:
     items = payloads["items"]
-    icon_items = sum(1 for i in items if i.get("iconUrl"))
+    icon_items = sum(1 for i in items if i.get("icon"))
     c = meta["counts"]
     report = f"""# 构建报告
 
@@ -81,7 +79,7 @@ def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None
 | 数据集 | 条数 |
 |---|---|
 | 干员 characters | {c["characters"]} |
-| 物品 items(含图标链接 {icon_items} 条) | {c["items"]} |
+| 物品 items(含图标 id {icon_items} 条) | {c["items"]} |
 | 配方 recipes | {c["recipes"]} |
 | 武器 weapons | {c["weapons"]} |
 | 装备 equips / 套装 suits | {c["equips"]} / {c["suits"]} |
@@ -89,7 +87,8 @@ def _write_report(t0: datetime, meta: dict, payloads: dict, misses: int) -> None
 
 ## 产物位置
 
-- 数据集:`data/<产物>/` 目录(每条一个 `<id>.json` + 轻量索引 `index.json`,网页展示由 `site/` 消费)
+- 数据集:`data/<产物>/` 目录(每条一个 `<id>.json` + 轻量索引 `index.json`;
+  图标只存裸 id,经 `node web/build.mjs` 构建为 dist/ 零外链站点后展示)
 - 本报告:`reports/build-report.md`
 """
     REPORTS_DIR.mkdir(parents=True, exist_ok=True)

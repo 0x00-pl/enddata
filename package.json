@@ -1,0 +1,8 @@
+{
+  "name": "enddata",
+  "private": true,
+  "description": "EndData JS 构建(js 项目根 = 仓库根,零 npm 依赖):npm run build 读取 web/ 源码生成零外链的 dist/",
+  "scripts": {
+    "build": "node web/build.mjs"
+  }
+}

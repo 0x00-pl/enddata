@@ -1,12 +1,14 @@
 """EndData 统一命令行入口:数据采集(collection)、版本监控(version)。
 
 用法示例:
-    enddata collection clone                   # 克隆/更新数据源仓库到 sources/
+    enddata collection clone                   # 克隆/更新数据源仓库到 sources/(含图标 git 源)
     enddata collection all                     # 依赖全部 collection:自动补抓原始表并产出所有数据集
     enddata collection all --lang en           # 以英语为默认翻译语言构建全部数据集
     enddata collection items                   # 只生成 items 数据集(缺表自动补抓)
     enddata collection characters --force      # 强制重抓该产物依赖的原始表
     enddata version --record
+
+站点构建(JS 工具链,非本 CLI):npm run build(js 项目根 = 仓库根)→ 零外链的 dist/
 """
 
 from __future__ import annotations

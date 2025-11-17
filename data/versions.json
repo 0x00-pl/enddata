@@ -23,11 +23,17 @@
       "sha": "54fd90c",
       "date": "2026-06-18",
       "subject": "更新中文版 README.md"
+    },
+    "555me/EndfieldAssets": {
+      "branch": "main",
+      "sha": "cbca0c6",
+      "date": "2026-09-02",
+      "subject": "9764758"
     }
   },
-  "updatedAt": "2026-09-16T09:48:32+00:00",
+  "updatedAt": "2026-09-16T10:30:07+00:00",
   "game": {
     "build": "initial_10024360-6_main_10024360-6",
-    "checkedAt": "2026-09-16T09:48:32+00:00"
+    "checkedAt": "2026-09-16T10:30:07+00:00"
   }
 }

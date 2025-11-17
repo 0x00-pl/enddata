@@ -13,7 +13,8 @@ collection/<产物>.py 按需读取原始表
         │  i18n 反查、表间 join、attrType 枚举翻译
         ▼
 data/<产物>/          ← 生成的数据集目录(每条一个 <id>.json + 轻量索引 index.json,
-        │               套装/强化全局配置在 data/equips/_global.json),由 site/ 消费
+        │               套装/强化全局配置在 data/equips/_global.json),经 web/build.mjs
+        │               构建为 dist/(图标落地 + 注入本地 URL)后由站点消费
         ▼
 data/meta.json / data/versions.json   ← 构建信息 / 游戏构建号与各仓库 HEAD
 reports/build-report.md               ← 人类可读构建报告

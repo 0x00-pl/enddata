@@ -1,4 +1,4 @@
-/* EndData 前端:加载 site/data 数据集并渲染各分页。无框架、无构建。
+/* EndData 前端:加载 dist/data 数据集并渲染各分页。无框架、无构建。
    数据布局:每个产物一个目录 data/<产物>/(每条一个 <id>.json + 轻量索引 index.json),
    列表页只读 index.json;套装/强化全局配置在 data/equips/_global.json。 */
 

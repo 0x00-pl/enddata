@@ -26,7 +26,7 @@ from __future__ import annotations
 import json
 import re
 
-from tools.tables import DATA_DIR, I18n, attr_name, dump_dir, i18n_table, load_tables, load_vfs_config, vfs_url
+from tools.tables import DATA_DIR, I18n, attr_name, dump_dir, i18n_table, load_tables
 
 PRODUCT = "equips"
 
@@ -249,7 +249,7 @@ def build(raw: dict, t: I18n) -> dict:
             "suit": e.get("suitID") or None,
             "rarity": item.get("rarity"),
             "minWearLv": e.get("minWearLv"),
-            "icon": vfs_url("item_icon", iconId=item.get("iconId")),
+            "icon": item.get("iconId"),
             "baseAttr": {"type": attr_name(base.get("attrType")), "value": base.get("attrValue")} if base else None,
             "attrs": mods,
             "formula": formula_of(raw, t, eid, craft_options),
@@ -283,7 +283,6 @@ def write(payload: dict) -> None:
 
 
 def main(force: bool = False) -> None:
-    load_vfs_config()
     raw = load_tables(REQUIRED_TABLES, force=force)
     write(build(raw, I18n(raw[i18n_table()])))
 
