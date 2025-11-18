@@ -14,19 +14,8 @@
       {
         "repo": "555me/EndfieldAssets",
         "branch": "main",
-        "partial": true,
-        "sparse": [
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/itemicon/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/charicon/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/charroundicon/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/charprofessionicon/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/attributeicon/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/elementicon/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/talenttreeicon/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/inventory/",
-          "assets/beyond/dynamicassets/gameplay/ui/sprites/factory/"
-        ],
-        "role": "图标资源源(vfs 资源 git 镜像,6.4GB;sparse 只取 9 个图标目录(工作区实测 74MB,含 .git 约 146MB),禁全量克隆)"
+        "partial": false,
+        "role": "图标资源源(vfs 资源 git 镜像,6.4GB 完整克隆:74MB 图标目录 + 立绘/场景等其余解包资源)"
       },
       {
         "repo": "AndreaFrederica/jei-web",

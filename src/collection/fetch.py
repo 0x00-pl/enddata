@@ -7,7 +7,7 @@
       元数据(目录树)本地全量,blob 按需懒取、取过即本地缓存,
       适合 rmxlinux(1.5GB)等大仓库与不稳定的代理网络
     - sparse=[目录…] 的仓库在 partial 基础上用 sparse-checkout 限定物化范围,
-      checkout/reset 只懒取目录内 blob(适合超大资源仓库,如图标源 555me/EndfieldAssets 6.4GB)
+      checkout/reset 只懒取目录内 blob(可选能力,用于压缩超大资源仓库的本地占用)
     - 已存在的仓库执行 fetch + 更新引用到远端最新;
       ⚠️ 非 sparse 的 partial 仓库绝不能 reset --hard(会触发全量 blob 懒取),只移动引用;
       sparse 仓库 reset --hard 只物化 sparse 范围内的 blob,可安全使用

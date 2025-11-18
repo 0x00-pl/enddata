@@ -94,10 +94,12 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 按构建号跟版(提交信息即构建号,约 1~3 周一更;2026-09-16 实测 HEAD 为构建 9764758,2026-09-02,
 比 rmxlinux 表数据(2026-09-08)落后 6 天,图标资源与数值表版本天然接近)。
 
-- **接入方式**:`partial + sparse`(blob:none + sparse-checkout --no-cone)只物化 9 个图标目录
-  (itemicon 1740 / charicon 61 / charroundicon / charprofessionicon 26 / attributeicon /
-  elementicon / talenttreeicon / inventory / factory),工作区实测 74MB(factory 子目录即占 34MB;对比 6.4GB 全量,禁全量克隆);
-  由 `enddata collection clone` 统一维护,HEAD 自动入 data/versions.json
+- **接入方式**:完整克隆(`--depth 1` 单分支,2026-09-16 起;仓库 6.4GB,其中 9 个图标目录约 74MB
+  —— itemicon 1740 / charicon 61 / charroundicon 95 / charprofessionicon 26 / attributeicon /
+  elementicon / talenttreeicon / inventory / factory,其余为 guide 引导图、副本/关卡图、
+  loading 立绘等解包资源,可一并离线取用);由 `enddata collection clone` 统一维护,
+  HEAD 自动入 data/versions.json。如需压缩本地占用,可改回 partial+sparse
+  (blob:none + sparse-checkout --no-cone 只取图标目录,本地约 146MB 含 .git)
 - **消费方式**:数据集只存裸 id → `node web/build.mjs` 按映射复制引用到的图标到
   `dist/icons/sprites/` 并注入 `/icons/sprites/...` 本地 URL(映射与覆盖率注记见
   `config/sources.json` 的 `icon_git`;构建清单产出 `dist/data/_icons.json`)
@@ -191,7 +193,7 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
   维护(`enddata collection clone`)。rmxlinux/jei-web 已完整本地化(2026-09-16,proxychains 实测 11MB/s);
   今后新仓库默认 partial 克隆(`--filter=blob:none --no-checkout`)按需懒取即可。
   ⚠️ 非 sparse 的 partial 仓库更新后**不要** `reset --hard`(会触发全量 blob 懒取),用 `git update-ref`
-  移动分支引用;配置了 `sparse` 的仓库(555me/EndfieldAssets)reset --hard 只物化 sparse 范围内的
+  移动分支引用;配置了 `sparse` 的仓库 reset --hard 只物化 sparse 范围内的
   blob,可安全使用(fetch 后直接 `reset --hard FETCH_HEAD`)。
 - **速度实测(2026-09-16)**:`proxychains4 -q git clone` + `GIT_CONFIG_GLOBAL=/dev/null`(绕过 insteadOf)
   为最优路径——jei-web 114MB/10s、rmxlinux 1.5GB 约 12 分钟完整克隆成功;远快于 git 原生
