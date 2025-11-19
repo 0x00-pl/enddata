@@ -152,22 +152,21 @@ fffdan vfs 降为备源与路径模式参考。敌人图片与 wiki 图(bbs.hycd
 
 ## 四、统计(2026-09-16)
 
-### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-16 图标源接入后
+### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-17 实测
 
 | 指标 | 值 |
 |---|---|
 | 仓库总数 | **5**(审查前 13,累计退役 9) |
-| 总体积 | **约 6.6 GB**(555me/EndfieldAssets 6.4GB 完整克隆为大头;rmxlinux 1.5GB 经 partial 克隆仅占 18MB) |
+| 总体积 | **约 20.3 GB**(555me 图标源 17G 为大头;rmxlinux/jei-web 已完整物化,不再走 partial 懒取) |
 | 主源核心表本地可直读 | **24/24(100%,零网络)** |
-| partial 懒取实测 | 首次 13s(经代理)→ 之后 0.02s(纯本地) |
 
 | 仓库 | 体积 | 角色 |
 |---|---|---|
-| 555me/EndfieldAssets | 6.4G | **图标源**(完整克隆:9 个图标目录约 74MB + 立绘/场景等其余解包资源) |
+| 555me/EndfieldAssets | 17G | **图标源**(完整克隆:工作区 ~7G / 28737 文件,其中 9 个图标目录约 74MB;大头部 guide 引导图、副本/关卡图、loading 立绘) |
+| rmxlinux/EndfieldData | 3.1G | **主源**(完整物化:工作区 1.5G + 累积懒取对象) |
 | JamboChen/endfield-calc | 69M | 产线精校数据(craftingTime/电力) |
-| rmxlinux/EndfieldData | 18M | **主源**(partial,1.5GB 仓库按需懒取) |
+| AndreaFrederica/jei-web | 114M | 森空岛 Wiki 包(敌人中文名,规划) |
 | AixLnyt/skport-api-docs | 0.24M | 官方 API 文档 |
-| AndreaFrederica/jei-web | 0.24M | 森空岛 Wiki 包(敌人中文名,规划) |
 
 ### 数据集产出(`data/`,构建于 rmxlinux@main 2026-09-08)
 

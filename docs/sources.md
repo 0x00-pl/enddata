@@ -94,12 +94,16 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 按构建号跟版(提交信息即构建号,约 1~3 周一更;2026-09-16 实测 HEAD 为构建 9764758,2026-09-02,
 比 rmxlinux 表数据(2026-09-08)落后 6 天,图标资源与数值表版本天然接近)。
 
-- **接入方式**:完整克隆(`--depth 1` 单分支,2026-09-16 起;仓库 6.4GB,其中 9 个图标目录约 74MB
-  —— itemicon 1740 / charicon 61 / charroundicon 95 / charprofessionicon 26 / attributeicon /
-  elementicon / talenttreeicon / inventory / factory,其余为 guide 引导图、副本/关卡图、
-  loading 立绘等解包资源,可一并离线取用);由 `enddata collection clone` 统一维护,
-  HEAD 自动入 data/versions.json。如需压缩本地占用,可改回 partial+sparse
-  (blob:none + sparse-checkout --no-cone 只取图标目录,本地约 146MB 含 .git)
+- **接入方式**:完整克隆(`--depth 1` 单分支,2026-09-16 起;盘上实测 ~17G = 工作区 ~7G /
+  28737 文件 + .git,其中 9 个图标目录约 74MB——itemicon 1740 / charicon 61 / charroundicon 95 /
+  charprofessionicon 26 / attributeicon / elementicon / talenttreeicon / inventory / factory,
+  其余为 guide 引导图、副本/关卡图、loading 立绘等解包资源,可一并离线取用)。
+  代理链路扛不住单连接 ~4GB(57% 处断流),实际按「blob:none 骨架(原生 http.proxy,约 1MB)
+  → GitHub API recursive tree 取精确体积 → ≤400MB 逐批 sparse-checkout(单批失败只重试
+  当前批)→ 去 sparse 与 partial 滤镜」分批物化(脚本在 sources/ 本地,不入库)。
+  由 `enddata collection clone` 统一维护,HEAD 自动入 data/versions.json。
+  如需压缩本地占用,可改回 partial+sparse(blob:none + sparse-checkout --no-cone 只取
+  图标目录,本地约 146MB 含 .git)
 - **消费方式**:数据集只存裸 id → `node web/build.mjs` 按映射复制引用到的图标到
   `dist/icons/sprites/` 并注入 `/icons/sprites/...` 本地 URL(映射与覆盖率注记见
   `config/sources.json` 的 `icon_git`;构建清单产出 `dist/data/_icons.json`)

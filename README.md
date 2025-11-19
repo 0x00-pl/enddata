@@ -78,7 +78,7 @@ enddata/
 │       ├── datasource.py       # 数据源访问:本地git → jsdelivr → raw → API 多级回退
 │       ├── tables.py           # 表加载 + i18n 反查 + 属性枚举 + vfs 链接
 │       └── versions.py         # data/versions.json 读写 + enddata version 报告
-├── sources/                # 数据源(5 个本地 git 克隆,gitignore;含 6.4GB 图标源完整克隆,经血统审查)
+├── sources/                # 数据源(5 个本地 git 克隆,gitignore;含图标源完整克隆盘上约 17G,经血统审查)
 ├── data/                   # 生成的数据:各产物目录(每条一个 <id>.json + index.json)+ meta + versions.json(数据集 gitignore)
 ├── reports/                # 生成的报告(build-report.md,入库)
 ├── web/                    # ② 网页展示的源码(唯一手写前端源码,不含生成产物)
