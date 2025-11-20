@@ -15,11 +15,12 @@ const state = {
 const FORMATTER = new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 1 });
 
 async function loadData() {
-  const folders = ["characters", "weapons", "equips"];
+  const folders = ["characters", "weapons"];
   const results = await Promise.allSettled([
     (await fetch("/data/meta.json")).json(),
     ...folders.map((n) => fetch(`/data/${n}/index.json`).then((r) => r.json())),
     (await fetch("/data/equips/_global.json")).json(),
+    (await fetch("/data/equips/index.json")).json(),
     (await fetch("/data/recipes/index.json")).json(),
     (await fetch("/data/items/index.json")).json(),
     (await fetch("/data/enemies/index.json")).json(),
@@ -30,11 +31,12 @@ async function loadData() {
   put(0, "meta");
   folders.forEach((n, i) => put(i + 1, n));
   put(folders.length + 1, "equipsGlobal");
-  put(folders.length + 2, "recipeIds"); // 配方清单:按站点分组的 id 列表
-  put(folders.length + 3, "itemIds");   // 物品清单:按类型 slug 分组的 id 列表
-  put(folders.length + 4, "enemyIds");  // 敌人清单:按类型 slug 分组的 id 列表
+  put(folders.length + 2, "equipIds");  // 装备清单:按套装分组的 id 列表
+  put(folders.length + 3, "recipeIds"); // 配方清单:按站点分组的 id 列表
+  put(folders.length + 4, "itemIds");   // 物品清单:按类型 slug 分组的 id 列表
+  put(folders.length + 5, "enemyIds");  // 敌人清单:按类型 slug 分组的 id 列表
   // id → 子目录 映射,供详情浮层定位清单式数据集的子文件
-  const manifests = { items: state.data.itemIds, enemies: state.data.enemyIds };
+  const manifests = { equips: state.data.equipIds, items: state.data.itemIds, enemies: state.data.enemyIds };
   state.slugMap = {};
   for (const [product, manifest] of Object.entries(manifests)) {
     state.slugMap[product] = Object.fromEntries(
@@ -211,6 +213,9 @@ const loadItemDetails = () =>
 const loadEnemyDetails = () =>
   bulkLoadDetails(state.data.enemyIds, (slug, id) => `/data/enemies/${slug}/${id}.json`, "enemies");
 
+const loadEquipDetails = () =>
+  bulkLoadDetails(state.data.equipIds, (suit, id) => `/data/equips/${suit}/${id}.json`, "equips");
+
 function renderRecipes() {
   if (!state.data.recipes) {
     loadRecipeDetails();
@@ -253,7 +258,11 @@ function renderRecipes() {
 }
 
 function renderEquips() {
-  const equips = state.data.equips ?? [];
+  if (!state.data.equips) {
+    loadEquipDetails();
+    return `<div class="empty-state">正在按 data/equips/index.json 清单加载装备…</div>`;
+  }
+  const equips = state.data.equips;
   const suits = (state.data.equipsGlobal ?? {}).suits ?? [];
   const q = state.search.equips ?? "";
   const part = state.filters.equips ?? "";
@@ -276,7 +285,7 @@ function renderEquips() {
       ${suits.map((x) => `<span class="badge" title="${esc(x.effects.map((e2) => `${e2.count}件:${e2.desc ?? "—"}`).join("\n"))}">${esc(x.name)}(${x.effects.map((e2) => e2.count + "件").join("/")})</span>`).join(" ")}
     </p>
     <table><thead><tr><th>装备</th><th>稀有度</th><th>部位</th><th>套装</th><th>词条</th></tr></thead><tbody>
-    ${list.map((e) => `<tr class="clickable" data-detail="equips" data-id="${esc(e.id)}">
+    ${list.map((e) => `<tr class="clickable" data-detail="equips" data-sub="${esc(e.suit ?? "unknown")}" data-id="${esc(e.id)}">
       <td>${e.icon ? `<img class="icon-sm" src="${esc(e.icon)}" alt="" loading="lazy" onerror="this.remove()">` : ""}${esc(e.name)} <span class="dim">${esc(e.id)}</span></td>
       <td>${rarityTag(e.rarity)}</td><td>${PART[e.part] ?? e.part ?? "—"}</td>
       <td>${e.suit ? `<span class="badge machine">${esc((suits.find((x) => x.id === e.suit) ?? {}).name ?? e.suit)}</span>` : "—"}</td>

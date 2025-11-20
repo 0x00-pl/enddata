@@ -1,6 +1,7 @@
 """采集+初步处理(多数据源综合):装备与套装数据集 → data/equips/ 目录。
 
-(装备逐件一个文件,套装与强化全局配置在 _global.json,轻量索引 index.json)
+(装备逐件一个文件、按所属套装分子目录,suit 字段 = 子目录名,无套装入 unknown;
+套装与强化全局配置在 _global.json;index.json 为按 suit 分组的 id 清单)
 
 数据来源与贡献:
     - rmxlinux@TableCfg:EquipTable × EquipSuitTable × ItemTable(命名/稀有度/图标)
@@ -272,11 +273,23 @@ def build(raw: dict, t: I18n) -> dict:
 
 
 def write(payload: dict) -> None:
-    """每件装备一个独立文件 + 轻量索引 index.json(不含 formula/enhancePity 详情)。
+    """每件装备一个独立文件,按所属套装子目录存放(suit 字段 = 子目录名,
+    无套装的入 unknown);套装与强化规则为全局配置,整体在 _global.json。
 
-    套装与强化规则是全局配置(非逐件实体),整体写入 _global.json。
+    index.json 只是清单:按 suit 分组的装备 id 列表;formula/enhancePity 等
+    一切内容都在子文件里,不在索引中重复。
     """
-    dump_dir(PRODUCT, payload["equips"], exclude_index=("formula", "enhancePity"))
+    def subdir(e: dict) -> str:
+        return e.get("suit") or "unknown"
+
+    def finalize(_rows: list, entries: list[dict]) -> dict:
+        grouped: dict[str, list] = {}
+        for e in entries:
+            grouped.setdefault(subdir(e), []).append(e["id"])
+        return dict(sorted(grouped.items()))
+
+    dump_dir(PRODUCT, payload["equips"], subdir=subdir,
+             index_map=lambda e: e["id"], index_finalize=finalize)
     dest = DATA_DIR / PRODUCT / "_global.json"
     dest.write_text(json.dumps({"suits": payload["suits"], "enhance": payload["enhance"]},
                                ensure_ascii=False, indent=2), encoding="utf-8")

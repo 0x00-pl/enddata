@@ -174,33 +174,29 @@ iconUrl, obtainWays, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
 - `potentialUpItems` 非空表示潜能可用道具提升;当前 79 把武器四类模板键全部命中
 
 ### equips/ — 装备与套装(战斗/养成)
-目录化输出:每件装备一个完整文件 `data/equips/<equipId>.json`(索引不含
-formula/enhancePity 详情);套装与强化规则为全局配置,整体在 `data/equips/_global.json`
-(`{"suits": [...], "enhance": {...}}`):
+目录化输出:每件装备一个完整文件 `data/equips/<suit>/<equipId>.json`——按所属套装
+分子目录(suit 字段与子目录同名,无套装的入 `unknown`,共 25 个);`index.json` 只是
+按 suit 分组的 id 清单;套装被动与强化规则为全局配置,整体在 `data/equips/_global.json`
+(`{"suits": [...], "enhance": {...}}`)。单件装备字段:
 ```json
-{
-  "equips": [ { "id": "item_equip_t0_parts_tundra01_body_01", "name": "简易护甲",
-                "part": "body", "suit": null, "rarity": 1, "minWearLv": 1,
-                "icon": "…vfs…/itemicon/….png", "baseAttr": null,
-                "attrs": [ { "type": "Str", "value": 15.0 }, { "type": "MaxHp", "value": 46.3 } ],
-                "formula": { "formulaId": "item_formu_t0_parts_tundra01_body_01", "level": "T0.5",
-                             "packId": "pack_parts_tundra01_t0", "packName": "简易独立装备组",
-                             "unlock": null,
-                             "craftOptions": [ { "chainId": 1005, "discount": 1.0, "isDefault": true,
-                                 "gold": null,
-                                 "materials": [ { "id": "item_crystal_shell", "name": "晶体外壳", "count": 10 } ] } ] },
-                "enhancePity": null } ],
-  "suits":  [ { "id": "suit_agi01", "name": "巡行信使", "logo": "icon_pack_tundra_suit_agi01",
-                "members": 9,
-                "effects": [ { "count": 3, "skill": "passive_equipsuit_agi_01", "lv": 1 } ] } ]
-}
+{ "id": "item_equip_t2_suit_agi01_body_01", "name": "巡行信使夹克",
+  "part": "body", "suit": "suit_agi01", "rarity": 3, "minWearLv": 1,
+  "icon": "item_equip_t2_suit_agi01_body_01(裸 id,站点构建时注入 /icons/sprites URL)",
+  "baseAttr": null,
+  "attrs": [ { "type": "Str", "value": 15.0 }, { "type": "MaxHp", "value": 46.3 } ],
+  "formula": { "formulaId": "…", "level": "T2", "packId": "…", "packName": "…",
+               "unlock": null,
+               "craftOptions": [ { "chainId": 1005, "discount": 1.0, "isDefault": true,
+                                   "gold": null, "materials": [ … ] } ] },
+  "enhancePity": null }
 ```
 `part` 自装备 id 解析(body/hand/edc),`name`/`rarity`/`icon` 经 itemId join ItemTable;
 `formula` 按 outcomeEquipId 反查(ReverseTable 索引),`level` 为合成档位,`craftOptions`
 为该档位可选加工链(调度券 gold + 材料 materials,图纸条目含工艺名与解锁主线);
 `enhancePity` 为词条引用的强化保底规则 id,定义在 `enhance.guaranteeRules`
 (强化消耗为全局配置)。套装效果按件数分档,描述经 SkillPatchTable 反查
-(24/24 可解析,富文本已剥离,`{键:fmt}`/`{1-键:fmt}` 占位符按 blackboard 回填)。
+(24/24 可解析,富文本已剥离,`{键:fmt}`/`{1-键:fmt}` 占位符按 blackboard 回填),
+即 `suits[].effects[].desc`。
 
 ### enemies/ — 敌人(战斗)
 目录化输出:每个敌人一个完整文件 `data/enemies/<typeSlug>/<enemyId>.json`——typeSlug
