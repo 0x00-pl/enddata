@@ -42,7 +42,7 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 | 表 | 规模 | 内容 |
 |---|---|---|
 | `FactoryManualCraftTable` | 102 | 手工制作(烹饪):ingredients/outcomes、稀有度、解锁 |
-| `FactoryMachineCraftTable` | 317 | 工厂机器配方:**支持可替代原料组(group)**、机器绑定、进度 |
+| `FactoryMachineCraftTable` | 317 | 工厂机器配方:**支持同槽多原料(group,同时消耗)**、机器绑定、进度 |
 | `FactoryMachineCrafterTable` | 27+ | 机器模式(如 liquid) |
 | `FactoryBuildingTable` / `FactoryItemTable` | — | 工厂建筑与产线物品 |
 | `SpaceshipManufactureFormulaTable` | 8 | 飞船制造公式 |

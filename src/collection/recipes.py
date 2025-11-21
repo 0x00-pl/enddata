@@ -106,16 +106,16 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
     building_name = {bid: t(b.get("name")) for bid, b in raw["FactoryBuildingTable"].items()}
 
     def resolve_side(entries: list[dict]) -> list[dict]:
-        """原料/产物条目 → [{count, options:[{id,name}]}];机器配方的同组 options
-        为同槽原料,游戏内同时消耗(如灌装=空瓶+溶液,非可替代项)。"""
+        """原料/产物条目 → [{group:[{id,name}]}],与源表同名同构;机器配方的同组
+        group 为同槽原料,游戏内同时消耗(如灌装=空瓶+溶液,非可替代项)。"""
         out = []
         for e in entries or []:
             if "group" in e:
-                options = [{"id": o["id"], "name": item_name.get(o["id"]) or o["id"], "count": o.get("count", 1)}
-                           for o in e["group"]]
+                group = [{"id": o["id"], "name": item_name.get(o["id"]) or o["id"], "count": o.get("count", 1)}
+                         for o in e["group"]]
             else:
-                options = [{"id": e["id"], "name": item_name.get(e["id"]) or e["id"], "count": e.get("count", 1)}]
-            out.append({"count": options[0]["count"], "options": options})
+                group = [{"id": e["id"], "name": item_name.get(e["id"]) or e["id"], "count": e.get("count", 1)}]
+            out.append({"group": group})
         return out
 
     recipes = []

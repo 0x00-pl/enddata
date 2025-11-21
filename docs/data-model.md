@@ -106,7 +106,7 @@ iconUrl, obtainWays, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
 按默认翻译语言(--lang)反查;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版
 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 - `obtainWays`:`ItemTable.obtainWayIds` → `SystemJumpTable` 的 `desc` 经 i18n 反查的获取途径文案数组(保序去重),无登记时为 null
-- `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 可替代组按"任选其一"逐组员计入;无关联时为 null
+- `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 为同槽原料(同时消耗),逐组员计入;无关联时为 null
 注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 
 ### recipes/ — 生产配方(按站点分 子目录)
@@ -128,15 +128,15 @@ iconUrl, obtainWays, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
   "name": "小瓶荞复锭剂",
   "showingType": 19, "showingName": "精制食药", "craftFilterType": 0,
   "rarity": 4, "domainId": "domain_1", "sortId": 21,
-  "ingredients": [ { "count": 5, "options": [ { "id": "item_plant_moss_spc_powder_1", "name": "荞愈药粉", "count": 5 } ] },
-                   { "count": 5, "options": [ { "id": "item_glass_bottle", "name": "紫晶质瓶", "count": 5 } ] } ],
+  "ingredients": [ { "group": [ { "id": "item_plant_moss_spc_powder_1", "name": "荞愈药粉", "count": 5 } ] },
+                   { "group": [ { "id": "item_glass_bottle", "name": "紫晶质瓶", "count": 5 } ] } ],
   "outcomes": [ ... ]
 }
 ```
 机器配方条目另有 `machineId`/`machineName`/`formulaGroupId`/`formulaDesc`(如
-`filling_bottled_copper_acid` → 灌装机 / 沉积酸(灌装))。机器配方的 `options` 是**可替代
-原料组**(任选其一);手工配方 options 长度恒为 1;飞船制造表只登记产物,`ingredients`
-为空数组。
+`filling_bottled_copper_acid` → 灌装机 / 沉积酸(灌装))。机器配方的 `group` 是**同槽
+原料**(游戏内同时消耗,如灌装=空瓶+溶液,非可替代项);手工配方 group 长度恒为 1;
+飞船制造表只登记产物,`ingredients` 为空数组。
 `craftTimeSec`(制造耗时,秒)与 `facility`(生产设施 ID)来自 JamboChen/endfield-calc
 (本地克隆,其常量展开后与 TableCfg 同一套小写 ID,按配方 ID join);
 仅机器配方命中(317/317),手工/飞船及 calc 数据缺失时为 null。

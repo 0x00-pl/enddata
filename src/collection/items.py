@@ -32,7 +32,7 @@ STATIONS = ("manual", "machine", "spaceship")
 def _side_item_ids(entries: list[dict]) -> set[str]:
     """配方一侧条目 → 涉及的物品 ID 集合(条目形如 {id, count})。
 
-    机器配方的 group 是可替代原料组(任选其一即可开工),组员逐一计入:
+    机器配方的 group 是同槽原料(游戏内同时消耗,非可替代项),组员逐一计入:
     每个组员都算参与这一条配方。同一条配方内同一物品只计一次(按配方计数)。
     """
     ids: set[str] = set()

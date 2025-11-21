@@ -159,11 +159,10 @@ function renderItems() {
 }
 
 function recipeSide(side) {
-  return side.map((ing) => {
-    const opts = ing.options.map((o) =>
-      `<span title="${esc(o.id)}">${esc(o.name)}</span>${ing.options.length > 1 ? "…" : ""}×${o.count}`);
-    return opts.join(' <span class="opt">/</span> ');
-  }).join(" + ");
+  return side
+    .flatMap((ing) => ing.group.map((o) =>
+      `<span title="${esc(o.id)}">${esc(o.name)}</span>×${o.count}`))
+    .join(" + ");
 }
 
 const recipeCategory = (r) => r.showingName ?? r.machineName ?? null;
@@ -228,7 +227,7 @@ function renderRecipes() {
   const cats = [...new Set(byStation.map(recipeCategory).filter(Boolean))].sort();
   const catEff = cats.includes(cat) ? cat : "";
   const hit = (r) => match(r.name, q) || match(r.formulaDesc, q)
-    || match(r.outcomes.map((o) => o.options[0].name).join(), q);
+    || match(r.outcomes.map((o) => o.group[0].name).join(), q);
   const list = byStation.filter((r) => (!catEff || recipeCategory(r) === catEff) && hit(r));
   return `
     ${toolbar("recipes", "搜索配方 / 产物名…", `
@@ -246,7 +245,7 @@ function renderRecipes() {
       工业配方按生产设施;data/recipes/ 按站点(manual/machine/spaceship)分子目录存放。</p>
     <table><thead><tr><th>产物</th><th>配方</th><th>分类</th><th>站点</th></tr></thead><tbody>
     ${list.map((r) => {
-      const out = r.outcomes[0]?.options[0];
+      const out = r.outcomes[0]?.group[0];
       return `<tr class="clickable" data-detail="recipes" data-sub="${esc(r.station)}" data-id="${esc(r.id)}">
         <td>${esc(r.name || (out?.name ?? r.id))} ×${out?.count ?? 1}</td>
         <td><div class="recipe-line">${recipeSide(r.ingredients) || '<span class="opt">—</span>'}</div></td>
@@ -427,7 +426,7 @@ function detailItems(d) {
 function detailRecipes(d) {
   const st = { manual: "手工", machine: "工厂", spaceship: "飞船" }[d.station];
   return `
-    <h3>${esc(d.name || d.formulaDesc || (d.outcomes?.[0]?.options?.[0]?.name ?? d.id))}</h3>
+    <h3>${esc(d.name || d.formulaDesc || (d.outcomes?.[0]?.group?.[0]?.name ?? d.id))}</h3>
     <div class="sub"><span class="badge ${d.station}">${st ?? d.station}</span> · ${esc(d.id)}</div>
     ${sec("原料", `<div class="recipe-line">${recipeSide(d.ingredients) || '<span class="opt">—</span>'}</div>`)}
     ${sec("产物", `<div class="recipe-line">${recipeSide(d.outcomes)}</div>`)}
