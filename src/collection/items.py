@@ -12,6 +12,10 @@
       FactoryManualCraftTable / FactoryMachineCraftTable / SpaceshipManufactureFormulaTable
       → usedInRecipes(作原料)/ producedBy(作产物),按站点 manual/machine/spaceship 计数
     - 获取途径:ItemTable.obtainWayIds → SystemJumpTable(游戏内跳转表)desc 经 i18n 反查
+    - 交易/价值:FactoryItemTable.value → factoryValue;据点收购(SettlementBasicDataTable
+      settlementTradeItemMap,按 据点×等级×物品)→ settlementTrades,同报价合并据点去重;
+      活动叠加援助券(ActivityLimitedFormulaSettlementTable tradeList)→ activityCoupons,
+      保留 活动→券额→适用据点 耦合
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ REQUIRED_TABLES = [
     "ItemTable", "ItemTypeTable", "I18nTextTable_CN", "I18nTextTable_EN",
     "FactoryManualCraftTable", "FactoryMachineCraftTable",
     "SpaceshipManufactureFormulaTable", "SystemJumpTable",
+    "FactoryItemTable", "SettlementBasicDataTable", "ActivityLimitedFormulaSettlementTable",
 ]
 
 STATIONS = ("manual", "machine", "spaceship")
@@ -83,6 +88,42 @@ def _stat_view(per_item: dict, iid: str) -> dict | None:
     return {"total": m + mc + sp, "manual": m, "machine": mc, "spaceship": sp}
 
 
+def collect_trade_prices(raw: dict) -> tuple[dict, dict, dict]:
+    """统计物品的交易/价值(直读原始表,不经其他数据集)。
+
+    返回 (factory_value, trades, coupons):
+        - factory_value: {item_id: FactoryItemTable.value}(生产/回收基准价值)
+        - trades: {item_id: [{"settlements": [...], "money": 调度券, "stmExp": 据点经验}]}
+          SettlementBasicDataTable 按 据点×等级×物品 收购,同(调度券,经验)报价合并据点去重
+        - coupons: {item_id: {活动id: {"moneyCount": 援助成果券, "settlements": [...]}}}
+          ActivityLimitedFormulaSettlementTable 活动期叠加券;同一活动同一物品券额
+          取登记值(当前各据点一致),保留 活动→券额→适用据点 耦合
+    """
+    factory_value = {iid: f.get("value") for iid, f in raw["FactoryItemTable"].items()
+                     if f.get("value") is not None}
+    trade: dict[str, dict[tuple, set[str]]] = {}
+    for stm, v in raw["SettlementBasicDataTable"].items():
+        for lv in (v.get("settlementLevelMap") or {}).values():
+            for iid, e in (lv.get("settlementTradeItemMap") or {}).items():
+                trade.setdefault(iid, {}).setdefault(
+                    (e.get("rewardMoneyCount"), e.get("stmExp")), set()).add(stm)
+    trades = {iid: [{"settlements": sorted(stms), "money": money, "stmExp": exp}
+                    for (money, exp), stms in sorted(offers.items())]
+              for iid, offers in trade.items()}
+    coupons: dict[str, dict[str, dict]] = {}
+    for aid, av in raw["ActivityLimitedFormulaSettlementTable"].items():
+        for stm, sv in (av.get("settlementList") or {}).items():
+            for iid, e in (sv.get("tradeList") or {}).items():
+                c = coupons.setdefault(iid, {}).setdefault(
+                    aid, {"moneyCount": e.get("moneyCount"), "settlements": []})
+                if stm not in c["settlements"]:
+                    c["settlements"].append(stm)
+    for by_act in coupons.values():
+        for entry in by_act.values():
+            entry["settlements"].sort()
+    return factory_value, trades, coupons
+
+
 def build(raw: dict, t: I18n) -> list[dict]:
     type_names = {v.get("itemType"): t(v.get("name")) for v in raw["ItemTypeTable"].values()}
     # EN 名称仅用于目录 slug(目录名对文件系统/URL 友好),不替代中文 typeName
@@ -90,6 +131,7 @@ def build(raw: dict, t: I18n) -> list[dict]:
     type_slugs = {v.get("itemType"): slugify(t_en(v.get("name")), f"type_{v.get('itemType')}")
                   for v in raw["ItemTypeTable"].values()}
     used, produced = collect_recipe_stats(raw)
+    factory_value, trades, coupons = collect_trade_prices(raw)
     # 获取途径:obtainWayIds → SystemJumpTable desc(游戏内"获取途径"文案即取此处)
     obtain_desc = {oid: t(cfg.get("desc")) for oid, cfg in raw["SystemJumpTable"].items()}
 
@@ -109,6 +151,9 @@ def build(raw: dict, t: I18n) -> list[dict]:
             "desc": t(it.get("desc")),
             "icon": it.get("iconId"),
             "obtainWays": obtain_ways or None,
+            "factoryValue": factory_value.get(iid),
+            "settlementTrades": trades.get(iid) or None,
+            "activityCoupons": coupons.get(iid) or None,
             "usedInRecipes": _stat_view(used, iid),
             "producedBy": _stat_view(produced, iid),
         })

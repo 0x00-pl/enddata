@@ -102,10 +102,18 @@ reports/build-report.md               ← 人类可读构建报告
 反查后转小写下划线,如 `currency`/`engraved_medal`,共 77 个;`typeSlug` 字段与
 目录同名)。`index.json` 只是按 typeSlug 分组的 id 清单,内容不做重复。
 条目字段:`{id, name, type, typeSlug, typeName, rarity, showingType, desc, icon,
-iconUrl, obtainWays, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
+iconUrl, obtainWays, factoryValue, settlementTrades, activityCoupons,
+usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
 按默认翻译语言(--lang)反查;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版
 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 - `obtainWays`:`ItemTable.obtainWayIds` → `SystemJumpTable` 的 `desc` 经 i18n 反查的获取途径文案数组(保序去重),无登记时为 null
+- `factoryValue`:`FactoryItemTable.value` 生产/回收基准价值,无登记时为 null
+- `settlementTrades`:据点收购价(`SettlementBasicDataTable.settlementTradeItemMap`,
+  按 据点×等级×物品),同(调度券,据点经验)报价合并据点去重,形如
+  `[{"settlements": ["stm_hongs_1", …], "money": 200, "stmExp": 200}]`;不被收购时为 null
+- `activityCoupons`:限时配方活动的叠加援助券(`ActivityLimitedFormulaSettlementTable`
+  tradeList),形如 `{"activity_limited_formula_2": {"moneyCount": 20, "settlements": […]}}`,
+  保留 活动→券额→适用据点 耦合;无活动券时为 null
 - `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 为同槽原料(同时消耗),逐组员计入;无关联时为 null
 注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 
