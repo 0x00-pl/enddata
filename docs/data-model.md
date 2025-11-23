@@ -101,19 +101,41 @@ reports/build-report.md               ← 人类可读构建报告
 物品类型的 EN slug(`ItemTable.type` → `ItemTypeTable.name` 经 `I18nTextTable_EN`
 反查后转小写下划线,如 `currency`/`engraved_medal`,共 77 个;`typeSlug` 字段与
 目录同名)。`index.json` 只是按 typeSlug 分组的 id 清单,内容不做重复。
-条目字段:`{id, name, type, typeSlug, typeName, rarity, showingType, desc, icon,
-iconUrl, obtainWays, factoryValue, settlementTrades, activityCoupons,
-usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
+条目字段:`{id, name, type, typeSlug, typeName, rarity, showingType, showingName,
+showingIcon, desc, icon, iconUrl, obtainWays, factoryValue, settlementTrades,
+activityCoupons, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
 按默认翻译语言(--lang)反查;无名条目 `name` 为 null,`iconUrl` 为 vfs 图标直链。注意新版
 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 - `obtainWays`:`ItemTable.obtainWayIds` → `SystemJumpTable` 的 `desc` 经 i18n 反查的获取途径文案数组(保序去重),无登记时为 null
+- `decoDesc`:`ItemTable.decoDesc` 展示描述(潜能明信片/干员留影等收藏品的陈列文案,干员 wiki 侧同名文本据此剔除),无登记时为 null
 - `factoryValue`:`FactoryItemTable.value` 生产/回收基准价值,无登记时为 null
+- `showingName`/`showingIcon`:`showingType` 经 `ItemShowingTypeTable` 反查的展示分类名与
+  枚举图标(矿物/植物/产物/可用道具/护手/护甲/配件/采集材料/培养素材/生产工具/随身装置);
+  注意物品用的是这张表,与配方展示分类 `FactoryCraftShowingTypeTable` 是两套体系;
+  `showingType` 为 0 或未登记(如部分活动材料)时两者为 null
 - `settlementTrades`:据点收购价(`SettlementBasicDataTable.settlementTradeItemMap`,
   按 据点×等级×物品),同(调度券,据点经验)报价合并据点去重,形如
   `[{"settlements": ["stm_hongs_1", …], "money": 200, "stmExp": 200}]`;不被收购时为 null
 - `activityCoupons`:限时配方活动的叠加援助券(`ActivityLimitedFormulaSettlementTable`
   tradeList),形如 `{"activity_limited_formula_2": {"moneyCount": 20, "settlements": […]}}`,
   保留 活动→券额→适用据点 耦合;无活动券时为 null
+- 用途细节字段(每物品零到多个,无关联不出现;实现见 `collect_item_details`):
+  - `apRecover` 理智药剂回复量;`exp` 经验卡 `{gain, type}`;`gift` 赠礼好感
+    `{favor, tags, preferTag, popular}`;`fuel` 燃料 `{energy, power}`;
+    `batteryEnergy` 电池容量;`seed` 种子生长 `{growTotalProgress}`;`fertilize` 施肥 `{type, time}`
+  - `fluid` 气液装灌映射,`kind=liquid|gas|fullBottle|fullJar|emptyBottle|emptyJar`
+    (Gas/Liquid/Full·EmptyBottle·GasJar 六表,官方瓶罐对应关系,含容量与另一侧物品清单)
+  - `useEffect` 使用效果(UseItemTable):`{duration, effectType, persistent, useDesc, actions}`,
+    actions 内 buff 黑板按 `{key: value}` 摊平并保留 `buffId`/`skillId`
+  - `battleEquip` 战斗装备物品实战参数(EquipItemTable,与随身装置两表物品不相交):
+    `{castTime, chargeCount, cooldown, recoverTime, levelUpChargeCount, cond, desc, extraDesc}`
+  - `device` 随身装置(ItemPortableDeviceTable):`{type, isMainDevice, lv, nextLvItemId}`
+  - `chest` 宝箱/自选包(UsableItemChestTable):`rewardIdList` 经 `RewardTable` 展开为
+    `{items, probItems}` 物品清单,附 `random` 随机池与 `selectedCount`
+  - `weekraid` 周本收藏品:转换目标(`convertItemId`/`convertGoldId`/`convertGoldNum`)与所属区域
+  - `gemDomain` 宝石所属地块;`gemBox` 定制箱(所引宝石的词条池随箱收录——宝石本体
+    `item_gem_*` 不在 ItemTable,无独立条目)
+  - `gachaPools` 抽卡票券适用卡池;`money` 货币清规则;`moneyExchanges` 货币兑换率(挂源货币)
 - `usedInRecipes`/`producedBy`:物品作为原料/产物出现的配方数(直读三张 Factory 表统计,形如 `{"total": n, "manual": n, "machine": n, "spaceship": n}`);机器配方 group 为同槽原料(同时消耗),逐组员计入;无关联时为 null
 注意新版 `showingType`/`type` 可能是整数枚举(旧镜像为字符串),前端只做展示不做枚举解释。
 
