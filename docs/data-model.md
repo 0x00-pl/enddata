@@ -172,6 +172,24 @@ activityCoupons, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
 仅机器配方命中(317/317),手工/飞船及 calc 数据缺失时为 null。
 产率/分钟 = 产物数量 × 60 ÷ craftTimeSec。
 
+### settlements/ — 据点
+条目少,平铺输出:每据点一个完整文件 `data/settlements/<settlementId>.json`,
+`index.json` 为 id 清单。来源 `SettlementBasicDataTable`(6 据点:`stm_hongs_*` 与
+`stm_tundra_*` 各 3,分属 domain_2/domain_1;ID 前缀非游戏名,游戏名见条目 `name`,
+如天王坪援建点/心脏修缮站/盈天台建设站/难民暂居处/基建前站/重建指挥部)。
+条目字段:`{id, name, domainId, domainLevelId, facRegionIndex, color, wantTags, levels}`;
+`name` 为据点名 i18n 反查。
+- `wantTags`:驻留加成标签(`SettlementTagTable`,按 `wantTagIdGroup` 保序),形如
+  `{id, name, desc, charTags, expRate, moneyRate, produceSpeedRate}`——驻留干员命中
+  `charTags` 时对应收益 +%。
+- `levels`:按等级(1..N)登记,每级含 `bandwidth`(带宽)/`battleBuildingLimit`(战斗
+  建筑上限)/`travelPoleLimit`/`moneyMax`+`moneyPeriod`(资金上限与恢复周期)/
+  `levelUpExp`/`isFinalMaxLevel`/`recoItemId`+`recoItemName`(推荐产物)/`desc`。
+- `levels[].trades`:该等级收购列表,`{itemId, name, money(调度券), stmExp(据点经验)}`;
+  活动关联物品带 `activityId`,活动期叠加援助券 `coupon`/`couponActivityId`
+  (来自 `ActivityLimitedFormulaSettlementTable`)。物品侧视图见 items 的
+  `settlementTrades`/`activityCoupons`(同一份源表,按物品聚合)。
+
 ### weapons/ — 武器(多数据源综合)
 目录化输出:`index.json` 为轻量列表(不含潜能/天赋/升级/突破详情,列表页用);
 每把武器一个完整文件 `data/weapons/<weaponId>.json`:

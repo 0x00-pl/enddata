@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from collection import characters, enemies, equips, items, recipes, weapons
+from collection import characters, enemies, equips, items, recipes, settlements, weapons
 from tools import versions
 from tools import tables
 from tools.tables import (
@@ -21,7 +21,7 @@ from tools.tables import (
 )
 from tools.datasource import PROJECT_ROOT, info, load_json
 
-PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies)
+PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies, settlements)
 
 
 def run(force: bool = False) -> None:

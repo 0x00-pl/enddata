@@ -16,7 +16,7 @@ from __future__ import annotations
 import argparse
 
 from collection import build_all, fetch
-from collection import characters, enemies, equips, items, recipes, weapons
+from collection import characters, enemies, equips, items, recipes, settlements, weapons
 from tools import tables, versions
 
 PRODUCT_MODULES = {
@@ -26,6 +26,7 @@ PRODUCT_MODULES = {
     "weapons": weapons,
     "equips": equips,
     "enemies": enemies,
+    "settlements": settlements,
 }
 
 
@@ -54,7 +55,7 @@ def build_parser() -> argparse.ArgumentParser:
     coll_sub = coll.add_subparsers(
         dest="target",
         required=True,
-        metavar="{fetch,clone,all,characters,items,recipes,weapons,equips,enemies}",
+        metavar="{fetch,clone,all,characters,items,recipes,weapons,equips,enemies,settlements}",
     )
 
     clone_p = coll_sub.add_parser("clone", help="克隆/更新数据源仓库到 sources/")
