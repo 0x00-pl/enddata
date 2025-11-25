@@ -1,5 +1,10 @@
 """采集+初步处理(多数据源综合):干员数据集 → data/characters/ 目录。
 
+输出:每名干员一个 chr_<charId>.json + 轻量索引 index.json;技能按官方分组
+输出 skillGroupMap(键 = <charId>_<族>,skillList 与 SkillPatchTable 键一一
+对应,附属入 unknown);突破阶段(CharBreakStageTable,全局共享、
+与具体干员无关)独立写入 _global.json。
+
 数据来源与贡献:
     - rmxlinux/EndfieldData@TableCfg(本地 git):身份、职业、稀有度、
       1 级/满级面板(CharacterTable×CharProfessionTable×CharBreakTable)
@@ -17,9 +22,11 @@ import json
 import re
 import subprocess
 import time
+from difflib import SequenceMatcher
 
 from tools.tables import (
     ATTRACTIONS_OF_INTEREST,
+    DATA_DIR,
     I18n,
     dump_dir,
     i18n_table,
@@ -32,7 +39,8 @@ PRODUCT = "characters"
 
 REQUIRED_TABLES = [
     "CharacterTable", "CharProfessionTable", "CharBreakTable",
-    "SkillPatchTable", "I18nTextTable_CN",
+    "SkillPatchTable", "I18nTextTable_CN", "CharGrowthTable",
+    "I18nTextTable_EN", "I18nTextTable_JP", "I18nTextTable_KR",
     "CharacterPotentialTable", "PotentialTalentEffectTable",
     "WeaponBasicTable", "CharWpnRecommendTable",
     "CharBattleTagTable", "CharacterTagTable", "CharacterTagDesTable",
@@ -59,7 +67,7 @@ def _git_bytes(repo: str, *args, timeout: int = 300) -> bytes | None:
 
 
 def load_wiki_operators() -> dict[str, dict]:
-    """从 jei-web 森空岛 Wiki 干员包提取 name → {itemId, rarityStars, icon}。
+    """从 jei-web 森空岛 Wiki 干员包提取 name → {itemId, rarityStars, icon, detail}。
 
     文件路径含中文,git 命令用 -z 避免路径转义;懒取 blob 失败时重试。
     """
@@ -174,21 +182,72 @@ def _char_id_of(skill_id: str) -> str:
     return "_".join(skill_id.split("_")[:3])
 
 
-def collect_skills(raw: dict, t: I18n) -> dict[str, list[dict]]:
+def _skill_group_index(raw: dict, t: I18n) -> dict:
+    """CharGrowthTable.skillGroupMap 解析 → 每个技能的官方分类与文本。
+
+    SkillPatchTable 的 skillName/description 哈希对全部干员均为 0,
+    技能名称/描述的官方文本实际挂在 CharGrowthTable.skillGroupMap
+    (name/desc → I18nTextTable)。每组的 skillGroupType 即主技能槽位:
+        0=普攻(NormalAttack) 1=战技(NormalSkill)
+        2=终结(UltimateSkill) 3=连携(ComboSkill)
+    组的 skillIdList 覆盖该槽位下全部分段/形态变体(attack1..5、
+    power_attack、floating 系等)。返回三部分:
+        groups — 组完整解析(gid → 全部源字段:i18n 引用已反查为文本、
+                 富文本标签原样保留、skillIdList 原样),供 skillGroupMap 输出;
+        exact  — skillIdList 逐 id 精确 join;
+        family — 少数 skill 行与 idList 对不上(如 typhoea 终结技的
+                 `_skillfloating` 变体 id),退化为 (干员, 技能族) 匹配
+                 (族名 = 组键去掉干员前缀,归一化大小写与下划线比较)。
+    注意:idList 仅接受本干员前缀的 skillId——chr_9000_endmin(NPC 占位)
+    的组引用的是 endminm/endminf 的技能 id,必须排除(源表里唯一的多对多
+    即此情形;同一干员内仍是一对多)。
+    """
+    exact: dict[str, dict] = {}
+    family: dict[tuple[str, str], dict] = {}
+    groups: dict[str, dict] = {}
+    for growth in (raw.get("CharGrowthTable") or {}).values():
+        cid = growth.get("charId")
+        for gid, group in (growth.get("skillGroupMap") or {}).items():
+            resolved = {k: (t(v) or "" if isinstance(v, dict) else v)
+                        for k, v in group.items() if k != "skillIdList"}
+            groups[gid] = resolved
+            family_name = gid[len(cid) + 1:] if cid and gid.startswith(cid + "_") else gid
+            for sid in group.get("skillIdList") or []:
+                if cid and sid.startswith(cid + "_"):
+                    exact[sid] = resolved
+            if cid and family_name != gid:
+                family[(cid, family_name.replace("_", "").lower())] = resolved
+    return {"exact": exact, "family": family, "groups": groups}
+
+
+def _official_skill_entry(group_index: dict, sid: str, cid: str) -> dict | None:
+    entry = group_index["exact"].get(sid)
+    if entry is None and sid.startswith(cid + "_"):
+        rest = sid[len(cid) + 1:].replace("_", "").lower()
+        entry = group_index["family"].get((cid, rest))
+    return entry
+
+
+def collect_skills(raw: dict, t: I18n, group_index: dict) -> dict[str, list[dict]]:
     """SkillPatchTable 按(干员, 技能)分组,等级补丁聚合为 levels 列表。
 
-    注:干员技能的 skillName/description 哈希在解包表中多为 0(名称待从
-    Wiki/其他表补充),有效信息是 blackboard 数值板与冷却/费用。
+    技能分类与名称/描述:官方取 CharGrowthTable.skillGroupMap(见
+    _skill_group_index,富文本标签原样保留),SkillPatchTable 行内的哈希
+    恒为 0;Wiki 回填(见 _enriched_skills)只补官方仍缺的名称/描述。
+    有效数值信息是 blackboard 数值板与冷却/费用。
     """
     grouped: dict[tuple[str, str], dict] = {}
     for sid, entry in raw["SkillPatchTable"].items():
         cid = _char_id_of(sid)
         for patch in entry.get("SkillPatchDataBundle") or []:
             key = (cid, sid)
+            off = _official_skill_entry(group_index, sid, cid) or {}
             sk = grouped.setdefault(key, {
                 "skillId": sid,
-                "name": t(patch.get("skillName")),
-                "desc": t(patch.get("description")),
+                "name": off.get("name") or t(patch.get("skillName")),
+                "desc": off.get("desc") or t(patch.get("description")),
+                "skillGroupId": off.get("skillGroupId"),
+                "skillGroupType": off.get("skillGroupType"),
                 "coolDown": patch.get("coolDown"),
                 "costType": patch.get("costType"),
                 "costValue": patch.get("costValue"),
@@ -212,9 +271,22 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
     professions = {v["profession"]: (t(v.get("name")), v.get("iconId"))
                    for v in raw["CharProfessionTable"].values()}
     max_level = max(int(v.get("maxLevel", 0)) for v in raw["CharBreakTable"].values())
-    skills_by_char = collect_skills(raw, t)
+    group_index = _skill_group_index(raw, t)
+    skills_by_char = collect_skills(raw, t, group_index)
+    # CV 名各按其语言表反查(中/英/日/韩原生写法),与 --lang 默认语言无关
+    cv_resolvers = {k: I18n(raw[n]) for k, n in (
+        ("ChiCVName", "I18nTextTable_CN"), ("EngCVName", "I18nTextTable_EN"),
+        ("JapCVName", "I18nTextTable_JP"), ("KorCVName", "I18nTextTable_KR")) if n in raw}
 
     characters = []
+    # 突破阶段(各技能等级上限):全局表,与具体干员无关(实测 33 名干员完全一致),
+    # 独立写入 _global.json,不随干员文件重复
+    break_stages = [{"stage": b.get("breakStage"), "maxLevel": b.get("maxCharLevel"),
+                     "skillLevels": {"normalAttack": b.get("normalAttackSkillLevel"),
+                                     "normal": b.get("normalSkillLevel"),
+                                     "combo": b.get("comboSkillLevel"),
+                                     "ultimate": b.get("ultimateSkillLevel")}}
+                    for b in (raw["CharBreakStageTable"] or {}).values()]
     for cid, c in raw["CharacterTable"].items():
         lv1, lv_max = {}, {}
         for seg in c.get("attributes", []):
@@ -310,14 +382,6 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             station_tags.append({"tag": tag_id.replace("tag_expert_", "").replace("tag_hobby_", ""),
                                  "desc": desc or None})
 
-        # 突破阶段(各技能等级上限)
-        break_stages = [{"stage": b.get("breakStage"), "maxLevel": b.get("maxCharLevel"),
-                         "skillLevels": {"normalAttack": b.get("normalAttackSkillLevel"),
-                                         "normal": b.get("normalSkillLevel"),
-                                         "combo": b.get("comboSkillLevel"),
-                                         "ultimate": b.get("ultimateSkillLevel")}}
-                        for b in (raw["CharBreakStageTable"] or {}).values()]
-
         # 表现层数据:SkillData 的施法消耗与关联 Buff(本地 Json/SkillData)
         for sk in skills_by_char.get(cid, []):
             sd = _repo_json("rmxlinux/EndfieldData", f"Json/SkillData/{sk['skillId']}.json")
@@ -328,6 +392,10 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                 if sd.get("buffs"):
                     sk["buffs"] = sd.get("buffs")
 
+        raw_cv = c.get("cvName") or {}
+        cv_view = {k: cv_resolvers[k](raw_cv[k]) or None
+                   for k in ("ChiCVName", "EngCVName", "JapCVName", "KorCVName")
+                   if raw_cv.get(k)} or None
         characters.append({
             "id": cid,
             "name": c_name,
@@ -338,7 +406,7 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             "icon": f"icon_{cid}",
             "rarity": c.get("rarity"),
             "weaponType": c.get("weaponType"),
-            "cv": c.get("cvName"),
+            "cv": cv_view,
             "maxLevel": max_level,
             "lv1": {k: lv1.get(k) for k in ATTRACTIONS_OF_INTEREST},
             "lvMax": {k: lv_max.get(k) for k in ATTRACTIONS_OF_INTEREST},
@@ -348,7 +416,6 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             "recommendedWeapons": recommended,
             "battleTags": [n for n in battle_tag_names if n],
             "stationTags": station_tags,
-            "breakStages": break_stages,
             "wiki": ({"itemId": w["itemId"], "rarityStars": w["rarityStars"],
                       "icon": w["icon"], "illustration": w.get("illustration"),
                       "detail": w.get("detail")} if w else None),
@@ -357,12 +424,63 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                        + (["jei-web@森空岛Wiki干员包"] if w else []),
         })
     characters.sort(key=lambda x: (-(x["rarity"] or 0), x["id"]))
-    return characters
+
+    # 技能按官方分组输出:skillGroupMap = {组 id: 完整解析后的源组字段
+    # (condition*/icon/name/desc/skillGroupId/skillGroupType/skillIdList,
+    # i18n 引用已反查为文本、富文本保留)+ skillList(按 SkillPatchTable 键
+    # 逐一展开的成员,一个成员 = 一个 skillId,含数值相同的形态变体,
+    # 忠实源数据不合并)。未入组的附属技能(被动、个别变体)入 "unknown"
+    # (对齐 equips 无套装的约定;无源组字段,仅成员 + 回填的 name/desc)。
+    for c in characters:
+        raw_map: dict[str, list[dict]] = {}
+        for sk in c.pop("skills") or []:
+            gid = sk.pop("skillGroupId", None) or "unknown"
+            sk.pop("skillGroupType", None)
+            raw_map.setdefault(gid, []).append(sk)
+
+        skill_group_map: dict[str, dict] = {}
+        for gid, members in raw_map.items():
+            src = group_index["groups"].get(gid) or {}
+            name, desc = src.get("name"), src.get("desc")
+            uniform_text = all(m.get("name") == name and m.get("desc") == desc
+                               for m in members)
+            skill_list = []
+            for m in members:
+                mem = {"skillId": m["skillId"]}
+                if not uniform_text:
+                    mem.update({k: m.get(k) for k in ("name", "desc") if m.get(k) is not None})
+                mem.update({k: m.get(k) for k in
+                            ("iconId", "coolDown", "costType", "costValue", "castCost", "buffs", "levels")
+                            if m.get(k) is not None})
+                skill_list.append(mem)
+            grp = dict(src)
+            grp["skillList"] = skill_list
+            if "name" not in grp and name is not None:
+                grp["name"] = name  # unknown 组:无源字段,回填首个成员文本
+            if "desc" not in grp and desc is not None:
+                grp["desc"] = desc
+            skill_group_map[gid] = grp
+
+        # 排序:主技能槽 0普攻/1战技/2终结/3连携 在前,其余(unknown)垫底
+        order_key = lambda item: (item[1].get("skillGroupType") is None,
+                                  item[1].get("skillGroupType") if item[1].get("skillGroupType") is not None else 99,
+                                  item[0])
+        c["skillGroupMap"] = dict(sorted(skill_group_map.items(), key=order_key))
+
+    return {"characters": characters, "breakStages": break_stages}
 
 
-def write(payload: list[dict]) -> None:
-    """每名干员一个独立文件 + 轻量索引 index.json(列表页用,不含技能详情)。"""
-    dump_dir(PRODUCT, payload, exclude_index=("skills", "potentials", "wiki", "sources"))
+def write(payload: dict) -> None:
+    """每名干员一个独立文件 + 轻量索引 index.json(列表页用,不含技能详情)。
+
+    突破阶段(CharBreakStageTable,全局共享、与干员无关)独立写入 _global.json,
+    不在干员文件与索引中重复。
+    """
+    dump_dir(PRODUCT, payload["characters"],
+             exclude_index=("skills", "potentials", "wiki", "sources"))
+    dest = DATA_DIR / PRODUCT / "_global.json"
+    dest.write_text(json.dumps({"breakStages": payload["breakStages"]},
+                               ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def main(force: bool = False) -> None:

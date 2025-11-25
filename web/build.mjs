@@ -63,7 +63,10 @@ function walk(node, idField, inject) {
   } else if (node && typeof node === "object") {
     const id = node[idField];
     if (typeof id === "string" && id) inject(node, id);
-    for (const v of Object.values(node)) walk(v, idField, inject);
+    for (const [k, v] of Object.entries(node)) {
+      if (k === "skillGroupMap") continue; // 组对象的 icon 等字段不是干员/物品图标引用
+      walk(v, idField, inject);
+    }
   }
 }
 

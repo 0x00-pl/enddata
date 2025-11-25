@@ -139,3 +139,6 @@ td.num { font-variant-numeric: tabular-nums; }
 .modal th, .modal td { padding: 5px 8px; }
 .modal td.k { color: var(--text-dim); width: 140px; }
 .modal .wiki-img { max-width: 100%; border-radius: 8px; margin: 6px 0; }
+
+/* i18n 富文本标签(<@ba.key>/<#ba.xx> → span.rt;按 data-rt 可再细分配色) */
+.rt { color: var(--accent, #4da3ff); font-weight: 600; }

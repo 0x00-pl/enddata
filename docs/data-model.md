@@ -49,11 +49,21 @@ reports/build-report.md               ← 人类可读构建报告
   "rarity": 6, "weaponType": "Sword", "cv": "...", "maxLevel": 60,
   "lv1":   { "MaxHp": 500, "Atk": 30, "Def": 0, "Str": 10.8, "Agi": 20.6, "Wisd": 8.9, "Will": 9.7 },
   "lvMax": { "...": "同上结构,最终突破满级面板" },
-  "skills": [ { "skillId": "chr_0005_chen_attack1", "name": null, "desc": null,
-                "coolDown": 0.0, "costType": 0, "costValue": 0.0, "castCost": 8,
-                "buffs": ["buff_chr_0005_chen_…"],
-                "levels": [ { "level": 1, "blackboard": { "atk_scale": 0.1 } },
-                            { "level": 2, "blackboard": { "…": "…" } } ] } ],
+  "skillGroupMap": {
+    "chr_0005_chen_NormalAttack":  { "skillGroupType": 0, "icon": "icon_attack_sword",
+      "name": "…", "desc": "…",
+      "conditionId1": "", "conditionIcon1": "", "conditionName1": "", "conditionDesc1": "",
+      "conditionId2": "", "conditionIcon2": "", "conditionName2": "", "conditionDesc2": "",
+      "conditionDescInactive1": "", "conditionDescInactive2": "",
+      "conditionPostDesc1": "", "conditionPostDesc2": "",
+      "skillList": [ { "skillId": "chr_0005_chen_attack1", "coolDown": 0.0,
+                       "levels": [ { "level": 1, "blackboard": { "atk_scale": 0.1 } },
+                                   { "level": 2, "blackboard": { "…": "…" } } ] },
+                     { "skillId": "chr_0005_chen_attack2", "…": "…" } ] },
+    "chr_0005_chen_NormalSkill":   { "…": "同结构" },
+    "chr_0005_chen_UltimateSkill": { "…": "同结构" },
+    "chr_0005_chen_ComboSkill":    { "…": "同结构" }
+  },
   "wiki":  { "itemId": "12", "rarityStars": 5, "icon": "https://bbs.hycdn.cn/….png",
              "detail": { "chapters": [ { "title": "能力扩延", "widgets": [
                  { "title": "战斗技能", "tabs": [ { "name": "归穹宇", "type": "战技",
@@ -64,9 +74,6 @@ reports/build-report.md               ← 人类可读构建报告
   "recommendedWeapons": { "weaponIds1": ["…"], "weaponIds2": ["…"], "weaponIds3": [] },
   "battleTags": ["击飞", "失衡"],
   "stationTags": [ { "tag": "erudit", "desc": "博闻强记·博采众长\n百家之法…" } ],
-  "breakStages": [ { "stage": 0, "maxLevel": 20,
-                     "skillLevels": { "normalAttack": 1, "normal": 1,
-                                      "combo": 1, "ultimate": 1 } } ],
   "potentials": [ { "level": 1, "name": "绝影",
                     "desc": "对生命值少于{hp_remain:0%}的敌人造成的伤害+{extra_dmg:0%}。",
                     "values": { "extra_dmg": 0.0, "hp_remain": 0.5 },
@@ -78,20 +85,46 @@ reports/build-report.md               ← 人类可读构建报告
 ```
 多源说明:
 - 基础与面板来自 CharacterTable(本地 git 直读);技能按 skillId 分组,
-  `levels` 是逐级 blackboard 数值板(干员技能名称/描述哈希在解包表中多为 0,待补)
+  `levels` 是逐级 blackboard 数值板;技能名称/描述取 CharGrowthTable.skillGroupMap
+  (name/desc 哈希 → I18nTextTable,经 skillIdList 精确 join + 技能族前缀回退,
+  富文本标签已剥离;SkillPatchTable 行内哈希恒为 0)。当前覆盖 357/360:
+  yvonne 被动、wulfa 连携变体不在任何 skillGroupMap,lizhiyan 连携的 desc 哈希
+  不在 i18n 转储——均为解包数据本身的缺口,待上游更新)
+- `skillGroupMap` 与源表 CharGrowthTable.skillGroupMap 同构(组对象 = 源组全字段,
+  i18n 引用已反查为文本):键 = `<charId>_<族>` 完整组 id,即四个主技能槽
+  `NormalAttack`(普攻,skillGroupType=0)/`NormalSkill`(战技,1)/
+  `UltimateSkill`(终结,2)/`ComboSkill`(连携,3);普攻的分段 attack1..5、
+  重击/下落、浮空形态变体随所属主技能入组。未入组的附属技能(被动、
+  个别变体)入 `unknown`(对齐 equips 无套装的约定)。
+  组级 `name`/`desc` 为该族全体技能共享的官方文本(成员实测恒一致,故上提
+  去重),`skillGroupType` 即槽位号;另收 `icon` 与 condition 系列字段
+  (`conditionId/Icon/Name/Desc/DescInactive/PostDesc 1/2`——形态/条件状态
+  的官方文本,如诀· Lizhiyan 的「智识值 ≥ 意志值」条件,多数干员为空串)。
+  源表的 `skillIdList` 不再输出——其信息已由 `skillList` 的逐成员展开涵盖。
+  `skillList` 与 SkillPatchTable 键一一对应(一个成员 = 一个 skillId,一对多;
+  同干员内每个 skillId 只属一组,已验证),数值完全相同的形态变体保持独立
+  条目,忠实源数据。名称/描述覆盖 357/360:yvonne 被动、wulfa
+  连携变体不在任何 skillGroupMap,lizhiyan 连携的 desc 哈希不在 i18n
+  转储,均为解包数据本身的缺口
+- 技能文本的富文本标签(`<@ba.key>`、`<#ba.xx>`、`</>` 等)原样保留,
+  前端经 `rich()` 转义后转换为 `span.rt` 渲染
+- `cv` 四语言 CV 名:CharacterTable.cvName 的 i18n 句柄已各按其语言表反查
+  (Chi→CN、Eng→EN、Jap→JP、Kor→KR,原生写法,与 --lang 默认语言无关),空文本为 null
 - `wiki` 来自 jei-web 森空岛 Wiki 干员包(名称 join;管理员按 charId 后缀 m/f 特判),
   部分新干员 Wiki 尚未覆盖时为 null
 - `potentials` 潜能/天赋:CharacterPotentialTable(解锁链+材料)×
   PotentialTalentEffectTable(效果描述 165/165 全可读,富文本标签已剥离;
   `{键:0%}` 占位符对应 blackboard/属性键,由游戏运行时填充)
-- `icon`/`professionIcon` 为宏山档案局 vfs 直链
+- `icon`/`professionIcon` 只存裸 id(`icon_<charId>` / 职业图标 id),
+  站点构建期经 icon_git 源本地化注入 URL
 - `potentials.values` 与技能 `castCost`/`buffs` 来自 rmxlinux 的
   `Json/BuffData`、`Json/SkillData`(表现层定义):potentials 描述中的
   `{键:0%}` 占位符数值即 `values` 的键值;`castCost` 为技能真实消耗
   (如终结技 8 点)
 - `weapon`/`recommendedWeapons` 来自 defaultWeaponId 与 CharWpnRecommendTable(join 武器表名称)
 - `stationTags` 派驻标签描述来自 CharacterTagDesTable(基建加成全文,i18n 已反查)
-- `breakStages` 为突破阶段的各技能等级上限(CharBreakStageTable)
+- `breakStages` 不在干员文件内:来自全局表 CharBreakStageTable(实测 33 名干员完全一致),
+  独立写入 `data/characters/_global.json` 的 `{"breakStages": [...]}`
 - `wiki.detail` 来自森空岛 Wiki 文档解析(章节→组件→tab→嵌套文档块递归取文本):
   按章节输出 干员资料表格(代号/性别/生日/种族)、战斗技能卡(名称/类型/描述/正文)、
   天赋阵列正文。⚠️ 天赋无独立名称字段(游戏内为图标),名称含于正文首词

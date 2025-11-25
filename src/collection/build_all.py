@@ -44,7 +44,7 @@ def run(force: bool = False) -> None:
         "lang": tables.DEFAULT_LANG,
         "i18nMisses": t.misses,
         "counts": {
-            "characters": len(payloads["characters"]),
+            "characters": len(payloads["characters"]["characters"]),
             "items": len(payloads["items"]),
             "recipes": len(payloads["recipes"]),
             "weapons": len(payloads["weapons"]),

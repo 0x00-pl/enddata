@@ -1,6 +1,7 @@
 /* EndData 前端:加载 dist/data 数据集并渲染各分页。无框架、无构建。
    数据布局:每个产物一个目录 data/<产物>/(每条一个 <id>.json + 轻量索引 index.json),
-   列表页只读 index.json;套装/强化全局配置在 data/equips/_global.json。 */
+   列表页只读 index.json;全局共享配置在 _global.json(装备套装/强化 → equips/,
+   干员突破阶段 → characters/)。 */
 
 const main = document.getElementById("main");
 const tabs = document.getElementById("tabs");
@@ -24,6 +25,7 @@ async function loadData() {
     (await fetch("/data/recipes/index.json")).json(),
     (await fetch("/data/items/index.json")).json(),
     (await fetch("/data/enemies/index.json")).json(),
+    (await fetch("/data/characters/_global.json")).json(),
   ]);
   const put = (i, key) => {
     if (results[i].status === "fulfilled") state.data[key] = results[i].value;
@@ -35,6 +37,7 @@ async function loadData() {
   put(folders.length + 3, "recipeIds"); // 配方清单:按站点分组的 id 列表
   put(folders.length + 4, "itemIds");   // 物品清单:按类型 slug 分组的 id 列表
   put(folders.length + 5, "enemyIds");  // 敌人清单:按类型 slug 分组的 id 列表
+  put(folders.length + 6, "breakStages"); // 突破阶段:全局表(_global.json,所有干员共享)
   // id → 子目录 映射,供详情浮层定位清单式数据集的子文件
   const manifests = { equips: state.data.equipIds, items: state.data.itemIds, enemies: state.data.enemyIds };
   state.slugMap = {};
@@ -347,13 +350,25 @@ function detailCharacters(d) {
     <div class="sub">${esc(d.enName ?? "")} · ${esc(d.professionName ?? d.profession)} · 武器:${esc(d.weaponType ?? "—")}${d.cv ? ` · CV:${esc(d.cv)}` : ""} · 满级 ${d.maxLevel ?? "—"}</div>
     ${sec("面板(1 级 → 满级)", `<table><thead><tr><th>属性</th><th>1 级</th><th>满级</th></tr></thead><tbody>
       ${["MaxHp", "Atk", "Def", "Str", "Agi", "Wisd", "Will"].map(statRow).join("")}</tbody></table>`)}
-    ${sec("技能", (d.skills ?? []).map((sk) => `
-      <div class="block"><h5>${esc(sk.name ?? "(未命名)")}</h5>
+    ${sec("技能", (() => {
+      const FAMILY_LABEL = { NormalAttack: "普攻", NormalSkill: "战技",
+                             UltimateSkill: "终结技", ComboSkill: "连携技", unknown: "附属技能" };
+      // 富文本:<@ba.xx>/<#ba.xx> 开标签 → span.rt,</> 闭标签 → </span>(文本已先整体转义)
+      const rich = (s) => !s ? "" : esc(s).replace(
+        /&lt;[@#]([a-zA-Z0-9_.-]+)&gt;|&lt;\/&gt;/g,
+        (m, name) => name ? `<span class="rt" data-rt="${esc(name)}">` : "</span>");
+      return Object.entries(d.skillGroupMap ?? {}).map(([gid, grp]) => {
+        const family = gid.startsWith(d.id + "_") ? gid.slice(d.id.length + 1) : gid;
+        return `
+      <div class="sub"><strong>${FAMILY_LABEL[family] ?? family}</strong>${grp.name ? ` · ${rich(grp.name)}` : ""}(${grp.skillList.length})</div>
+      ${grp.desc ? `<p class="desc">${rich(grp.desc)}</p>` : ""}
+      ${grp.skillList.map((sk) => `
+      <div class="block"><h5>${esc(sk.skillId.split("_").slice(-2).join("_"))}</h5>
         <div class="sub">${esc(sk.skillId)}${sk.castCost ? ` · 终结点消耗 ${sk.castCost}` : ""}${sk.coolDown ? ` · 冷却 ${trimN(sk.coolDown)}s` : ""}${sk.costValue ? ` · 费用 ${trimN(sk.costValue)}` : ""}</div>
-        ${sk.desc ? `<p class="desc">${esc(sk.desc)}</p>` : ""}
         <div class="bb-line">${(sk.levels ?? []).map((l) =>
           `<span class="bb">Lv${l.level ?? "?"}:${fmtBB(l.blackboard) || "—"}</span>`).join("")}</div>
-      </div>`).join("") || dimP)}
+      </div>`).join("")}`;
+      }).join("") || dimP}
     ${sec("潜能 / 天赋", (d.potentials ?? []).map((p) => `
       <div class="block"><h5>${esc(p.name ?? `潜能 ${p.level}`)}</h5>
         ${p.desc ? `<p class="desc">${esc(p.desc)}</p>` : ""}
@@ -365,7 +380,7 @@ function detailCharacters(d) {
       ["推荐武器(1/2/3 阶)", Object.values(d.recommendedWeapons ?? {}).map((arr) => arr.map(esc).join("、") || "—").join(" / ")],
     ]) : dimP)}
     ${sec("突破阶段", `<table><thead><tr><th>阶段</th><th>干员等级上限</th><th>技能等级上限(普攻/战技/连携/终结)</th></tr></thead><tbody>
-      ${(d.breakStages ?? []).map((b) => `<tr><td>${b.stage}</td><td class="num">${b.maxLevel ?? "—"}</td>
+      ${(state.data.breakStages ?? []).map((b) => `<tr><td>${b.stage}</td><td class="num">${b.maxLevel ?? "—"}</td>
         <td class="num">${["normalAttack", "normal", "combo", "ultimate"].map((k) => b.skillLevels?.[k] ?? "—").join(" / ")}</td></tr>`).join("")}
       </tbody></table>`)}
     ${(d.battleTags ?? []).length || (d.stationTags ?? []).length ? sec("标签", `<div class="sub">
