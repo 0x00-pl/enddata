@@ -228,6 +228,18 @@ def _official_skill_entry(group_index: dict, sid: str, cid: str) -> dict | None:
     return entry
 
 
+def _resolve_i18n_deep(v, t: I18n):
+    """递归解析数据内的 i18n 引用({id, text} 形状 → 文本,富文本标签保留),
+    其余结构原样透传(如 requiredItem 的 {count, id} 不受影响)。"""
+    if isinstance(v, list):
+        return [_resolve_i18n_deep(x, t) for x in v]
+    if isinstance(v, dict):
+        if v and set(v.keys()) <= {"id", "text"}:
+            return t(v) or ""
+        return {k: _resolve_i18n_deep(x, t) for k, x in v.items()}
+    return v
+
+
 def collect_skills(raw: dict, t: I18n, group_index: dict) -> dict[str, list[dict]]:
     """SkillPatchTable 按(干员, 技能)分组,等级补丁聚合为 levels 列表。
 
@@ -287,6 +299,12 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                                      "combo": b.get("comboSkillLevel"),
                                      "ultimate": b.get("ultimateSkillLevel")}}
                     for b in (raw["CharBreakStageTable"] or {}).values()]
+    # 天赋节点(CharGrowthTable.talentNodeMap,与数据源同构):nodeType
+    # 1=突破 2=装备破解 3=天赋(属性加成/好感度) 4=被动技能 5=工厂技能,
+    # 节点内 i18n 引用已递归反查为文本(富文本标签保留)
+    growth_map = {g["charId"]: g for g in (raw.get("CharGrowthTable") or {}).values()}
+    talent_map = {cid: _resolve_i18n_deep(g["talentNodeMap"], t)
+                  for cid, g in growth_map.items() if g.get("talentNodeMap")}
     for cid, c in raw["CharacterTable"].items():
         lv1, lv_max = {}, {}
         for seg in c.get("attributes", []):
@@ -416,6 +434,12 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             "recommendedWeapons": recommended,
             "battleTags": [n for n in battle_tag_names if n],
             "stationTags": station_tags,
+            "talentNodeMap": talent_map.get(cid) or None,
+            "charTypeId": growth_map.get(cid, {}).get("charTypeId"),
+            "mainAttrType": growth_map.get(cid, {}).get("mainAttrType"),
+            "subAttrType": growth_map.get(cid, {}).get("subAttrType"),
+            "charBreakCostMap": _resolve_i18n_deep(growth_map.get(cid, {}).get("charBreakCostMap"), t) or None,
+            "skillLevelUp": _resolve_i18n_deep(growth_map.get(cid, {}).get("skillLevelUp"), t) or None,
             "wiki": ({"itemId": w["itemId"], "rarityStars": w["rarityStars"],
                       "icon": w["icon"], "illustration": w.get("illustration"),
                       "detail": w.get("detail")} if w else None),
@@ -477,7 +501,8 @@ def write(payload: dict) -> None:
     不在干员文件与索引中重复。
     """
     dump_dir(PRODUCT, payload["characters"],
-             exclude_index=("skills", "potentials", "wiki", "sources"))
+             exclude_index=("skills", "skillGroupMap", "potentials", "talentNodeMap",
+                            "charBreakCostMap", "skillLevelUp", "wiki", "sources"))
     dest = DATA_DIR / PRODUCT / "_global.json"
     dest.write_text(json.dumps({"breakStages": payload["breakStages"]},
                                ensure_ascii=False, indent=2), encoding="utf-8")
