@@ -299,12 +299,21 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                                      "combo": b.get("comboSkillLevel"),
                                      "ultimate": b.get("ultimateSkillLevel")}}
                     for b in (raw["CharBreakStageTable"] or {}).values()]
-    # 天赋节点(CharGrowthTable.talentNodeMap,与数据源同构):nodeType
-    # 1=突破 2=装备破解 3=天赋(属性加成/好感度) 4=被动技能 5=工厂技能,
-    # 节点内 i18n 引用已递归反查为文本(富文本标签保留)
+    # 天赋节点(CharGrowthTable.talentNodeMap)按 nodeType 分组:
+    # talentNodeMap = {"1": [节点…], …},键即 nodeType(1=突破 2=装备破解
+    # 3=天赋(属性加成/好感度) 4=被动技能 5=工厂技能),节点内不再重复
+    # nodeType;i18n 引用已递归反查为文本(富文本标签保留)
     growth_map = {g["charId"]: g for g in (raw.get("CharGrowthTable") or {}).values()}
-    talent_map = {cid: _resolve_i18n_deep(g["talentNodeMap"], t)
-                  for cid, g in growth_map.items() if g.get("talentNodeMap")}
+    talent_map = {}
+    for cid, g in growth_map.items():
+        grouped: dict[str, list[dict]] = {}
+        for nid, node in (g.get("talentNodeMap") or {}).items():
+            node = dict(node)
+            nt = node.pop("nodeType", None)
+            grouped.setdefault(str(nt) if nt is not None else "unknown", []).append(node)
+        order = ["1", "2", "3", "4", "5"]
+        keys = [k for k in order if k in grouped] + sorted(set(grouped) - set(order))
+        talent_map[cid] = {k: grouped[k] for k in keys}
     for cid, c in raw["CharacterTable"].items():
         lv1, lv_max = {}, {}
         for seg in c.get("attributes", []):

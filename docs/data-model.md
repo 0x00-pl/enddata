@@ -108,12 +108,12 @@ reports/build-report.md               ← 人类可读构建报告
   转储,均为解包数据本身的缺口
 - 技能文本的富文本标签(`<@ba.key>`、`<#ba.xx>`、`</>` 等)原样保留,
   前端经 `rich()` 转义后转换为 `span.rt` 渲染
-- `talentNodeMap` 与源表 CharGrowthTable.talentNodeMap 同构(节点 nodeId → 节点,
-  i18n 引用已递归反查为文本、富文本保留)。nodeType:1=突破、2=装备破解、
-  3=天赋(`attributeNodeInfo`:`title`/`desc`/`attributeModifiers` 属性加成/
-  `favorability` 好感门槛)、4=被动技能(`passiveSkillNodeInfo`:`name`/`iconId`/
-  `talentEffectId`,与 potentials 的 effectId 同源)、5=工厂技能
-  (`factorySkillNodeInfo`);各节点 `requiredItem` 为解锁消耗
+- `talentNodeMap` 按节点类型分组(键 = nodeType 字符串,节点内不再重复该字段,
+  i18n 引用已递归反查为文本、富文本保留):`"1"`=突破、`"2"`=装备破解、
+  `"3"`=天赋(`attributeNodeInfo`:`title`/`desc`/`attributeModifiers` 属性加成/
+  `favorability` 好感门槛)、`"4"`=被动技能(`passiveSkillNodeInfo`:`name`/`iconId`/
+  `talentEffectId`,与 potentials 的 effectId 同源)、`"5"`=工厂技能
+  (`factorySkillNodeInfo`);各节点含 `nodeId` 与 `requiredItem` 解锁消耗
 - `charTypeId` 伤害属性枚举(Physical/Fire/Electric…);`mainAttrType`/`subAttrType`
   主/副属性枚举,与天赋 `attributeModifiers.attrType` 同体系
 - `charBreakCostMap` 与源表同构(节点 nodeId → 节点):charBreak20/40/60/70 +
