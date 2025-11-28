@@ -308,12 +308,24 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
     for cid, g in growth_map.items():
         grouped: dict[str, list[dict]] = {}
         for nid, node in (g.get("talentNodeMap") or {}).items():
-            node = dict(node)
+            node = _resolve_i18n_deep(node, t)
+            if not isinstance(node, dict):
+                continue
             nt = node.pop("nodeType", None)
             grouped.setdefault(str(nt) if nt is not None else "unknown", []).append(node)
         order = ["1", "2", "3", "4", "5"]
         keys = [k for k in order if k in grouped] + sorted(set(grouped) - set(order))
         talent_map[cid] = {k: grouped[k] for k in keys}
+    # 被动技能节点(nodeType=4)补描述:passiveSkillNodeInfo 源结构只有 name,
+    # 技能描述挂在 talentEffectId 指向的 PotentialTalentEffectTable.desc(富文本保留)
+    pet_table = raw.get("PotentialTalentEffectTable") or {}
+    for nodes in talent_map.values():
+        for node in nodes.get("4", []):
+            psi = node.get("passiveSkillNodeInfo") or {}
+            eff = pet_table.get(psi.get("talentEffectId")) or {}
+            desc = t(eff.get("desc"))
+            if desc:
+                psi["desc"] = desc
     for cid, c in raw["CharacterTable"].items():
         lv1, lv_max = {}, {}
         for seg in c.get("attributes", []):

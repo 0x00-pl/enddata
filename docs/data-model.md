@@ -111,8 +111,10 @@ reports/build-report.md               ← 人类可读构建报告
 - `talentNodeMap` 按节点类型分组(键 = nodeType 字符串,节点内不再重复该字段,
   i18n 引用已递归反查为文本、富文本保留):`"1"`=突破、`"2"`=装备破解、
   `"3"`=天赋(`attributeNodeInfo`:`title`/`desc`/`attributeModifiers` 属性加成/
-  `favorability` 好感门槛)、`"4"`=被动技能(`passiveSkillNodeInfo`:`name`/`iconId`/
-  `talentEffectId`,与 potentials 的 effectId 同源)、`"5"`=工厂技能
+  `favorability` 好感门槛)、`"4"`=被动技能(`passiveSkillNodeInfo`:`name`/`desc`/
+  `iconId`/`talentEffectId`——desc 经 talentEffectId 从 PotentialTalentEffectTable
+  反查,131/131 全覆盖,占位符 `{atk:0%}` 等随黑板数值由前端填充,与 potentials
+  惯例一致)、`"5"`=工厂技能
   (`factorySkillNodeInfo`);各节点含 `nodeId` 与 `requiredItem` 解锁消耗
 - `charTypeId` 伤害属性枚举(Physical/Fire/Electric…);`mainAttrType`/`subAttrType`
   主/副属性枚举,与天赋 `attributeModifiers.attrType` 同体系
