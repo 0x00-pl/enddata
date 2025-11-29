@@ -112,9 +112,9 @@ reports/build-report.md               ← 人类可读构建报告
   i18n 引用已递归反查为文本、富文本保留):`"1"`=突破、`"2"`=装备破解、
   `"3"`=天赋(`attributeNodeInfo`:`title`/`desc`/`attributeModifiers` 属性加成/
   `favorability` 好感门槛)、`"4"`=被动技能(`passiveSkillNodeInfo`:`name`/`desc`/
-  `iconId`/`talentEffectId`——desc 经 talentEffectId 从 PotentialTalentEffectTable
-  反查,131/131 全覆盖,占位符 `{atk:0%}` 等随黑板数值由前端填充,与 potentials
-  惯例一致)、`"5"`=工厂技能
+  `values`/`iconId`/`talentEffectId`——desc 经 talentEffectId 从 PotentialTalentEffectTable
+  反查,131/131 全覆盖;`values` 收录该 effect dataList 全部数值,desc 占位符
+  245/245 可由 values 替换)、`"5"`=工厂技能
   (`factorySkillNodeInfo`);各节点含 `nodeId` 与 `requiredItem` 解锁消耗
 - `charTypeId` 伤害属性枚举(Physical/Fire/Electric…);`mainAttrType`/`subAttrType`
   主/副属性枚举,与天赋 `attributeModifiers.attrType` 同体系
@@ -133,9 +133,12 @@ reports/build-report.md               ← 人类可读构建报告
 - `icon`/`professionIcon` 只存裸 id(`icon_<charId>` / 职业图标 id),
   站点构建期经 icon_git 源本地化注入 URL
 - `potentials.values` 与技能 `castCost`/`buffs` 来自 rmxlinux 的
-  `Json/BuffData`、`Json/SkillData`(表现层定义):potentials 描述中的
-  `{键:0%}` 占位符数值即 `values` 的键值;`castCost` 为技能真实消耗
-  (如终结技 8 点)
+  `Json/BuffData`、`Json/SkillData`(表现层定义),并合并 PotentialTalentEffectTable
+  `dataList` 的全部数值(attachBuff/attachSkill 黑板、attrModifier 经属性枚举转
+  属性名、skillBbModifier/skillParamModifier):描述中的 `{键:0%}` 占位符
+  191/204 按同名键精确命中 `values`,其余 13 处数值也在 `values` 中
+  (游戏按位置对应,键名与占位符不一致,如「冷却-3秒」存为 `param2: -3.0`);
+  `castCost` 为技能真实消耗(如终结技 8 点)
 - `weapon`/`recommendedWeapons` 来自 defaultWeaponId 与 CharWpnRecommendTable(join 武器表名称)
 - `stationTags` 派驻标签描述来自 CharacterTagDesTable(基建加成全文,i18n 已反查)
 - `breakStages` 不在干员文件内:来自全局表 CharBreakStageTable(实测 33 名干员完全一致),

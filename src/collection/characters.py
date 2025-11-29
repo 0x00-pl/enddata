@@ -28,6 +28,7 @@ from tools.tables import (
     ATTRACTIONS_OF_INTEREST,
     DATA_DIR,
     I18n,
+    attr_name,
     dump_dir,
     i18n_table,
     flat_attrs,
@@ -240,6 +241,32 @@ def _resolve_i18n_deep(v, t: I18n):
     return v
 
 
+def _effect_values(eff: dict) -> dict:
+    """PotentialTalentEffectTable 行的 dataList → {占位符 key: 数值}。
+
+    描述中的 {key:格式} 占位符数值分散在 dataList 各条目的
+    attachBuff.blackboard / attrModifier(经 attr_name 转属性名)/
+    skillBbModifier / skillParamModifier 中。"""
+    vals: dict = {}
+    for d in eff.get("dataList") or []:
+        for b in (d.get("attachBuff") or {}).get("blackboard") or []:
+            if b.get("key"):
+                vals[b["key"]] = b.get("value")
+        for b in (d.get("attachSkill") or {}).get("blackboard") or []:
+            if b.get("key"):
+                vals[b["key"]] = b.get("value")
+        am = d.get("attrModifier") or {}
+        if am.get("attrValue"):
+            vals[attr_name(am.get("attrType")) or f"attr{am.get('attrType')}"] = am.get("attrValue")
+        sb = d.get("skillBbModifier") or {}
+        if sb.get("bbKey"):
+            vals[sb["bbKey"]] = sb.get("floatValue")
+        sp = d.get("skillParamModifier") or {}
+        if sp.get("paramType"):
+            vals[f"param{sp.get('paramType')}"] = sp.get("paramValue")
+    return vals
+
+
 def collect_skills(raw: dict, t: I18n, group_index: dict) -> dict[str, list[dict]]:
     """SkillPatchTable 按(干员, 技能)分组,等级补丁聚合为 levels 列表。
 
@@ -316,8 +343,9 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
         order = ["1", "2", "3", "4", "5"]
         keys = [k for k in order if k in grouped] + sorted(set(grouped) - set(order))
         talent_map[cid] = {k: grouped[k] for k in keys}
-    # 被动技能节点(nodeType=4)补描述:passiveSkillNodeInfo 源结构只有 name,
-    # 技能描述挂在 talentEffectId 指向的 PotentialTalentEffectTable.desc(富文本保留)
+    # 被动技能节点(nodeType=4)补名称描述与数值:passiveSkillNodeInfo 源结构
+    # 只有 name 哈希,desc 与占位符数值挂在 talentEffectId 指向的
+    # PotentialTalentEffectTable(desc 富文本保留;dataList → values)
     pet_table = raw.get("PotentialTalentEffectTable") or {}
     for nodes in talent_map.values():
         for node in nodes.get("4", []):
@@ -326,6 +354,9 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             desc = t(eff.get("desc"))
             if desc:
                 psi["desc"] = desc
+            vals = _effect_values(eff)
+            if vals:
+                psi["values"] = vals
     for cid, c in raw["CharacterTable"].items():
         lv1, lv_max = {}, {}
         for seg in c.get("attributes", []):
@@ -391,11 +422,16 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                                  if (d.get("attachSkill") or {}).get("skillId")})
             buff_json = _repo_json("rmxlinux/EndfieldData",
                                    f"Json/BuffData/buff_{cid}_potential_{b.get('level')}.json")
+            # 描述占位符数值:优先 BuffData 黑板,缺失的由 effect.dataList 补
+            # (attachBuff.blackboard / attrModifier / skillBbModifier 等)
+            values = _blackboard_values(buff_json) or {}
+            for k, v in _effect_values(effect).items():
+                values.setdefault(k, v)
             potentials.append({
                 "level": b.get("level"),
                 "name": t(b.get("name")),
                 "desc": desc or None,
-                "values": _blackboard_values(buff_json) or None,
+                "values": values or None,
                 "effectId": effect_id,
                 "materials": materials,
                 "skills": skills_hit,
