@@ -1,0 +1,48 @@
+# CLAUDE.md — 项目记忆(会话自动加载)
+
+EndData · 明日方舟:终末地 数据站。采集(Python 标准库)→ JS 构建生成零外链站点。
+详细文档在 `docs/`(sources 数据源调研 / data-model 字段结构 / data-lineage 血缘统计),本文件只记约定与坑。
+
+## 常用命令(全部在仓库根执行)
+
+```bash
+poetry run enddata collection clone/all   # 数据源同步 / 全量采集
+npm run build                             # 即 node web/build.mjs → dist/
+python3 -m http.server 8321 --bind 127.0.0.1 --directory dist
+```
+
+- 采集重跑后必须重跑 `npm run build`(数据集只存裸 id,URL 由构建期注入)。
+- 唯一根目录是 project-root;JS 项目根也是它(package.json 在根,零 npm 依赖)。
+- `data/`、`dist/`、`sources/` 均已 gitignore;`.zcode/` 不要提交。
+
+## 数据结构约定
+
+- **技能**:`skillGroupMap` 与源表 CharGrowthTable.skillGroupMap 同构——键为完整组 id
+  (`<charId>_<族>`),组对象 = 源组全字段(condition*/icon/name/desc/skillGroupType,
+  i18n 已反查) + `skillList` 逐成员展开;成员单数 `skillId` 与 SkillPatchTable 键
+  一一对应,数值相同的形态变体保持独立条目,忠实源数据不合并。
+  四个主技能槽:skillGroupType 0=普攻 1=战技 2=终结 3=连携。
+- **未入组 → `"unknown"`**:装备无套装、干员附属技能(被动/变体)统一入 `unknown` 键。
+- **全局共享 → `_global.json`**:characters(突破阶段 breakStages)、equips(套装/强化)。
+- **富文本**:i18n 文本一律保留 `<@ba.xx>`/`</>` 标签原样,不要在采集侧剥离;
+  前端 `rich()` 先整体转义再转 `span.rt`(style.css 已有样式)。
+- **描述占位符数值来源**:`{key:fmt}` 的值不在文本里,按位置/键查——
+  技能 → 成员 `levels[].blackboard`;潜能 → `potentials[].values`;
+  被动节点 → `passiveSkillNodeInfo.values`;天赋节点 → `attributeNodeInfo.attributeModifiers`。
+  潜能/被动 values 已合并 PotentialTalentEffectTable.dataList 全部数值
+  (attachBuff/attachSkill 黑板 + attrModifier 经 attr_name 转属性名);
+  约 6% 占位符与 values 键名为位置对应而非同名(如「冷却-3秒」存为 `param2`)。
+- **chr_9000_endmin 是 NPC 占位条目**:无技能、头像双源 404,其 skillGroupMap
+  引用 endminm/endminf 的技能 id——展开时必须按干员前缀过滤(唯一的多对多情形)。
+
+## 图标(离线源)
+
+- 图标 git 源 `555me/EndfieldAssets`(与 fffdan vfs 同构,17G 完整克隆在 sources/),
+  32 个双源 404 的图标构建期注入 `/icons/placeholder.svg`。
+- `web/build.mjs` 的 walk 会跳过 `skillGroupMap` 子树——组对象的 `icon` 字段
+  不是干员/物品图标引用,勿移除该跳过逻辑。
+
+## 提交
+
+conventional commits 中文描述(`feat(scope): …`),按主题拆分;并行开发中的
+他人 WIP 不要混提。
