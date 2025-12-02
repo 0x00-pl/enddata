@@ -1,4 +1,4 @@
-"""EndData 统一命令行入口:数据采集(collection)、版本监控(version)。
+"""EndData 统一命令行入口:数据采集(collection)、进阶分析(analysis)、版本监控(version)。
 
 用法示例:
     enddata collection clone                   # 克隆/更新数据源仓库到 sources/(含图标 git 源)
@@ -6,6 +6,7 @@
     enddata collection all --lang en           # 以英语为默认翻译语言构建全部数据集
     enddata collection items                   # 只生成 items 数据集(缺表自动补抓)
     enddata collection characters --force      # 强制重抓该产物依赖的原始表
+    enddata analysis team                       # 配队分析:技能/天赋/潜能的需求与产出资源解析
     enddata version --record
 
 站点构建(JS 工具链,非本 CLI):npm run build(js 项目根 = 仓库根)→ 零外链的 dist/
@@ -15,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 
+from analysis import team_comp
 from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, settlements, weapons
 from tools import tables, versions
@@ -46,7 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="EndData · 明日方舟:终末地 战斗与生产数据采集/分析工具集",
     )
     sub = parser.add_subparsers(dest="command", required=True,
-                                metavar="{collection,version}")
+                                metavar="{collection,analysis,version}")
 
     coll = sub.add_parser(
         "collection",
@@ -75,6 +77,16 @@ def build_parser() -> argparse.ArgumentParser:
         _add_lang_arg(pp)
 
     sub.add_parser("version", help="项目版本与数据源版本报告(读取 data/versions.json)")
+
+    ana = sub.add_parser(
+        "analysis",
+        help="进阶分析:基于 data/ 数据集二次计算(产物入 data/analysis/ 与 reports/)",
+    )
+    ana_sub = ana.add_subparsers(dest="analysis_target", required=True,
+                                 metavar="{team}")
+    ana_sub.add_parser(
+        "team", help="配队分析:技能/天赋/潜能的需求与产出资源解析 → reports/team-analysis.md",
+    )
     return parser
 
 
@@ -83,6 +95,12 @@ def main(argv=None) -> None:
 
     if args.command == "version":
         versions.run()
+        return
+
+    # analysis 域
+    if args.command == "analysis":
+        if args.analysis_target == "team":
+            team_comp.main()
         return
 
     # collection 域
