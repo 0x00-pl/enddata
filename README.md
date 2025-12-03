@@ -1,7 +1,7 @@
 # EndData · 明日方舟:终末地 数据站
 
 收集《明日方舟:终末地》的**战斗**与**生产**数据,加工成报告并以网页展示。
-项目按两大功能组织:**数据采集(collection)→ 数据展示(site)**。
+项目按功能组织:**数据采集(collection)→ 进阶分析(analysis)→ 数据展示(site)**。
 
 采集零第三方依赖(Python 标准库),展示由零 npm 依赖的 Node 构建脚本
 (`node web/build.mjs`)生成**零外链**的静态站点(游戏图标在构建期本地化)。
@@ -41,6 +41,9 @@ poetry run enddata collection items                      # 只生成 items 数�
 poetry run enddata collection all --lang en              # 指定默认翻译语言构建(可选 CN/TC/EN/JP/KR/FR/DE/IT/MX/BR/RU/ID/TH/VN)
 poetry run enddata collection all                        # 依赖全部 collection,产出所有数据集与报告
 
+# 进阶分析:基于 data/ 数据集二次计算,产物入 data/analysis/ 与 reports/
+poetry run enddata analysis team                         # 配队分析:技能/天赋/潜能的需求与产出资源解析
+
 # 站点构建:JS 工具链生成零外链的 dist/(复制静态资源 + 图标本地化 + 注入 URL)
 npm run build                                          # 即 node web/build.mjs(js 项目根 = 仓库根)
 
@@ -69,19 +72,21 @@ enddata/
 │   └── data-lineage.md     # 来源血缘关系、追溯规则与统计
 ├── src/                    # 功能代码
 │   ├── enddata/            #   CLI 入口(poetry run enddata <子命令>)
-│   │   └── cli.py              # collection {clone,fetch,all,<产物>} / version
+│   │   └── cli.py              # collection {clone,fetch,all,<产物>} / analysis {team} / version
 │   ├── collection/         #   ① 数据采集:原始数据的收集 + 初步处理(按产物一个模块)
 │   │   ├── fetch.py            # 数据源仓库同步(sources/)+ 原始表按需加载
 │   │   ├── characters.py items.py recipes.py weapons.py equips.py enemies.py
 │   │   └── build_all.py        # 统一入口:全部产物 + meta + 构建报告
+│   ├── analysis/           #   ② 进阶分析:基于 data/ 数据集二次计算(一个主题一个文件)
+│   │   └── team_comp.py        # 配队分析:技能/天赋/潜能的需求与产出资源解析 → reports/
 │   └── tools/              #   工具库
 │       ├── datasource.py       # 数据源访问:本地git → jsdelivr → raw → API 多级回退
 │       ├── tables.py           # 表加载 + i18n 反查 + 属性枚举 + vfs 链接
 │       └── versions.py         # data/versions.json 读写 + enddata version 报告
 ├── sources/                # 数据源(5 个本地 git 克隆,gitignore;含图标源完整克隆盘上约 17G,经血统审查)
 ├── data/                   # 生成的数据:各产物目录(每条一个 <id>.json + index.json)+ meta + versions.json(数据集 gitignore)
-├── reports/                # 生成的报告(build-report.md,入库)
-├── web/                    # ② 网页展示的源码(唯一手写前端源码,不含生成产物)
+├── reports/                # 生成的报告(build-report.md、team-analysis.md,入库)
+├── web/                    # ③ 网页展示的源码(唯一手写前端源码,不含生成产物)
 │   ├── index.html          #   总览/干员/武器/装备/物品/配方/敌人 七个分页
 │   ├── assets/             #   style.css / app.js(读取 /data/)
 │   └── build.mjs           #   站点构建脚本(零 npm 依赖):web/ 源码 + data/ → dist/
