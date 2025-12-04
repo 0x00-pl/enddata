@@ -34,6 +34,10 @@ python3 -m http.server 8321 --bind 127.0.0.1 --directory dist
   约 6% 占位符与 values 键名为位置对应而非同名(如「冷却-3秒」存为 `param2`)。
 - **chr_9000_endmin 是 NPC 占位条目**:无技能、头像双源 404,其 skillGroupMap
   引用 endminm/endminf 的技能 id——展开时必须按干员前缀过滤(唯一的多对多情形)。
+- **分析产物 JSON key 一律英文**:data/analysis/*.json 机器键用英文标识符
+  (资源 atb/usp/poise/heal/shield,维度 firepower/poise/survival/atbCycle/
+  energyCycle/diversity),中文名经顶层 resourceLabels/dimensionLabels 映射;
+  文案解析的状态前缀用 `{term,prefix}` 列表,不拿中文词当 key。
 
 ## 图标(离线源)
 
