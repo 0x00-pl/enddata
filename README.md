@@ -33,11 +33,14 @@ fffdan vfs 同源镜像)落地为本地文件并注入 URL,dist/ 站点零外链
 统一 CLI(子命令见 `poetry run enddata --help`):
 
 ```bash
-# 数据采集:原始表按需自动补抓 + 各产物数据集(只存图标裸 id,不生成 URL)
+# 数据采集:默认离线(仅读本地 sources/,缺表报错),--online 允许联网补抓
+# 快照超过 7 天会弹出数据过期警告;只存图标裸 id,不生成 URL
 poetry run enddata collection clone                      # 更新 sources/ 下数据源仓库(含图标 git 源)
-poetry run enddata collection fetch                      # 更新仓库 + 刷新构建号 + 预热原始表
-poetry run enddata collection characters --force         # 强制重抓干员依赖的原始表
-poetry run enddata collection items                      # 只生成 items 数据集(缺原始表自动补抓)
+poetry run enddata collection fetch                      # 联网:更新仓库 + 刷新构建号 + 预热原始表
+poetry run enddata collection characters                 # 离线生成干员数据集
+poetry run enddata collection characters --online        # 缺原始表时允许联网补抓
+poetry run enddata collection characters --force         # 核对远端 HEAD、有更新才增量拉取,随后本地重读(不逐表重新下载)
+poetry run enddata collection items                      # 只生成 items 数据集(离线;缺表报错)
 poetry run enddata collection all --lang en              # 指定默认翻译语言构建(可选 CN/TC/EN/JP/KR/FR/DE/IT/MX/BR/RU/ID/TH/VN)
 poetry run enddata collection all                        # 依赖全部 collection,产出所有数据集与报告
 

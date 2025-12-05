@@ -2,10 +2,12 @@
 
 用法示例:
     enddata collection clone                   # 克隆/更新数据源仓库到 sources/(含图标 git 源)
-    enddata collection all                     # 依赖全部 collection:自动补抓原始表并产出所有数据集
+    enddata collection fetch                   # 联网:更新数据源仓库 + 刷新构建号 + 预热原始表
+    enddata collection all                     # 全部产物数据集(默认离线直读本地 sources/)
     enddata collection all --lang en           # 以英语为默认翻译语言构建全部数据集
-    enddata collection items                   # 只生成 items 数据集(缺表自动补抓)
-    enddata collection characters --force      # 强制重抓该产物依赖的原始表
+    enddata collection items                   # 只生成 items 数据集(离线;缺表报错)
+    enddata collection items --online          # 缺原始表时允许联网补抓
+    enddata collection characters --force      # 核对远端 HEAD、有更新才增量拉取,随后本地重读
     enddata analysis team                       # 配队分析:技能/天赋/潜能的需求与产出资源解析
     enddata version --record
 
@@ -20,6 +22,7 @@ from analysis import team_comp
 from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, settlements, weapons
 from tools import tables, versions
+from tools.datasource import FetchError, die
 
 PRODUCT_MODULES = {
     "characters": characters,
@@ -68,12 +71,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     fetch.configure_parser(fetch_p)
     _add_lang_arg(fetch_p)
-    all_p = coll_sub.add_parser("all", help="全部产物数据集 + meta + 构建报告")
-    all_p.add_argument("--force", action="store_true", help="重新抓取全部依赖的原始表")
+    all_p = coll_sub.add_parser("all", help="全部产物数据集 + meta + 构建报告(默认离线)")
+    all_p.add_argument("--online", action="store_true", help="缺原始表时允许联网补抓")
+    all_p.add_argument("--force", action="store_true",
+                       help="核对数据源远端 HEAD(一致零下载,有更新增量拉取)后本地重读;隐含 --online")
     _add_lang_arg(all_p)
     for name, mod in PRODUCT_MODULES.items():
-        pp = coll_sub.add_parser(name, help=f"生成 {name} 数据集目录(缺原始表时自动补抓)")
-        pp.add_argument("--force", action="store_true", help="强制重抓该产物依赖的原始表")
+        pp = coll_sub.add_parser(name, help=f"生成 {name} 数据集目录(离线直读本地,缺表报错)")
+        pp.add_argument("--online", action="store_true", help="缺原始表时允许联网补抓")
+        pp.add_argument("--force", action="store_true",
+                        help="核对数据源远端 HEAD(一致零下载,有更新增量拉取)后本地重读;隐含 --online")
         _add_lang_arg(pp)
 
     sub.add_parser("version", help="项目版本与数据源版本报告(读取 data/versions.json)")
@@ -108,16 +115,23 @@ def main(argv=None) -> None:
         fetch.update_repos(no_update=args.no_update, only=args.only or None)
     elif args.target == "fetch":
         tables.set_default_lang(args.lang)
+        tables.set_online(True)  # fetch 即联网命令:本地缺表时照常补抓
         names = sorted({tables.i18n_table() if n == "I18nTextTable_CN" else n
                         for n in ALL_TABLES})
         fetch.run(args, default_names=names)
-    elif args.target == "all":
+    else:  # all / 单产物:默认离线,仅读本地 sources/
         tables.set_default_lang(args.lang)
-        build_all.run(force=args.force)
-    else:  # 单产物
-        tables.set_default_lang(args.lang)
-        mod = PRODUCT_MODULES[args.target]
-        mod.main(force=args.force)
+        is_online = args.online or args.force
+        tables.set_online(is_online)
+        if not is_online:
+            tables.warn_stale()
+        try:
+            if args.target == "all":
+                build_all.run(force=args.force)
+            else:
+                PRODUCT_MODULES[args.target].main(force=args.force)
+        except FetchError as e:
+            die(str(e))
 
 
 if __name__ == "__main__":

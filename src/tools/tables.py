@@ -3,9 +3,22 @@
 from __future__ import annotations
 
 import json
+import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 
-from tools.datasource import PROJECT_ROOT, fetch_gh_file, info, load_json, read_from_git
+from tools.datasource import (
+    PROJECT_ROOT,
+    FetchError,
+    fetch_gh_file,
+    info,
+    load_json,
+    local_head,
+    read_from_git,
+    remote_head,
+    repo_dir,
+    update_repo_to_remote,
+)
 
 DATA_DIR = PROJECT_ROOT / "data"
 REPORTS_DIR = PROJECT_ROOT / "reports"
@@ -35,6 +48,47 @@ def set_default_lang(lang: str) -> None:
 def i18n_table() -> str:
     """当前默认语言的 i18n 表名(load_tables 会把占位表名 I18nTextTable_CN 解析到它)。"""
     return f"I18nTextTable_{DEFAULT_LANG}"
+
+
+# 离线模式开关:默认 True,原始表仅读本地 sources/ 克隆、零网络(采集慢/失败的根源是
+# 联网回退,见 load_table)。CLI 用 --online 允许联网补缺、--force 强制联网重抓(隐含
+# online);程序化调用方同样默认离线,需联网时先调 set_online(True)。
+_ONLINE = False
+
+
+def set_online(online: bool) -> None:
+    global _ONLINE
+    _ONLINE = bool(online)
+
+
+def online() -> bool:
+    return _ONLINE
+
+
+def warn(msg: str) -> None:
+    print(f"警告: {msg}", file=sys.stderr, flush=True)
+
+
+# 主数据源本地快照超过该天数视为可能过期(离线构建前警告一次)
+STALE_DAYS = 7
+
+
+def warn_stale() -> None:
+    """离线构建前的数据过期警告:按 tablecfg 主源仓库的本地 HEAD 日期判断,只读本地 git。
+
+    克隆缺失同样警告(离线模式下无表可用);日期新鲜则保持安静。
+    """
+    from tools import versions  # 惰性导入,与 fetch.py 引 tables 同款,避免加重顶层依赖
+
+    cfg = _tablecfg()
+    head = versions.repo_head({"repo": cfg["repo"], "branch": cfg["branch"]})
+    if head["status"] != "ok":
+        warn(f"本地缺少 {cfg['repo']} 克隆,离线模式无原始表可用;先运行 enddata collection clone")
+        return
+    age = (datetime.now(timezone.utc).date() - date.fromisoformat(head["date"])).days
+    if age > STALE_DAYS:
+        warn(f"数据源快照已 {age} 天未更新({head['sha']} {head['date']}「{head['subject']}」),"
+             "可能落后当前游戏版本;联网刷新请运行 enddata collection fetch,或加 --force 重抓全部表")
 
 ATTRACTIONS_OF_INTEREST = ["MaxHp", "Atk", "Def", "Str", "Agi", "Wisd", "Will"]
 
@@ -132,19 +186,53 @@ def _tablecfg() -> dict:
     return load_json(PROJECT_ROOT / "config" / "sources.json")["sources"]["tablecfg"]
 
 
+# force 刷新时已核对过远端的仓库(每仓库每次运行至多一次,避免逐表重复网络往返)
+_fresh_repos: set[str] = set()
+
+
+def sync_repo_fresh(repo: str, branch: str) -> None:
+    """force 语义的刷新:ls-remote 核对远端 HEAD,一致则零下载;有新提交才增量 fetch+reset。
+
+    网络失败或无本地克隆时不阻塞构建——前者沿用本地快照(提示),后者由 load_table
+    回落 HTTP 逐表抓取。成功与否都只做一次,同仓库后续表直接读本地。
+    """
+    key = f"{repo}@{branch}"
+    if key in _fresh_repos or not repo_dir(repo).is_dir():
+        return
+    _fresh_repos.add(key)
+    remote_sha = remote_head(repo, branch)
+    if remote_sha is None:
+        warn("远端 HEAD 核对失败,沿用本地快照继续(数据可能不是最新)")
+        return
+    local_sha = local_head(repo)
+    if local_sha == remote_sha:
+        return  # 本地已是远端最新,零下载
+    info(f"同步 {key}:{(local_sha or '?')[:7]} → {remote_sha[:7]}(增量)")
+    if not update_repo_to_remote(repo, branch):
+        warn("增量同步失败,沿用本地快照继续(数据可能不是最新)")
+
+
 def load_table(name: str, force: bool = False) -> dict:
     """读取单张原始表(已解析 JSON)。
 
-    优先本地 sources/ git 仓库(git cat-file,首读会按需懒取 blob);
-    force=True 时跳过本地仓库直接走网络(jsdelivr → raw → API)。
+    本地克隆是第一数据源,两种模式都优先直读 sources/ 工作区(git cat-file 兜底):
+        - 默认离线:只读本地,缺表抛 FetchError(零网络);
+        - force:先经 sync_repo_fresh 核对/增量同步仓库(每仓库一次),仍读本地,
+          不逐表重新下载;本地无克隆或缺表时才回退 jsdelivr → raw → API;
+        - online()(--online):缺表时允许联网补抓。
     """
     cfg = _tablecfg()
     repo, branch = cfg["repo"], cfg["branch"]
     remote = f"{cfg.get('table_dir', 'TableCfg')}/{name}.json"
-    data = None
-    if not force:
-        data = read_from_git(repo, remote)
+    if force:
+        sync_repo_fresh(repo, branch)
+    data = read_from_git(repo, remote)
     if data is None:
+        if not (force or online()):
+            raise FetchError(
+                f"缺原始表 {name}(本地 {repo_dir(repo).relative_to(PROJECT_ROOT)} 无该文件),"
+                "当前为离线模式(默认)不联网补抓。请先 enddata collection fetch 更新本地数据源,"
+                "或加 --online 允许联网补抓")
         data, _channel = fetch_gh_file(repo, branch, remote)
     return json.loads(data)
 

@@ -26,8 +26,9 @@ PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies, settlem
 
 def run(force: bool = False) -> None:
     t0 = datetime.now(timezone.utc)
-    versions.record_repo_heads()
-    versions.refresh_game_build()
+    versions.record_repo_heads()  # 只读本地 git
+    if tables.online():
+        versions.refresh_game_build()  # 联网探测官方构建号;离线沿用 data/versions.json 旧值
 
     payloads: dict[str, object] = {}
     t = None

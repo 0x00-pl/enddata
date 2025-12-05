@@ -115,12 +115,12 @@ def configure_clone_parser(parser: argparse.ArgumentParser) -> None:
 
 def configure_parser(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("tables", nargs="*", help="要抓取的表名(不含 .json),缺省为全部产物依赖表")
-    parser.add_argument("--force", action="store_true", help="忽略本地缓存强制重新抓取")
+    parser.add_argument("--force", action="store_true", help="额外核对表源仓库远端 HEAD 并增量同步(仍读本地)")
     parser.add_argument("--no-update", action="store_true", help="跳过数据源仓库更新(离线时使用)")
 
 
 def fetch_tables(names: list[str], force: bool = False) -> None:
-    """按需加载原始表:本地仓库直读,缺 blob 自动懒取,force 时走网络刷新。"""
+    """按需加载原始表:本地仓库直读,缺 blob 自动懒取,force 时先核对远端 HEAD 增量同步。"""
     from tools.tables import load_tables
 
     load_tables(names, force=force)

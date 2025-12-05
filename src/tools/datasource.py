@@ -40,6 +40,52 @@ def git_proxy() -> str | None:
         return None
 
 
+def run_git_in(repo: str, args: list[str], timeout: int = 600) -> tuple[int, str]:
+    """在本地克隆里执行 git 命令(自动注入配置代理;与 collection/fetch.run_git 同策略)。"""
+    cmd = ["git", "-C", str(repo_dir(repo))]
+    proxy = git_proxy()
+    if proxy:
+        cmd += ["-c", f"http.proxy={proxy}", "-c", f"https.proxy={proxy}"]
+    cmd += args
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=git_env())
+    return r.returncode, (r.stdout + r.stderr)
+
+
+def local_head(repo: str) -> str | None:
+    """本地克隆 HEAD sha;无克隆/失败返回 None。"""
+    try:
+        code, out = run_git_in(repo, ["rev-parse", "HEAD"], timeout=10)
+    except (subprocess.TimeoutExpired, OSError):
+        return None
+    return out.strip() if code == 0 else None
+
+
+def remote_head(repo: str, branch: str) -> str | None:
+    """远端分支 HEAD sha(ls-remote 单次往返,不下对象);失败返回 None。"""
+    try:
+        code, out = run_git_in(repo, ["ls-remote", "origin", f"refs/heads/{branch}"], timeout=30)
+    except subprocess.TimeoutExpired:
+        return None
+    if code != 0 or not out.strip():
+        return None
+    return out.split()[0]
+
+
+def update_repo_to_remote(repo: str, branch: str) -> bool:
+    """增量同步本地克隆到远端:fetch 只下载新对象,reset 更新工作区到 FETCH_HEAD。
+
+    完整克隆场景下开销与新增提交量成正比(已有时不重下);失败返回 False。
+    """
+    try:
+        code, _ = run_git_in(repo, ["fetch", "--force", "origin", branch], timeout=600)
+        if code != 0:
+            return False
+        code, _ = run_git_in(repo, ["reset", "--hard", "FETCH_HEAD", "--quiet"], timeout=600)
+        return code == 0
+    except (subprocess.TimeoutExpired, OSError):
+        return False
+
+
 def repo_dir(repo: str) -> Path:
     return REPOS_DIR / repo.replace("/", "__")
 
