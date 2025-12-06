@@ -25,8 +25,8 @@
 from __future__ import annotations
 
 import json
-import re
 
+from tools.placeholders import fill_desc
 from tools.tables import DATA_DIR, I18n, attr_name, dump_dir, i18n_table, load_tables
 
 PRODUCT = "equips"
@@ -39,62 +39,9 @@ REQUIRED_TABLES = [
     "SkillPatchTable",
 ]
 
-# 套装被动描述占位符:{键:fmt}、裸 {键},以及 {1-键:0%} 型表达式(项为数字/键,可 * 连乘)
-_PLACEHOLDER_RE = re.compile(r"\{\s*([^{}:]+?)\s*(?::\s*([^{}]+))?\}")
-_TAG_RE = re.compile(r"<[^>]+>")
-_NUM_RE = re.compile(r"\d+(?:\.\d+)?")
-
-
-def _fmt_value(value: float, spec: str | None) -> str:
-    """按占位符格式说明渲染:'0.0%'/'0%'→百分比,'0'/'0.0'→定点小数,无 spec→整数。"""
-    if spec and spec.endswith("%"):
-        num = spec[:-1]
-        decimals = len(num.split(".")[-1]) if "." in num else 0
-        return f"{value * 100:.{decimals}f}%"
-    decimals = len(spec.split(".")[-1]) if spec and "." in spec else 0
-    return f"{value:.{decimals}f}"
-
-
-def _eval_expr(expr: str, blackboard: dict) -> float | None:
-    """占位符表达式 → 数值:项为数字或 blackboard 键(* 连乘),项间 +/- 求和。
-
-    键查不到(含表内带尾随空格的脏键)返回 None,由调用方保留占位符原样。
-    """
-    total, sign = 0.0, 1.0
-    for term in re.split(r"([+-])", expr):
-        term = term.strip()
-        if not term:
-            continue
-        if term == "+":
-            continue
-        if term == "-":
-            sign = -1.0
-            continue
-        v = 1.0
-        for k in term.split("*"):
-            k = k.strip()
-            if _NUM_RE.fullmatch(k):
-                v *= float(k)
-                continue
-            x = blackboard.get(k, blackboard.get(k.strip()))
-            if not isinstance(x, (int, float)):
-                return None
-            v *= x
-        total += sign * v
-        sign = 1.0
-    return total
-
-
-def _fill_desc(text: str | None, blackboard: dict) -> str | None:
-    """剥离富文本标签(<@ba.vup> 着色、<#ba.*> 状态图标引用),并回填数值占位符。"""
-    if not text:
-        return None
-
-    def sub(m: re.Match) -> str:
-        v = _eval_expr(m.group(1), blackboard)
-        return _fmt_value(v, m.group(2)) if v is not None else m.group(0)
-
-    return _PLACEHOLDER_RE.sub(sub, _TAG_RE.sub("", text)).strip()
+# 套装被动描述的富文本标签与 {键:fmt} 占位符(含裸 {键} 与 {1-键:0%} 型
+# 表达式:项为数字/键,可 * 连乘)由 tools/placeholders.py 共享实现回填;
+# 占位符缺数(键查不到/0 值)直接抛错,不静默留错档文案
 
 
 def suit_effects(raw: dict, t: I18n, tiers: list[dict]) -> list[dict]:
@@ -112,7 +59,7 @@ def suit_effects(raw: dict, t: I18n, tiers: list[dict]) -> list[dict]:
             "count": x.get("equipCnt"),
             "skill": sid,
             "lv": x.get("skillLv"),
-            "desc": _fill_desc(t((patch or {}).get("description")), bb),
+            "desc": fill_desc(t((patch or {}).get("description")), bb),
         })
     return out
 

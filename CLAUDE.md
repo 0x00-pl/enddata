@@ -29,9 +29,18 @@ python3 -m http.server 8321 --bind 127.0.0.1 --directory dist
 - **描述占位符数值来源**:`{key:fmt}` 的值不在文本里,按位置/键查——
   技能 → 成员 `levels[].blackboard`;潜能 → `potentials[].values`;
   被动节点 → `passiveSkillNodeInfo.values`;天赋节点 → `attributeNodeInfo.attributeModifiers`。
-  潜能/被动 values 已合并 PotentialTalentEffectTable.dataList 全部数值
-  (attachBuff/attachSkill 黑板 + attrModifier 经 attr_name 转属性名);
-  约 6% 占位符与 values 键名为位置对应而非同名(如「冷却-3秒」存为 `param2`)。
+  潜能/被动 values = BuffData 文件垫底 + PotentialTalentEffectTable.dataList
+  直接覆盖(attachBuff/attachSkill 黑板 + attrModifier 经 attr_name 转属性名)
+  ——BuffData 是共享模板(常为 0 或非本潜能口径),重叠键以 effect 为准;
+  约 6% 占位符与 values 键名为位置对应而非同名(如「冷却-3秒」存为 `param2`),
+  少数用游戏内部属性名(如 PhysicalAndSpellInflictionEnhance)而 values 存的是
+  AttributeMetaTable 词条名(OriginiumArts)——采集不做别名转换,缺数交由
+  placeholders.py 维持占位符原文。
+  回填实现统一在 `tools/placeholders.py`(采集 weapons/equips 与分析 team_comp
+  共用):fmt 模板渲染、算式键(数字/键 ± 相连、* 连乘)、values 恰有一个
+  `paramN` 时回退顶替未知键名;缺数(键查不到/解析到 0)一律维持占位符原文
+  ——传 missing 清单收集汇总、未传直接抛 ValueError,不回填成「+0%」一类
+  误导值,分析侧在运行末尾汇总打印。
 - **chr_9000_endmin 是 NPC 占位条目**:无技能、头像双源 404,其 skillGroupMap
   引用 endminm/endminf 的技能 id——展开时必须按干员前缀过滤(唯一的多对多情形)。
 - **分析产物 JSON key 一律英文**:data/analysis/*.json 机器键用英文标识符

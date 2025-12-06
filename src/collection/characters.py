@@ -422,11 +422,11 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                                  if (d.get("attachSkill") or {}).get("skillId")})
             buff_json = _repo_json("rmxlinux/EndfieldData",
                                    f"Json/BuffData/buff_{cid}_potential_{b.get('level')}.json")
-            # 描述占位符数值:优先 BuffData 黑板,缺失的由 effect.dataList 补
-            # (attachBuff.blackboard / attrModifier / skillBbModifier 等)
+            # 描述占位符数值:BuffData 黑板垫底、effect.dataList 直接覆盖——
+            # BuffData 是共享/默认模板(常为 0 或非本潜能口径的默认值),desc 与
+            # 真值同在 PotentialTalentEffectTable 行内,重叠键以 effect 为准
             values = _blackboard_values(buff_json) or {}
-            for k, v in _effect_values(effect).items():
-                values.setdefault(k, v)
+            values.update(_effect_values(effect))
             potentials.append({
                 "level": b.get("level"),
                 "name": t(b.get("name")),

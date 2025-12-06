@@ -16,8 +16,7 @@
 
 from __future__ import annotations
 
-import re
-
+from tools.placeholders import fill_desc
 from tools.tables import I18n, dump_dir, i18n_table, load_tables
 
 PRODUCT = "weapons"
@@ -30,45 +29,9 @@ REQUIRED_TABLES = [
     "WeaponBreakThroughTemplateTable",
 ]
 
-# 技能描述富文本标签(<@ba.vup>…</> 等)与数值占位符({atk_up:0.0%};
-# 少量为键乘积 {spell_dmg_up2*max_stack:0.0%} 或键带尾随空格 {dmg_up :0.0%})
-_TAG_RE = re.compile(r"<[^>]+>")
-_PLACEHOLDER_RE = re.compile(r"\{\s*([A-Za-z_]\w*(?:\s*\*\s*[A-Za-z_]\w*)*)\s*(?::\s*([^}]+))?\}")
-
-
-def _fmt_value(value: float, spec: str | None) -> str:
-    """按占位符格式说明渲染数值:'0.0%'/'0%'→百分比,'0'/'0.0'/'0.00'→定点小数。"""
-    if spec and spec.endswith("%"):
-        num = spec[:-1]
-        decimals = len(num.split(".")[-1]) if "." in num else 0
-        return f"{value * 100:.{decimals}f}%"
-    decimals = len(spec.split(".")[-1]) if spec and "." in spec else 0
-    return f"{value:.{decimals}f}"
-
-
-def _fill_desc(text: str | None, blackboard: dict) -> str | None:
-    """剥离富文本标签,并用对应等级的 blackboard 回填 {key:fmt} 占位符。
-
-    支持键乘积({a*b:0.0%});键查不到(含表内 'cd ' 带尾随空格的脏数据)
-    时保留原样,如实呈现。
-    """
-    if not text:
-        return None
-
-    def lookup(key: str):
-        v = blackboard.get(key, blackboard.get(key.strip()))
-        return v if isinstance(v, (int, float)) else None
-
-    def sub(m: re.Match) -> str:
-        factors = [lookup(k) for k in m.group(1).split("*")]
-        if any(v is None for v in factors):
-            return m.group(0)
-        v = 1.0
-        for x in factors:
-            v *= x
-        return _fmt_value(v, m.group(2))
-
-    return _PLACEHOLDER_RE.sub(sub, _TAG_RE.sub("", text)).strip()
+# 技能描述的富文本标签与 {key:fmt} 占位符(少量键乘积 {a*b:0.0%}、键带尾随
+# 空格的脏数据)由 tools/placeholders.py 共享实现回填:标签剥离 + 数值代入;
+# 占位符缺数(键查不到/0 值)直接抛错,不静默留错档文案
 
 
 def _blackboard(patch: dict) -> dict:
@@ -100,12 +63,12 @@ def collect_potential_skill(raw: dict, t: I18n, weapon: dict) -> dict | None:
         lv: dict = {"level": p.get("level"), "blackboard": bb}
         desc = t(p.get("description"))
         if desc and desc != base_desc:
-            lv["desc"] = _fill_desc(desc, bb)
+            lv["desc"] = fill_desc(desc, bb)
         levels.append(lv)
     return {
         "skillId": sid,
         "name": t(patches[0].get("skillName")),
-        "desc": _fill_desc(base_desc, _blackboard(patches[0])),
+        "desc": fill_desc(base_desc, _blackboard(patches[0])),
         "levels": levels,
     }
 
