@@ -11,8 +11,9 @@
     附着/异常状态/特殊资源  描述文案解析(元素附着、燃烧/导电/重击/猎矢/启示等)
 
 流程:① 描述提取(技能/天赋/潜能三个提取函数,预处理 = 满级 + 标签剥离 +
-blackboard 治疗/护盾提取)→ ② 注册 regex(需求/产出两张表,宽松捕获 + 后处理
-函数精筛)→ ③ 针对每条描述提取需求和产出 → ④ 收集汇总 → 保存结果。
+blackboard 治疗/护盾提取 + {占位符} 回填满级 blackboard/values 数值)→
+② 注册 regex(需求/产出两张表,宽松捕获 + 后处理函数精筛)→
+③ 针对每条描述提取需求和产出 → ④ 收集汇总 → 保存结果。
 
 输出:
     reports/team-analysis.md       人读报告(只保留逐干员技能资源解析一张表)
@@ -34,6 +35,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import NamedTuple
 
+from tools.placeholders import fill_placeholders
 from tools.tables import DATA_DIR, REPORTS_DIR
 
 # ---------------------------------------------------------------- 常量
@@ -97,6 +99,17 @@ def _strip_tags(desc: str | None) -> str | None:
     return _DESC_TAG_RE.sub(r"\1", desc)
 
 
+# 描述占位符 {key:fmt} 回填:实现在 tools/placeholders.py(采集/分析共用);
+# 缺数(键查不到/解析到 0)维持占位符原文,未解析键名(位置对应键/采集缺 0)
+# 汇总进 _unresolved_ph 供运行末尾打印。
+_unresolved_ph: list[str] = []
+
+
+def _fill_placeholders(desc: str | None, values: dict) -> str | None:
+    """回填 {key:fmt} 为满级实际值;无值不编造,保留原文并计入 _unresolved_ph。"""
+    return fill_placeholders(desc, values, missing=_unresolved_ph)
+
+
 def analyze_skill(sk: dict, slot: str, group_name: str | None, desc: str | None) -> SkillRes:
     """预处理一条技能描述:提取满级 blackboard 中的治疗/护盾形态(文案解析见 ③)。"""
     levels = sk.get("levels") or []
@@ -109,6 +122,7 @@ def analyze_skill(sk: dict, slot: str, group_name: str | None, desc: str | None)
             support.setdefault(RES_SHIELD, {})[key] = value
         elif _HEAL_RE.search(key):
             support.setdefault(RES_HEAL, {})[key] = value
+    desc = _fill_placeholders(desc, bb)
     return SkillRes(
         skillId=sk.get("skillId"),
         name=sk.get("name") or group_name,
@@ -131,10 +145,17 @@ def _extract_skill_res(entry: dict) -> list[SkillRes]:
     skills: list[SkillRes] = []
     for gid, g in ordered:
         slot = SLOT_NAMES.get(g.get("skillGroupType"), "附属")
-        for sk in g.get("skillList") or []:
-            # 成员描述缺失时(官方分组文本统一挂在组上)回退组描述
+        members = g.get("skillList") or []
+        # 组描述的占位符按组内成员 blackboard 并集回填(如 poise 在重击段)
+        pool: dict = {}
+        for sk in members:
+            lv = (sk.get("levels") or [{}])[-1]
+            pool.update(lv.get("blackboard") or {})
+        group_desc = _fill_placeholders(_strip_tags(g.get("desc")), pool)
+        for sk in members:
+            own = sk.get("desc")
             parsed = analyze_skill(sk, slot, g.get("name"),
-                                   _strip_tags(sk.get("desc") or g.get("desc")))
+                                   _strip_tags(own) if own else group_desc)
             parsed.group = g.get("name")
             parsed.groupId = gid
             skills.append(parsed)
@@ -143,7 +164,7 @@ def _extract_skill_res(entry: dict) -> list[SkillRes]:
 
 def _extract_talents(entry: dict) -> list[ExtraEntry]:
     """talentNodeMap 的被动技能节点 → 天赋条目(正式名称+描述,同点多等级取最高等级)。"""
-    best: dict[str, tuple[int, str]] = {}
+    best: dict[str, tuple[int, str, dict]] = {}
     for nodes in (entry.get("talentNodeMap") or {}).values():
         for n in nodes:
             ps = n.get("passiveSkillNodeInfo") or {}
@@ -152,10 +173,11 @@ def _extract_talents(entry: dict) -> list[ExtraEntry]:
                 continue
             level = ps.get("level") or 0
             if name not in best or level > best[name][0]:
-                best[name] = (level, desc)
+                best[name] = (level, desc, ps.get("values") or {})
     out: list[ExtraEntry] = []
-    for name, (_level, desc) in best.items():
-        out.append(ExtraEntry(kind="天赋", name=name, desc=_strip_tags(desc)))
+    for name, (_level, desc, values) in best.items():
+        out.append(ExtraEntry(kind="天赋", name=name,
+                              desc=_fill_placeholders(_strip_tags(desc), values)))
     return out
 
 
@@ -165,7 +187,8 @@ def _extract_potentials(entry: dict) -> list[ExtraEntry]:
     for p in entry.get("potentials") or []:
         out.append(ExtraEntry(kind="潜能",
                               name=p.get("name") or f"潜能·{p.get('level')}",
-                              desc=_strip_tags(p.get("desc"))))
+                              desc=_fill_placeholders(_strip_tags(p.get("desc")),
+                                                      p.get("values") or {})))
     return out
 
 
@@ -204,6 +227,19 @@ def _extract_terms(text: str) -> list[str]:
 def _post_terms(text: str) -> list[str]:
     """捕获片段中的资源词条原样保留:「施加缓速和法术脆弱」→ 缓速、法术脆弱。"""
     return _extract_terms(text)
+
+
+def _post_purify(text: str) -> list[str]:
+    """净化产出:「净化全队的寒冷附着和冻结状态」→ 净化全队的xx。
+
+    净化到首个词条之间的范围修饰(「全队的」)套用到片段内每个词条;
+    词条后的「状态」不在词表,自然丢弃。
+    """
+    terms = _extract_terms(text)
+    if not terms:
+        return []
+    prefix = text[:_TERM_RE.search(text).start()]
+    return [f"净化{prefix}{t}" for t in terms]
 
 
 def _post_passive_consume(text: str) -> list[str]:
@@ -284,8 +320,13 @@ _DEMAND_PATTERNS: list[DescPattern] = [
                 re.compile(r"(?=[^。;\n]*可以发动)(?P<demand>[^。;\n]*)"), _post_all_terms),
 ]
 
-# 产出 regex 表(捕获组统一命名 produce)
+# 产出 regex 表(捕获组统一命名 produce;优先级即列表顺序)
 _PRODUCE_PATTERNS: list[DescPattern] = [
+    # 净化:「净化全队的寒冷附着和冻结状态」→ 净化全队的寒冷附着、净化全队的冻结
+    # (须先于「施加产出」:净化片段内的「附着」会被后者当作施加动词截胡)
+    DescPattern("净化产出",
+                re.compile(rf"净化(?P<produce>[^，。;\n]{{0,16}})"),
+                _post_purify),
     # 施加/承受/转化:「施加导电」「转化为猎矢」「敌人持续受到缓速」
     # 「(目标)被施加缓速」(陈述句)→ xx
     DescPattern("施加产出",
@@ -502,20 +543,13 @@ def render_report(roster: list[Operator], meta: dict, now: str) -> str:
         f"- 数据源:{src.get('repo', 'rmxlinux/EndfieldData')}@{src.get('branch', 'main')}"
         f"(游戏 build {game.get('build', '?')});数据集:data/characters/",
         "- 处理来源:技能(满级 blackboard + 描述)、天赋(talentNodeMap 被动节点,"
-        "同点多等级取最高)、潜能(潜能描述);仅解析出资源时入表", "",
-        "口径:满级数值;按一次施放 / 一套普攻连招(含下落·冲锋变体)计。"
-        "按需求忽略**技力、终结技能量、失衡值、冷却**四项,"
-        "本表只展示触发/消耗条件、治疗/护盾与文案解析的附着·异常状态·特殊资源。"
-        "需求/产出两列为描述文案解析:宽松捕获片段 + 后处理函数精筛——「消耗xx」"
-        "记为 xx,「xx被消耗(被吸收)」记为 xx被消耗,「被xx(被冻结/被附着源石"
-        "结晶等)」记为 被xx,「每当/当…有敌人被施加xx后」记为 被施加xx,"
-        "陈述句「(目标)被施加xx」与施加/获得/生成/返还记入产出;"
-        "数值资源以 blackboard 为准、不在文案中重复计。",
+        "同点多等级取最高)、潜能(潜能描述);仅解析出资源时入表",
     ]
     sections = [_char_section(c) for c in sorted(roster, key=lambda x: x.id)]
     listed = sum(1 for s in sections if s)
-    lines[-1] += f"全部 {listed} 名干员均有条目。" if listed == len(roster) else \
-        f"共列出 {listed}/{len(roster)} 名干员。"
+    lines.append("")
+    lines.append(f"全部 {listed} 名干员均有条目。" if listed == len(roster) else
+                 f"共列出 {listed}/{len(roster)} 名干员。")
     lines.append("")
     lines += [line for s in sections for line in s]
     return "\n".join(lines)
@@ -545,6 +579,7 @@ def _save_results(report: str, roster_count: int) -> None:
 # ---------------------------------------------------------------- 主函数
 def run() -> None:
     """主函数:提取描述 → 解析需求/产出 → 收集汇总 → 保存结果。"""
+    _unresolved_ph.clear()
     entries = []
     for f in sorted(CHAR_DIR.glob("chr_*.json")):
         if f.stem in EXCLUDED_IDS:
@@ -562,6 +597,14 @@ def run() -> None:
     meta = _load_meta()
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
     _save_results(render_report(roster, meta, now), len(roster))
+    if _unresolved_ph:
+        stat: dict[str, int] = {}
+        for k in _unresolved_ph:
+            stat[k] = stat.get(k, 0) + 1
+        detail = "、".join(f"{k}×{n}" for k, n in
+                           sorted(stat.items(), key=lambda kv: -kv[1]))
+        print(f"  提示:{len(_unresolved_ph)} 处占位符无值未回填"
+              f"(位置对应键/采集缺 0,保留原文):{detail}")
 
 
 def main() -> None:
