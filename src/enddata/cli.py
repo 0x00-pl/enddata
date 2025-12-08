@@ -1,4 +1,4 @@
-"""EndData 统一命令行入口:数据采集(collection)、进阶分析(analysis)、版本监控(version)。
+"""EndData 统一命令行入口:数据采集(collection)、进阶分析(analysis)、版本监控(version)、id 关联映射(idmap)。
 
 用法示例:
     enddata collection clone                   # 克隆/更新数据源仓库到 sources/(含图标 git 源)
@@ -9,6 +9,9 @@
     enddata collection items --online          # 缺原始表时允许联网补抓
     enddata collection characters --force      # 核对远端 HEAD、有更新才增量拉取,随后本地重读
     enddata analysis team                       # 配队分析:技能/天赋/潜能的需求与产出资源解析
+    enddata idmap build                         # 扫描 rmxlinux 源,重建 data/id_map/ 关联映射产物
+    enddata idmap lookup <id>                   # 按 id 值查关联组(定义 + 引用)
+    enddata idmap relate <file#path>            # 按定位符走关联模式(变量绑定不全时报错)
     enddata version --record
 
 站点构建(JS 工具链,非本 CLI):npm run build(js 项目根 = 仓库根)→ 零外链的 dist/
@@ -21,7 +24,7 @@ import argparse
 from analysis import team_comp
 from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, settlements, weapons
-from tools import tables, versions
+from tools import id_links, tables, versions
 from tools.datasource import FetchError, die
 
 PRODUCT_MODULES = {
@@ -51,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="EndData · 明日方舟:终末地 战斗与生产数据采集/分析工具集",
     )
     sub = parser.add_subparsers(dest="command", required=True,
-                                metavar="{collection,analysis,version}")
+                                metavar="{collection,analysis,version,idmap}")
 
     coll = sub.add_parser(
         "collection",
@@ -94,6 +97,14 @@ def build_parser() -> argparse.ArgumentParser:
     ana_sub.add_parser(
         "team", help="配队分析:技能/天赋/潜能的需求与产出资源解析 → reports/team-analysis.md",
     )
+
+    idm = sub.add_parser(
+        "idmap",
+        help="id 关联映射:扫描 rmxlinux 源建立跨表 id 关联组与模式目录(产物入 data/id_map/)",
+    )
+    idm_sub = idm.add_subparsers(dest="idmap_cmd", required=True,
+                                 metavar="{build,lookup,relate,search,stats}")
+    id_links.configure_parser(idm_sub)
     return parser
 
 
@@ -108,6 +119,11 @@ def main(argv=None) -> None:
     if args.command == "analysis":
         if args.analysis_target == "team":
             team_comp.main()
+        return
+
+    # idmap 域
+    if args.command == "idmap":
+        id_links.run(args)
         return
 
     # collection 域

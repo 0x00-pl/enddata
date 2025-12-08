@@ -47,6 +47,11 @@ poetry run enddata collection all                        # 依赖全部 collecti
 # 进阶分析:基于 data/ 数据集二次计算,产物入 data/analysis/ 与 reports/
 poetry run enddata analysis team                         # 配队分析:技能/天赋/潜能的需求与产出资源解析
 
+# id 关联映射:扫描 rmxlinux 源,建立跨表 id 关联组与关联模式(产物入 data/id_map/)
+poetry run enddata idmap build                           # 重建映射产物(约 30 秒;离线只读本地克隆)
+poetry run enddata idmap lookup <id>                     # 查一个 id 的全部定义/引用位置
+poetry run enddata idmap relate <file#path>              # 沿关联模式查同组条目(变量绑定不全时报错)
+
 # 站点构建:JS 工具链生成零外链的 dist/(复制静态资源 + 图标本地化 + 注入 URL)
 npm run build                                          # 即 node web/build.mjs(js 项目根 = 仓库根)
 
