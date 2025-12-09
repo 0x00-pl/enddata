@@ -47,10 +47,9 @@ poetry run enddata collection all                        # 依赖全部 collecti
 # 进阶分析:基于 data/ 数据集二次计算,产物入 data/analysis/ 与 reports/
 poetry run enddata analysis team                         # 配队分析:技能/天赋/潜能的需求与产出资源解析
 
-# id 关联映射:扫描 rmxlinux 源,建立跨表 id 关联组与关联模式(产物入 data/id_map/)
-poetry run enddata idmap build                           # 重建映射产物(约 30 秒;离线只读本地克隆)
-poetry run enddata idmap lookup <id>                     # 查一个 id 的全部定义/引用位置
-poetry run enddata idmap relate <file#path>              # 沿关联模式查同组条目(变量绑定不全时报错)
+# id 关联映射:扫描 rmxlinux 源,按循环 LCS 反统一归纳跨表 id 匹配规则(产物入 data/id_map/)
+poetry run enddata idmap build                           # 重建映射产物(全量约 3 分钟;离线只读本地克隆)
+poetry run enddata idmap relate <file#path>              # 查一个定位符匹配的全部规则组
 
 # 站点构建:JS 工具链生成零外链的 dist/(复制静态资源 + 图标本地化 + 注入 URL)
 npm run build                                          # 即 node web/build.mjs(js 项目根 = 仓库根)
@@ -80,7 +79,7 @@ enddata/
 │   └── data-lineage.md     # 来源血缘关系、追溯规则与统计
 ├── src/                    # 功能代码
 │   ├── enddata/            #   CLI 入口(poetry run enddata <子命令>)
-│   │   └── cli.py              # collection {clone,fetch,all,<产物>} / analysis {team} / version
+│   │   └── cli.py              # collection {clone,fetch,all,<产物>} / analysis {team} / idmap {build,relate} / version
 │   ├── collection/         #   ① 数据采集:原始数据的收集 + 初步处理(按产物一个模块)
 │   │   ├── fetch.py            # 数据源仓库同步(sources/)+ 原始表按需加载
 │   │   ├── characters.py items.py recipes.py weapons.py equips.py enemies.py
@@ -90,6 +89,7 @@ enddata/
 │   └── tools/              #   工具库
 │       ├── datasource.py       # 数据源访问:本地git → jsdelivr → raw → API 多级回退
 │       ├── tables.py           # 表加载 + i18n 反查 + 属性枚举 + vfs 链接
+│       ├── id_links.py         # id 关联映射:定位符扫描 + 循环 LCS 规则归纳(enddata idmap)
 │       ├── placeholders.py     # 描述 {key:fmt} 占位符回填(算式键/paramN 回退,采集/分析共用)
 │       └── versions.py         # data/versions.json 读写 + enddata version 报告
 ├── sources/                # 数据源(5 个本地 git 克隆,gitignore;含图标源完整克隆盘上约 17G,经血统审查)

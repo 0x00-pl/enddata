@@ -2,8 +2,8 @@
 
 回答一个问题:**"这个 id 还在哪些文件、哪些字段出现?"** —— 无论它是被定义
 还是被引用。扫描 `sources/rmxlinux__EndfieldData`,按 id 字符串把全部出现位置
-聚成**关联组**,再把同构的关联组归纳成带 `{var}` 的**关联模式**,一并存入
-`data/id_map/`(gitignore 的派生产物,随时可重建)。
+聚成**关联组**,再用**循环最长公共子串(LCS)反统一**把关联组归纳成带 `{vN}`
+变量的**匹配规则**,存入 `data/id_map/`(gitignore 的派生产物,随时可重建)。
 
 ## 定位符规范(描述 id 值所在位置的 path 生成方法)
 
@@ -42,18 +42,44 @@ Json/SkillData/chr_0027_tangtang_combo_skill.json#skillId.chr_0027_tangtang_comb
 TableCfg/StrIdNumTable.json#skill_id.dic.chr_0027_tangtang_combo_skill                                                                    # 键出现(map 键)
 ```
 
-除末段外每段描述结构,末段即 id —— 因此定位符既给出 id 的准确位置(可回 JSON
-逐步走到底),又自描述(末段可 grep)。
-
-## 产物(`enddata idmap build`,约 30 秒)
+## 产物(`enddata idmap build`,全量约 3 分钟)
 
 | 文件 | 内容 |
 |---|---|
-| `ids.jsonl` | 全部关联组:每行 `{id, pid, defs[], refs[]}`,定位符按字典序 |
-| `index.db` | ids.jsonl 的 sqlite 主键索引(lookup/search 用,派生物,可删) |
-| `patterns.json` | 关联模式目录:槽位模板 + 变量示例/例外 + 实例数 |
+| `patterns.json` | 匹配规则目录:`{"rules": [{"patterns": [...]}]}`,数组下标即规则号(rid) |
+| `ids.jsonl` | 全部关联组:每行 `{id, pid, defs[], refs[]}`,pid = 命中的规则号(0 = 单路径组,不成规则) |
 | `files.json` | 反查:每个文件定义/引用了哪些 id |
-| `meta.json` | 数据源 HEAD、扫描范围、计数、解析失败清单 |
+| `meta.json` | 数据源 HEAD、扫描范围、算法版本、计数 |
+
+模式串 = 字面量段与 `{vN}` 变量的有序序列;一条规则的 patterns 列表里**任一**
+模式能按序覆盖(首尾锚定)某定位符,即视为该规则覆盖它。
+
+## 规则生成算法(lcs-v1)
+
+1. **触发**:按字典序遍历 id;其**全部出现位置**(defs+refs,含行键/文件名/
+   补充键)逐一做覆盖检查,已被某条规则匹配的位置跳过;
+2. **规则推导**:存在未覆盖位置 → 对该 id 的全部定位符循环求**最长公共子串**,
+   长度 ≥2 就把每次出现替换为新变量 `{v1}`、`{v2}`…,直到最长公共子串 ≤1;
+   各定位符泛化后的模板串(去重)即新规则的 patterns。id 特有子串通常第一轮
+   就变成 `{v1}`;
+3. **过滤**:只有单条路径的 id 不成规则(pid=0);模式至少含 1 个 ≥4 字符字面量
+   才参与覆盖判定(防全变量退化规则吃掉全部位置);
+4. **先到先得**:覆盖判定按规则加入顺序,首个命中的规则认领该位置;id 归属
+   首条命中规则(触发新规则时归属新规则)。
+
+效果示例 —— tangtang 连携技(id `chr_0027_tangtang_combo_skill`,14 个定位符)
+的规则含如下模式(完整 id 已变量化为 `{v1}`):
+
+```
+Json/S{v3}Data/{v1}{v2}
+Json/S{v3}Data/{v1}{v2}#s{v3}Id.{v1}
+TableCfg/CharGrowthTable{v2}#chr_0027_tangtang.s{v3}GroupMap.chr_0027_tangtang_ComboS{v3}.s{v3}IdList[].{v1}
+TableCfg/StrIdNumTable{v2}#s{v3}_id.dic.{v1}
+```
+
+行为特征:字面 LCS + 先到先得会让规则按**公共片段聚簇** —— 名字片段
+(`tangtang`、`skill` 等)成为字面量,同族 id 的位置被同一规则认领
+(最大的规则覆盖上万个 id),规则数(5.1 万)小于多路径 id 数(11.7 万)。
 
 ## 收集范围与规模(2026-09,rmxlinux@ef902ef)
 
@@ -61,71 +87,36 @@ TableCfg/StrIdNumTable.json#skill_id.dic.chr_0027_tangtang_combo_skill          
 只扫基准语言 CN(其余 13 语言是同键重复定义,`--dir` 可强行附加)。`--all-json`
 全量(含关卡/NPC/口型 7 万+文件,慢且产物大)。
 
-当前规模:6206 文件 → **253,724 个 id**(定义 209,665 · 引用 347,945),归纳出
-**1,279 个模式**,另 13.7 万单例组(仅一处出现,无模式)。
+当前规模:6206 文件 → **253,724 个 id**(定义 209,665 · 引用 347,945)→
+**51,344 条规则**;单路径组 136,667 个(rid=0)。
 
-## 模式归纳
-
-1. **分桶**:每组的定位符各算粗签名(目录, 文件名 token 数, 各段 token 数),
-   签名集合相同的组同桶;
-2. **子集匹配**:槽位组合全库唯一的组,回退并入"槽集合为其子集"的最大模式
-   (组可带模式之外的多余定位符);
-3. **逐槽对齐**:每模式取全部实例(≤200),每(组, 槽) 取一条定位符,跨实例逐
-   位置对齐:常量位置留字面量;相邻可变位置按共变性(变化轨迹完全一致)合并为
-   变量;变量身份 = 该跨度在各实例上的完整取值向量;
-4. **跨槽归并**:取值集合 Jaccard ≥ 0.9(且 ≥5 元素)的变量并为同一变量,例外
-   差集记入 `varExceptions` —— 典型即 chr_9000_endmin 的 skillGroupMap 引用
-   endminm/endminf 前缀技能(CLAUDE.md「系统数据实体」节),例外实例在匹配时
-   自然不命中,不污染一般规则;
-5. **命名**:数字开头的跨度用前邻字面量(`chr_0027_tangtang` → `{chr}`),纯数字
-   用 `num`,其余取示例值首段;模式内同名变量取同一值。
-
-于是有(用户给的原例,现为 P461 系模式的槽):
-
-```
-TableCfg/CharGrowthTable.json#chr_{chr}.skillGroupMap.chr_{chr}_ComboSkill.skillIdList[].chr_{chr}_combo_skill
-  ↔ Json/SkillData/chr_{chr}_combo_skill.json
-  ↔ TableCfg/SkillPatchTable.json#chr_{chr}_combo_skill
-```
-
-## 查询(`enddata idmap {lookup,relate,search,stats}`)
+## 查询(`enddata idmap relate <file#path>`)
 
 ```bash
-poetry run enddata idmap lookup chr_0027_tangtang_combo_skill   # 按 id 直查关联组
-poetry run enddata idmap search tangtang --file TableCfg        # 子串模糊搜 id
-poetry run enddata idmap stats                                  # 规模与头部模式
+poetry run enddata idmap relate 'TableCfg/CharGrowthTable.json#chr_0027_tangtang.skillGroupMap.chr_0027_tangtang_ComboSkill.skillIdList[].chr_0027_tangtang_combo_skill'
 ```
 
-`lookup` 永远能回答(组内全部定义 + 引用 + 所属模式模板)。
-
-`relate <file#path>` 沿**模式**找同组条目,语义从严:
-
-1. 定位符匹配某模式的某槽模板 → 得到变量绑定;
-2. 渲染同模式其余槽;绑定不全的变量先试填关联组 id 本身(模式各槽共享同一 id 值),
-   渲染结果一律对照该 id 的实例组**验证后才输出**;
-3. 仍无法确定的变量(查询方向一对多,如从 `I18nTextTable_CN.json#{num}` 反推
-   `TableCfg/{表}.json#{item}.name.id.{num}` 的 `{item}`)**直接报错,不强行映射**,
-   并提示改用 `lookup <id>`;
-4. 定位符末段 id 不在索引中(如 <2³² 的小整数)同样直接报错。
-
-真实输出示例(tangtang 连携技,从成长表 `skillIdList[]` 出发):
+直接返回**全部匹配的规则组**:每条给出规则号与其 patterns 列表;命中几条返回
+几条,不做绑定完整性校验、无一对多报错。查询性能靠"模式最长字面量 gram → 规则"
+倒排索引预筛候选,再按序验证(全量产物上单次查询约 2 秒)。
 
 ```text
-$ enddata idmap relate 'TableCfg/CharGrowthTable.json#chr_0027_tangtang.skillGroupMap.chr_0027_tangtang_ComboSkill.skillIdList[].chr_0027_tangtang_combo_skill'
-[P461 等 9 个模式] 5 处关联:
-  Json/SkillData/chr_0027_tangtang_combo_skill.json
-  Json/SkillData/chr_0027_tangtang_combo_skill.json#skillId.chr_0027_tangtang_combo_skill
-  TableCfg/StrIdNumTable.json#skill_id.dic.chr_0027_tangtang_combo_skill
-  TableCfg/SkillPatchTable.json#chr_0027_tangtang_combo_skill
-  TableCfg/SkillPatchTable.json#chr_0027_tangtang_combo_skill.SkillPatchDataBundle[].skillId.chr_0027_tangtang_combo_skill
-  (另有至多 7 个模式槽位在该 id 实例上未观察到,已剔除)
-无法映射 等共 8 个(变量绑定不全,查询方向一对多):P461 缺 {attack}; …
+$ enddata idmap relate '<定位符>'
+匹配 18 条规则:
+[R13] 2 条模式:
+  {v3}Group{v2}chr_{v4}g{v1}
+  {v3}{v2}{v4}spaceship_i0{v1}
+[R47334] 20 条模式:
+  {v1}tangtang{v2}
+  …
 ```
+
+规则的生成数据(哪个 id 的哪些定位符)追溯 `ids.jsonl` 中 `pid` 指向它的组。
 
 ## 跟版与边界
 
 - 数据源更新后重跑 `enddata idmap build` 即可(离线,只读本地克隆);
   meta.json 的 `head` 记录构建时数据源版本。
-- 已知边界:单例组(P0)无模式可 relate;数组不记下标;JSON 空键被分词剔除;
+- 已知边界:单路径组(rid=0)没有规则;数组不记下标;JSON 空键被分词剔除;
   混合大小写 map 键不作键出现(见定位符规范);关卡/NPC 等目录默认不在范围
-  (需要时 `--dir Json/NPC` 附加)。
+  (需要时 `--dir Json/NPC` 附加);变量绑定不校验同值,覆盖判定在极端情形略宽松。
