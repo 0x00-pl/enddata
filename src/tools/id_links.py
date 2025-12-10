@@ -227,8 +227,12 @@ def _lcs_all(temps: list[str]) -> str:
     return best
 
 
-def _generalize(locs: list[str]) -> list[str]:
-    """循环把全组最长公共子串(≥2)替换为 {vN},返回各定位符泛化后的去重模板。"""
+def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
+    """循环把全组最长公共子串(≥2)替换为 {vN}。
+
+    返回 (patterns, examples):各定位符泛化后的去重模板,以及与之一一对应的
+    泛化前真实定位符样例(去重时取首个来源)。
+    """
     temps = list(locs)
     n = 0
     while n < 64:  # 保险丝:每轮消耗一个公共子串,正常远达不到
@@ -238,7 +242,15 @@ def _generalize(locs: list[str]) -> list[str]:
         n += 1
         v = "{v%d}" % n
         temps = [t.replace(s, v) for t in temps]
-    return list(dict.fromkeys(temps))
+    pats: list[str] = []
+    examples: list[str] = []
+    seen: set[str] = set()
+    for t, loc in zip(temps, locs):
+        if t not in seen:
+            seen.add(t)
+            pats.append(t)
+            examples.append(loc)
+    return pats, examples
 
 
 def _pattern_literals(pat: str) -> list[str]:
@@ -288,14 +300,14 @@ class _RuleIndex:
     """增量规则表:规则列表 + 覆盖判定用的字面量段与 gram 倒排索引。"""
 
     def __init__(self) -> None:
-        self.patterns: list[list[str]] = []
+        self.rules: list[dict] = []
         self._lits: list[list[list[str]]] = []
         self._grams: dict[str, list[int]] = {}
         self._gram_count: Counter = Counter()
 
-    def add(self, pats: list[str]) -> int:
-        rid = len(self.patterns)
-        self.patterns.append(pats)
+    def add(self, pats: list[str], examples: list[str] | None = None) -> int:
+        rid = len(self.rules)
+        self.rules.append({"patterns": pats, "example": examples or []})
         elig = _eligible(pats)
         self._lits.append([_pattern_literals(p) for p in elig])
         # 每个参与判定的模式各建一个 gram:模式 P 匹配 loc ⇒ P 的最长字面量
@@ -352,11 +364,12 @@ def derive_rules(groups: dict):
                 triggered = True
                 break
         if triggered:
-            gid_rid[gid] = index.add(_generalize(locs))
+            pats, examples = _generalize(locs)
+            gid_rid[gid] = index.add(pats, examples)
         else:
             gid_rid[gid] = first_cover
-    meta = {"rules": len(index.patterns), "singlePathIds": n_single}
-    return index.patterns, gid_rid, meta
+    meta = {"rules": len(index.rules), "singlePathIds": n_single}
+    return index.rules, gid_rid, meta
 
 
 # ---------------------------------------------------------------- 产物输出
@@ -392,8 +405,7 @@ def build(extra_dirs: list[str] | None = None, all_json: bool = False,
             fh.write(json.dumps({"id": gid, "pid": gid_rid.get(gid, 0),
                                  "defs": sorted(d), "refs": sorted(r)},
                                 ensure_ascii=False, sort_keys=True) + "\n")
-    _write_json(OUT_DIR / "patterns.json",
-                {"rules": [{"patterns": pats} for pats in rules]})
+    _write_json(OUT_DIR / "patterns.json", {"rules": rules})
     _write_json(OUT_DIR / "files.json",
                 {k: {**v, "defs": sorted(v["defs"]), "refs": sorted(v["refs"])}
                  for k, v in sorted(by_file.items())})
@@ -430,7 +442,7 @@ def relate(locator: str) -> int:
     data = json.loads((OUT_DIR / "patterns.json").read_text(encoding="utf-8"))
     index = _RuleIndex()
     for r in data["rules"]:
-        index.add(r["patterns"])
+        index.add(r["patterns"], r.get("example"))
     hits = []
     seen: set[int] = set()
     for length in range(_MIN_COVER_LITERAL, _GRAM + 1):
@@ -446,10 +458,13 @@ def relate(locator: str) -> int:
         return 1
     print(f"匹配 {len(hits)} 条规则:")
     for rid in hits:
-        pats = index.patterns[rid]
+        rule = index.rules[rid]
+        pats = rule["patterns"]
+        examples = rule.get("example") or []
         print(f"[R{rid}] {len(pats)} 条模式:")
-        for p in pats[:_DISPLAY_CAP]:
-            print(f"  {p}")
+        for i, p in enumerate(pats[:_DISPLAY_CAP]):
+            ex = f"   例: {examples[i]}" if i < len(examples) else ""
+            print(f"  {p}{ex}")
         if len(pats) > _DISPLAY_CAP:
             print(f"  …(其余 {len(pats) - _DISPLAY_CAP} 条省略)")
     return 0

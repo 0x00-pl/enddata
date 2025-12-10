@@ -46,7 +46,7 @@ TableCfg/StrIdNumTable.json#skill_id.dic.chr_0027_tangtang_combo_skill          
 
 | 文件 | 内容 |
 |---|---|
-| `patterns.json` | 匹配规则目录:`{"rules": [{"patterns": [...]}]}`,数组下标即规则号(rid) |
+| `patterns.json` | 匹配规则目录:`{"rules": [{"patterns": [...], "example": [...]}]}`,数组下标即规则号(rid);`example` 与 `patterns` 一一对应,是该模式泛化前的真实定位符 |
 | `ids.jsonl` | 全部关联组:每行 `{id, pid, defs[], refs[]}`,pid = 命中的规则号(0 = 单路径组,不成规则) |
 | `files.json` | 反查:每个文件定义/引用了哪些 id |
 | `meta.json` | 数据源 HEAD、扫描范围、算法版本、计数 |
@@ -104,12 +104,14 @@ poetry run enddata idmap relate 'TableCfg/CharGrowthTable.json#chr_0027_tangtang
 $ enddata idmap relate '<定位符>'
 匹配 18 条规则:
 [R13] 2 条模式:
-  {v3}Group{v2}chr_{v4}g{v1}
-  {v3}{v2}{v4}spaceship_i0{v1}
+  {v3}Group{v2}chr_{v4}g{v1}   例: TableCfg/NpcGroupTable.json#npc_chr_0014_aurora_g01.name.id.-1072676122322635220
+  {v3}{v2}{v4}spaceship_i0{v1}   例: TableCfg/NpcTable.json#npc_0014_aurora_spaceship_i001.name.id.-1072676122322635220
 [R47334] 20 条模式:
-  {v1}tangtang{v2}
+  {v1}tangtang{v2}   例: TableCfg/ActivityTable.json#activity_checkin_tangtang.panelId.ActivityCharSignCommon
   …
 ```
+
+每条模式附 `例:` 行 —— 该模式泛化前的真实定位符(即 patterns.json 的 example)。
 
 规则的生成数据(哪个 id 的哪些定位符)追溯 `ids.jsonl` 中 `pid` 指向它的组。
 
