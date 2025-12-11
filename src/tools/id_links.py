@@ -227,11 +227,28 @@ def _lcs_all(temps: list[str]) -> str:
     return best
 
 
+def _renumber_vars(pat: str) -> str:
+    """模式内变量按首次出现顺序重排为 {v1}…{vN}(消去 LCS 轮次带来的跳号)。"""
+    mapping: dict[str, str] = {}
+    out: list[str] = []
+    idx = 0
+    for m in _VAR_RE.finditer(pat):
+        out.append(pat[idx:m.start()])
+        v = m.group(0)
+        if v not in mapping:
+            mapping[v] = "{v%d}" % (len(mapping) + 1)
+        out.append(mapping[v])
+        idx = m.end()
+    out.append(pat[idx:])
+    return "".join(out)
+
+
 def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
     """循环把全组最长公共子串(≥2)替换为 {vN}。
 
-    返回 (patterns, examples):各定位符泛化后的去重模板,以及与之一一对应的
-    泛化前真实定位符样例(去重时取首个来源)。
+    返回 (patterns, examples):各定位符泛化后的模板(变量名按模式内出现顺序
+    规格化,patterns 按模式串排序),examples 与之一一对应(泛化前真实定位符,
+    去重时取首个来源)。
     """
     temps = list(locs)
     n = 0
@@ -242,15 +259,15 @@ def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
         n += 1
         v = "{v%d}" % n
         temps = [t.replace(s, v) for t in temps]
-    pats: list[str] = []
-    examples: list[str] = []
+    pats: list[tuple[str, str]] = []
     seen: set[str] = set()
     for t, loc in zip(temps, locs):
+        t = _renumber_vars(t)
         if t not in seen:
             seen.add(t)
-            pats.append(t)
-            examples.append(loc)
-    return pats, examples
+            pats.append((t, loc))
+    pats.sort(key=lambda pair: pair[0])  # patterns 数组顺序规格化
+    return [p for p, _ in pats], [e for _, e in pats]
 
 
 def _pattern_literals(pat: str) -> list[str]:
