@@ -73,7 +73,9 @@ _GRAM = 8
 _DISPLAY_CAP = 50
 
 _VAR_RE = re.compile(r"\{v\d+\}")
-_VAR_CORE_RE = re.compile(r"v\d+")
+_VAR_CORE_RE = re.compile(r"v\d")   # 记号核心片段(v数字),LCS 窗口需跳过
+_VAR_MARK = "\x01"  # 内部变量记号哨兵:规格化期为 <MARK>vN<MARK>,输出前映射为 {vN}
+_VAR_TOKEN_RE = re.compile(f"{_VAR_MARK}v(\\d+){_VAR_MARK}")
 
 
 # ---------------------------------------------------------------- 扫描与分组
@@ -192,82 +194,104 @@ def scan(root: Path, scope: list[str], include_numeric: bool = True):
 # ---------------------------------------------------------------- LCS 规则归纳
 
 
-def _common_of_len(anchor: str, rest: list[str], length: int) -> str | None:
-    """anchor 的全部 length 窗口中,第一个在 rest 全部串里出现的;无则 None。
+def _token_spans(temps: list[str]) -> list[list[tuple[int, int]]]:
+    return [[(m.start(), m.end()) for m in _VAR_TOKEN_RE.finditer(t)] for t in temps]
 
-    含 '{'/'}' 的窗口与变量核心(v数字)跳过 —— 变量记号本身不允许再被提取成
-    公共子串(否则死循环替换)。
+
+def _replace_is_safe(temps: list[str], spans: list[list[tuple[int, int]]], s: str) -> bool:
+    """s 的每一次出现都不得与任何变量的记号区间重叠。
+
+    否则 replace 会把变量的编号字符一并换掉(如 '10' 命中 v10 的编号),
+    破坏已有变量。逐位置检查比 str.replace 的非重叠语义更保守,只会多拒绝。
     """
-    seen: set[str] = set()
-    for i in range(len(anchor) - length + 1):
-        sub = anchor[i:i + length]
-        if sub in seen or "{" in sub or "}" in sub or _VAR_CORE_RE.fullmatch(sub):
-            continue
-        seen.add(sub)
-        if all(sub in s for s in rest):
-            return sub
-    return None
+    for t, spans_t in zip(temps, spans):
+        start = 0
+        while True:
+            i = t.find(s, start)
+            if i < 0:
+                break
+            for a, b in spans_t:
+                if i < b and i + len(s) > a:
+                    return False
+            start = i + 1
+    return True
 
 
 def _lcs_all(temps: list[str]) -> str:
-    """全组最长公共子串(二分长度;anchor 取最短串)。"""
+    """全组最长公共子串(二分长度;anchor 取最短串),且替换后不破坏已有变量。"""
     if len(temps) == 1:
         return temps[0]
     order = sorted(range(len(temps)), key=lambda i: len(temps[i]))
     anchor = temps[order[0]]
     rest = [temps[i] for i in order[1:]]
+    spans = _token_spans(temps)
     lo, hi, best = 1, len(anchor), ""
     while lo <= hi:
         mid = (lo + hi) // 2
-        s = _common_of_len(anchor, rest, mid)
-        if s is not None:
-            best, lo = s, mid + 1
+        got = None
+        seen: set[str] = set()
+        for i in range(len(anchor) - mid + 1):
+            sub = anchor[i:i + mid]
+            if sub in seen or _VAR_MARK in sub or _VAR_CORE_RE.search(sub):
+                continue
+            seen.add(sub)
+            if all(sub in s for s in rest) and _replace_is_safe(temps, spans, sub):
+                got = sub
+                break
+        if got is not None:
+            best, lo = got, mid + 1
         else:
             hi = mid - 1
     return best
 
 
-def _renumber_vars(pat: str) -> str:
-    """模式内变量按首次出现顺序重排为 {v1}…{vN}(消去 LCS 轮次带来的跳号)。"""
-    mapping: dict[str, str] = {}
-    out: list[str] = []
-    idx = 0
-    for m in _VAR_RE.finditer(pat):
-        out.append(pat[idx:m.start()])
-        v = m.group(0)
-        if v not in mapping:
-            mapping[v] = "{v%d}" % (len(mapping) + 1)
-        out.append(mapping[v])
-        idx = m.end()
-    out.append(pat[idx:])
-    return "".join(out)
-
-
 def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
-    """循环把全组最长公共子串(≥2)替换为 {vN}。
+    """循环把全组最长公共子串(≥2)替换为 {vN}。可重入:输入可含旧变量。
 
-    返回 (patterns, examples):各定位符泛化后的模板(变量名按模式内出现顺序
-    规格化,patterns 按模式串排序),examples 与之一一对应(泛化前真实定位符,
-    去重时取首个来源)。
+    流程(保证同一 rule 多次规格化也正确):
+    ① 旧变量先改名加哨兵前缀({vN} → <MARK>v<序><MARK>),与新一轮变量命名
+       隔离,且不会被后续 LCS 窗口提取破坏;
+    ② 继续循环求最长公共子串,新变量编号接续计数器;
+    ③ 全部哨兵变量按(排序后)模式的首现顺序一次性映射为 {v1}…{vN}。
+
+    返回 (patterns, examples):模板(去重、按模式串排序)+ 一一对应的泛化前
+    真实定位符。跨模式同名变量 = 同一公共子串(同值)。
     """
-    temps = list(locs)
+    temps: list[str] = []
+    counter = 0
+    for loc in locs:
+        def _shield(m: "re.Match") -> str:  # ① 旧变量加前缀隔离
+            nonlocal counter
+            counter += 1
+            return f"{_VAR_MARK}v{counter}{_VAR_MARK}"
+        temps.append(_VAR_RE.sub(_shield, loc))
     n = 0
-    while n < 64:  # 保险丝:每轮消耗一个公共子串,正常远达不到
+    while n < 64:  # ② 保险丝:每轮消耗一个公共子串,正常远达不到
         s = _lcs_all(temps)
         if len(s) <= 1:
             break
         n += 1
-        v = "{v%d}" % n
+        counter += 1
+        v = f"{_VAR_MARK}v{counter}{_VAR_MARK}"
         temps = [t.replace(s, v) for t in temps]
-    pats: list[tuple[str, str]] = []
+    pairs = []
     seen: set[str] = set()
     for t, loc in zip(temps, locs):
-        t = _renumber_vars(t)
         if t not in seen:
             seen.add(t)
-            pats.append((t, loc))
-    pats.sort(key=lambda pair: pair[0])  # patterns 数组顺序规格化
-    return [p for p, _ in pats], [e for _, e in pats]
+            pairs.append((t, loc))
+    pairs.sort(key=lambda pair: pair[0])  # 数组顺序规格化(按泛化前模板)
+    mapping: dict[str, str] = {}
+    pats = [
+        _VAR_TOKEN_RE.sub(
+            lambda m: mapping.setdefault(m.group(0), "{v%d}" % (len(mapping) + 1)),
+            t,
+        )
+        for t, _ in pairs
+    ]
+    # 数组顺序 = 变量赋值顺序(按泛化前模板排序的确定性顺序):
+    # 自上而下读 patterns,变量恰好按 {v1},{v2},… 首次出现
+    return pats, [loc for _, loc in pairs]
 
 
 def _pattern_literals(pat: str) -> list[str]:
