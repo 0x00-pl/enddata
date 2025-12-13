@@ -239,6 +239,9 @@ def _lcs_all(temps: list[str]) -> str:
                 got = sub
                 break
         if got is not None:
+            if _VAR_MARK in got:  # 返回结果不应包含变量(片段);双保险,候选循环已过滤
+                hi = mid - 1
+                continue
             best, lo = got, mid + 1
         else:
             hi = mid - 1
@@ -289,9 +292,19 @@ def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
         )
         for t, _ in pairs
     ]
-    # 数组顺序 = 变量赋值顺序(按泛化前模板排序的确定性顺序):
-    # 自上而下读 patterns,变量恰好按 {v1},{v2},… 首次出现
-    return pats, [loc for _, loc in pairs]
+    # 数组顺序规格化:按移除全部变量后的字符串排序 —— 变量名不影响顺序
+    out = sorted(zip(pats, (loc for _, loc in pairs)),
+                 key=lambda pair: (_VAR_RE.sub("", pair[0]), pair[0]))
+    # 变量编号规格化:按最终数组的出现顺序重编为 {v1}…{vN}(同号跨模式同值)
+    relabel: dict[str, str] = {}
+    final = [
+        _VAR_RE.sub(
+            lambda m: relabel.setdefault(m.group(0), "{v%d}" % (len(relabel) + 1)),
+            p,
+        )
+        for p, _ in out
+    ]
+    return final, [e for _, e in out]
 
 
 def _pattern_literals(pat: str) -> list[str]:
