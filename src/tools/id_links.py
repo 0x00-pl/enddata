@@ -399,6 +399,7 @@ def derive_rules(groups: dict):
     """
     index = _RuleIndex()
     gid_rid: dict[str, int] = {}
+    seen_rules: dict[tuple, int] = {}  # patterns 元组 → rid(同构规则去重)
     n_single = 0
     for gid in sorted(groups):
         d, r = groups[gid]
@@ -419,7 +420,14 @@ def derive_rules(groups: dict):
                 break
         if triggered:
             pats, examples = _generalize(locs)
-            gid_rid[gid] = index.add(pats, examples)
+            key = tuple(pats)
+            twin = seen_rules.get(key)
+            if twin is not None:  # 同构规则已存在:不重复插入,归属已有规则
+                gid_rid[gid] = twin
+            else:
+                rid = index.add(pats, examples)
+                seen_rules[key] = rid
+                gid_rid[gid] = rid
         else:
             gid_rid[gid] = first_cover
     meta = {"rules": len(index.rules), "singlePathIds": n_single}
