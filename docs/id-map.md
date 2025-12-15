@@ -20,7 +20,7 @@ step    := 键名 | 键名'[]' | id
 - **末段恒为 id 本身**,两种出现:
   - **值出现**:id 是 Id/IdList 类键(键名 `id`、含 `Id`、`_id(s)` 结尾)下的取值
     —— 标量直接取,数组逐元素;数值只收 |v| > 2³² 的 64 位哈希(即 i18n 文本 id);
-  - **键出现**:id 本身是对象键 —— 表行键(I18nTextTable 的文本哈希)、
+  - **键出现**:id 本身是对象键 —— 表行键(如 ItemTable 的 `item_*`)、
     `skillGroupMap`/`charBreakCostMap` 等 map 键。键形态要求小写 snake
     (`chr_0027_tangtang` ✓,`wiki_type_equip` ✓);混合大小写的 map 键
     (`chr_x_ComboSkill`、`charBreak20`)不收集 —— 它们的内容里必带镜像
@@ -42,7 +42,7 @@ Json/SkillData/chr_0027_tangtang_combo_skill.json#skillId.chr_0027_tangtang_comb
 TableCfg/StrIdNumTable.json#skill_id.dic.chr_0027_tangtang_combo_skill                                                                    # 键出现(map 键)
 ```
 
-## 产物(`enddata idmap build`,全量约 3 分钟)
+## 产物(`enddata idmap build`,全量约 1 分钟)
 
 | 文件 | 内容 |
 |---|---|
@@ -88,16 +88,17 @@ TableCfg/StrIdNumTable{v2}#s{v3}_id.dic.{v1}
 
 行为特征:字面 LCS + 先到先得会让规则按**公共片段聚簇** —— 名字片段
 (`tangtang`、`skill` 等)成为字面量,同族 id 的位置被同一规则认领
-(最大的规则覆盖上万个 id),规则数(5.1 万)小于多路径 id 数(11.7 万)。
+(最大的规则覆盖上万个 id),规则数远小于多路径 id 数。
 
 ## 收集范围与规模(2026-09,rmxlinux@ef902ef)
 
-默认扫描 `TableCfg + Json/SkillData + Json/BuffData`(项目消费面);i18n 各语言表
-只扫基准语言 CN(其余 13 语言是同键重复定义,`--dir` 可强行附加)。`--all-json`
-全量(含关卡/NPC/口型 7 万+文件,慢且产物大)。
+默认扫描 `TableCfg + Json/SkillData + Json/BuffData`(项目消费面)。黑名单
+`TableCfg/I18nTextTable` 整体排除(黑名单优先于范围与 `--dir`):文本哈希的
+定义侧不入产物,数字 id 组只保留各表的引用侧。`--all-json` 全量(含关卡/NPC/
+口型 7 万+文件,慢且产物大)。
 
-当前规模:6206 文件 → **253,724 个 id**(定义 209,665 · 引用 347,945)→
-**49,725 条规则**;单路径组 136,667 个(rid=0)。
+当前规模:6205 文件 → **251,989 个 id**(定义 136,097 · 引用 347,945)→
+**2,617 条规则**;单路径组 205,873 个(rid=0)。构建约 1 分钟。
 
 ## 查询(`enddata idmap relate <file#path>`)
 

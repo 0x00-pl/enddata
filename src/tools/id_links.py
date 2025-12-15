@@ -44,10 +44,9 @@ ALGORITHM = "lcs-v1"
 # 默认扫描范围:项目消费的数值表 + 技能/Buff 实体目录。其余 Json(关卡/NPC/口型等)
 # 与数据站无关且量大(LipSync 7.4 万文件),--dir 追加、--all-json 全量。
 DEFAULT_SCOPE = ["TableCfg", "Json/SkillData", "Json/BuffData"]
-# i18n 各语言表是同一批文本哈希键的重复定义(项目以 CN 为基准),只扫 CN,
-# 否则 13 张表 × 14.7 万行纯重复定义会把数值 id 组淹没。
-_I18N_RE = re.compile(r"^I18nTextTable_([A-Z]{2})\.json$")
-I18N_BASE_LANG = "CN"
+# 扫描黑名单:命中前缀的文件一律排除(优先于范围与 --dir)。i18n 各语言表
+# (含基准语言 CN)是文本哈希的定义侧,排除后数字 id 组只保留引用侧。
+SCAN_BLACKLIST = ("TableCfg/I18nTextTable",)
 
 # 不带 Id 字样但实测承载 id 引用的键(试点扫描逐键核对过取值形态)。
 # 取值仍需通过 ID_SHAPE 校验,防止同名键在别处装普通字符串。
@@ -81,11 +80,6 @@ _VAR_TOKEN_RE = re.compile(f"{_VAR_MARK}v(\\d+){_VAR_MARK}")
 # ---------------------------------------------------------------- 扫描与分组
 
 
-def _lang_of(name: str) -> str | None:
-    m = _I18N_RE.match(name.rsplit("/", 1)[-1])
-    return m.group(1) if m else None
-
-
 def _resolve_scope(root: Path, extra_dirs: list[str], all_json: bool) -> list[str]:
     if all_json:
         scope = ["TableCfg", "Json", "ExtendData"]
@@ -94,16 +88,11 @@ def _resolve_scope(root: Path, extra_dirs: list[str], all_json: bool) -> list[st
     for d in extra_dirs:
         if d not in scope:
             scope.append(d)
-    if all_json:
-        return scope
-    out = []
-    for s in scope:
-        lang = _lang_of(s)
-        if lang and lang != I18N_BASE_LANG and (root / s).is_file():
-            info(f"警告: i18n 只扫基准语言 {I18N_BASE_LANG},跳过 {s}")
-            continue
-        out.append(s)
-    return out
+    return scope
+
+
+def _blacklisted(rel: str) -> bool:
+    return rel.startswith(SCAN_BLACKLIST)
 
 
 def _iter_scope_files(root: Path, scope: list[str]):
@@ -113,11 +102,14 @@ def _iter_scope_files(root: Path, scope: list[str]):
             for r, dirs, fs in os.walk(p):
                 dirs[:] = sorted(d for d in dirs if d != ".git")
                 for f in sorted(fs):
-                    # i18n 只收基准语言表(其余 13 语言是同键重复定义)
-                    if f.endswith(".json") and _lang_of(f) in (None, I18N_BASE_LANG):
-                        yield Path(r) / f
+                    if not f.endswith(".json"):
+                        continue
+                    path = Path(r) / f
+                    if not _blacklisted(path.relative_to(root).as_posix()):
+                        yield path
         elif p.is_file():
-            yield p
+            if not _blacklisted(Path(entry).as_posix()):
+                yield p
         else:
             info(f"警告: 扫描范围不存在,跳过 {entry}")
 
@@ -477,7 +469,7 @@ def build(extra_dirs: list[str] | None = None, all_json: bool = False,
         "head": local_head(REPO),
         "algorithm": ALGORITHM,
         "scope": scope,
-        "i18nBaseLang": I18N_BASE_LANG,
+        "scanBlacklist": list(SCAN_BLACKLIST),
         "extraRefKeys": sorted(EXTRA_REF_KEYS),
         "includeNumericHash": include_numeric,
         "counts": {"files": smeta["files"], "ids": len(groups),
