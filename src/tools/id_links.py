@@ -44,9 +44,33 @@ ALGORITHM = "lcs-v1"
 # 默认扫描范围:项目消费的数值表 + 技能/Buff 实体目录。其余 Json(关卡/NPC/口型等)
 # 与数据站无关且量大(LipSync 7.4 万文件),--dir 追加、--all-json 全量。
 DEFAULT_SCOPE = ["TableCfg", "Json/SkillData", "Json/BuffData"]
-# 扫描黑名单:命中前缀的文件一律排除(优先于范围与 --dir)。i18n 各语言表
-# (含基准语言 CN)是文本哈希的定义侧,排除后数字 id 组只保留引用侧。
-SCAN_BLACKLIST = ("TableCfg/I18nTextTable",)
+# 扫描黑名单:命中前缀的文件一律排除(优先于范围与 --dir)。
+# - TableCfg/I18nTextTable:i18n 各语言表是文本哈希的定义侧,排除后数字 id 组
+#   只保留引用侧;
+# - Json 下关卡侧资源(关卡/地图/导航/脚本/刷怪/任务运行时/NPC/口型/动画/交互
+#   等表现层),仅在 --all-json 或显式 --dir 时才可能进入范围,黑名单保证始终排除。
+SCAN_BLACKLIST = (
+    "TableCfg/I18nTextTable",
+    "Json/AIConfig/",
+    "Json/AnimationConfig/",
+    "Json/AtmosphericNpcData/",
+    "Json/CharInteractPerformCfgs/",
+    "Json/Interactive/",
+    "Json/InteractiveData/",
+    "Json/LevelConfig/",
+    "Json/LevelData/",
+    "Json/LevelGenForRuntime/",
+    "Json/LevelMountPoint/",
+    "Json/LevelScriptData/",
+    "Json/LevelScriptTemplateData/",
+    "Json/LipSync/",
+    "Json/MapConfig/",
+    "Json/MissionRuntimeAsset/",
+    "Json/NPC/",
+    "Json/NavMesh/",
+    "Json/SpawnerConfig/",
+    "Json/UILevelMapLoadConfig/",
+)
 
 # 不带 Id 字样但实测承载 id 引用的键(试点扫描逐键核对过取值形态)。
 # 取值仍需通过 ID_SHAPE 校验,防止同名键在别处装普通字符串。
