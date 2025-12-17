@@ -345,12 +345,27 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
         talent_map[cid] = {k: grouped[k] for k in keys}
     # 被动技能节点(nodeType=4)补名称描述与数值:passiveSkillNodeInfo 源结构
     # 只有 name 哈希,desc 与占位符数值挂在 talentEffectId 指向的
-    # PotentialTalentEffectTable(desc 富文本保留;dataList → values)
+    # PotentialTalentEffectTable(desc 富文本保留;dataList → values)。
+    # 管理员 m/f 节点引用的天赋效果行是旧设计残留(dataList 空壳/旧文案),
+    # 现行载荷在潜能解锁链指向的 chr_9000_endmin 行——字面 id 逐条映射,
+    # 不做字符串拼接,节点上的字面 talentEffectId 保持原样不改写
+    _TALENT_EFFECT_REDIRECT = {
+        "chr_0002_endminm_talent_1_1": "chr_9000_endmin_talent_1_1",
+        "chr_0002_endminm_talent_1_2": "chr_9000_endmin_talent_1_2",
+        "chr_0002_endminm_talent_2_1": "chr_9000_endmin_talent_2_1",
+        "chr_0002_endminm_talent_2_2": "chr_9000_endmin_talent_2_2",
+        "chr_0003_endminf_talent_1_1": "chr_9000_endmin_talent_1_1",
+        "chr_0003_endminf_talent_1_2": "chr_9000_endmin_talent_1_2",
+        "chr_0003_endminf_talent_2_1": "chr_9000_endmin_talent_2_1",
+        "chr_0003_endminf_talent_2_2": "chr_9000_endmin_talent_2_2",
+    }
     pet_table = raw.get("PotentialTalentEffectTable") or {}
     for nodes in talent_map.values():
         for node in nodes.get("4", []):
             psi = node.get("passiveSkillNodeInfo") or {}
-            eff = pet_table.get(psi.get("talentEffectId")) or {}
+            eff_id = _TALENT_EFFECT_REDIRECT.get(psi.get("talentEffectId"),
+                                                 psi.get("talentEffectId"))
+            eff = pet_table.get(eff_id) or {}
             desc = t(eff.get("desc"))
             if desc:
                 psi["desc"] = desc
