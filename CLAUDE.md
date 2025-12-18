@@ -41,8 +41,15 @@ python3 -m http.server 8321 --bind 127.0.0.1 --directory dist
   `paramN` 时回退顶替未知键名;缺数(键查不到/解析到 0)一律维持占位符原文
   ——传 missing 清单收集汇总、未传直接抛 ValueError,不回填成「+0%」一类
   误导值,分析侧在运行末尾汇总打印。
-- **chr_9000_endmin 是 NPC 占位条目**:无技能、头像双源 404,其 skillGroupMap
-  引用 endminm/endminf 的技能 id——展开时必须按干员前缀过滤(唯一的多对多情形)。
+- **chr_9000_endmin 是管理员的系统数据实体**:NPC 占位条目(无技能、头像双源
+  404),但潜能与天赋的**效果行都在它名下**——CharacterPotentialTable 对
+  endminm/endminf 引用 chr_9000_endmin_potential_*,天赋效果行同理取 9000 行
+  (characters.py `_TALENT_EFFECT_REDIRECT` 字面 id 逐条映射,不拼字符串、
+  不改写节点字面 talentEffectId;endminf 的节点甚至直接引用 endminm 前缀的
+  旧行;0002/0003 前缀行是旧设计残留:dataList 空壳、「封印」版文案/位置式
+  占位符)。
+  其 skillGroupMap 引用 endminm/endminf 的技能 id——展开时必须按干员前缀过滤
+  (唯一的多对多情形)。
 - **分析产物 JSON key 一律英文**:data/analysis/*.json 机器键用英文标识符
   (资源 atb/usp/poise/heal/shield,维度 firepower/poise/survival/atbCycle/
   energyCycle/diversity),中文名经顶层 resourceLabels/dimensionLabels 映射;
