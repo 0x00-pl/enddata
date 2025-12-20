@@ -10,7 +10,7 @@
     enddata collection characters --force      # 核对远端 HEAD、有更新才增量拉取,随后本地重读
     enddata analysis team                       # 配队分析:技能/天赋/潜能的需求与产出资源解析
     enddata idmap build                         # 扫描 rmxlinux 源,重建 data/id_map/ 关联规则产物
-    enddata idmap relate <file#path>            # 按定位符查规则,返回全部匹配的规则组
+    enddata idmap relate <file#path>            # 按定位符返回同组定位符列表(path 列表)
     enddata version --record
 
 站点构建(JS 工具链,非本 CLI):npm run build(js 项目根 = 仓库根)→ 零外链的 dist/

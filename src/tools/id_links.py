@@ -18,8 +18,8 @@ id 本身 —— 键出现(行键/map 键,小写 snake)与值出现(Id/IdList �
 4. 覆盖判定按规则加入顺序先到先得;候选过滤用"模式最长字面量的 8 字符窗口 →
    规则号"倒排索引(在线选当前最稀有窗口),必要条件预筛后正则 fullmatch 验证。
 
-查询(enddata idmap relate <file#path>):直接返回全部匹配的规则组,命中几条
-返回几条,无一对多报错。
+查询(enddata idmap relate <file#path>):返回同组定位符列表(path 列表),
+不含查询定位符自身;找不到 id 时报错。
 
 产物:data/id_map/{patterns.json, ids.jsonl, files.json, meta.json}
 """
@@ -93,7 +93,6 @@ HASH_MIN = 1 << 32
 _MIN_COVER_LITERAL = 4
 _GRAM = 8
 # relate 单条规则最多展示的模式数
-_DISPLAY_CAP = 50
 
 _VAR_RE = re.compile(r"\{v\d+\}")
 _VAR_CORE_RE = re.compile(r"v\d")   # 记号核心片段(v数字),LCS 窗口需跳过
@@ -514,38 +513,38 @@ def _write_json(path: Path, obj) -> None:
 # ---------------------------------------------------------------- 查询
 
 
+def _locator_id(locator: str) -> str | None:
+    """从定位符提取关联组 id:引用取值段、表行取行键、单实体文件取文件名。"""
+    if _VAR_MARK in locator:
+        return None
+    if "#" in locator:
+        rest = locator.rpartition("#")[2]
+        return rest.rsplit(".", 1)[-1] if rest else None
+    stem = locator.rstrip("/").rsplit("/", 1)[-1]
+    stem = stem[:-5] if stem.endswith(".json") else stem
+    return stem or None
+
+
 def relate(locator: str) -> int:
-    """按定位符查规则:直接返回全部匹配的规则组,命中几条返回几条。"""
+    """按定位符返回同组定位符列表(path 列表),不含查询定位符自身。"""
     locator = locator.strip()
-    data = json.loads((OUT_DIR / "patterns.json").read_text(encoding="utf-8"))
-    index = _RuleIndex()
-    for r in data["rules"]:
-        index.add(r["patterns"], r.get("example"))
-    hits = []
-    seen: set[int] = set()
-    for length in range(_MIN_COVER_LITERAL, _GRAM + 1):
-        for i in range(len(locator) - length + 1):
-            for rid in index._grams.get(locator[i:i + length], ()):
-                if rid not in seen:
-                    seen.add(rid)
-                    if any(_match_lits(parts, locator) for parts in index._lits[rid]):
-                        hits.append(rid)
-    hits.sort()
-    if not hits:
-        print(f"无匹配规则: {locator}")
+    idv = _locator_id(locator)
+    if not idv:
+        print(f"无法从定位符提取 id: {locator}", file=sys.stderr)
         return 1
-    print(f"匹配 {len(hits)} 条规则:")
-    for rid in hits:
-        rule = index.rules[rid]
-        pats = rule["patterns"]
-        examples = rule.get("example") or []
-        print(f"[R{rid}] {len(pats)} 条模式:")
-        for i, p in enumerate(pats[:_DISPLAY_CAP]):
-            ex = f"   例: {examples[i]}" if i < len(examples) else ""
-            print(f"  {p}{ex}")
-        if len(pats) > _DISPLAY_CAP:
-            print(f"  …(其余 {len(pats) - _DISPLAY_CAP} 条省略)")
-    return 0
+    row = None
+    with open(OUT_DIR / "ids.jsonl", encoding="utf-8") as fh:
+        for line in fh:
+            r = json.loads(line)
+            if r["id"] == idv:
+                row = r
+                break
+    if row is None:
+        print(f"未找到 id: {idv}", file=sys.stderr)
+        return 1
+    others = [x for x in (*row["defs"], *row["refs"]) if x != locator]
+    print("\n".join(others))
+    return 0 if others else 1
 
 
 # ---------------------------------------------------------------- CLI
@@ -560,7 +559,7 @@ def configure_parser(sub) -> None:
                    help="扫描全仓 JSON(含关卡/NPC 等大目录,慢且产物大)")
     b.add_argument("--no-numeric", action="store_true",
                    help="跳过 64 位数值哈希引用(i18n 文本 id)")
-    rl = sub.add_parser("relate", help="按定位符 file#path 查规则,返回全部匹配的规则组")
+    rl = sub.add_parser("relate", help="按定位符 file#path 返回同组定位符列表(path 列表)")
     rl.add_argument("locator", help="形如 TableCfg/ItemTable.json#item_gold 或文件路径")
 
 

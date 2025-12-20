@@ -107,24 +107,21 @@ TableCfg/StrIdNumTable{v2}#s{v3}_id.dic.{v1}
 poetry run enddata idmap relate 'TableCfg/CharGrowthTable.json#chr_0027_tangtang.skillGroupMap.chr_0027_tangtang_ComboSkill.skillIdList[].chr_0027_tangtang_combo_skill'
 ```
 
-直接返回**全部匹配的规则组**:每条给出规则号与其 patterns 列表;命中几条返回
-几条,不做绑定完整性校验、无一对多报错。查询性能靠"模式最长字面量 gram → 规则"
-倒排索引预筛候选,再按序验证(全量产物上单次查询约 2 秒)。
+从定位符末段提取 id,返回**同组定位符列表**(path 列表,每行一条,不含查询
+定位符自身);找不到 id 时报错退出。输出为纯 path 列表,便于管道/脚本消费;
+查询耗时约 1 秒(流式扫描 ids.jsonl)。
 
 ```text
-$ enddata idmap relate '<定位符>'
-匹配 18 条规则:
-[R13] 2 条模式:
-  {v3}Group{v2}chr_{v4}g{v1}   例: TableCfg/NpcGroupTable.json#npc_chr_0014_aurora_g01.name.id.-1072676122322635220
-  {v3}{v2}{v4}spaceship_i0{v1}   例: TableCfg/NpcTable.json#npc_0014_aurora_spaceship_i001.name.id.-1072676122322635220
-[R47334] 20 条模式:
-  {v1}tangtang{v2}   例: TableCfg/ActivityTable.json#activity_checkin_tangtang.panelId.ActivityCharSignCommon
-  …
+$ enddata idmap relate 'TableCfg/CharGrowthTable.json#chr_0027_tangtang…skillIdList[].chr_0027_tangtang_combo_skill'
+Json/SkillData/chr_0027_tangtang_combo_skill.json
+TableCfg/SkillPatchTable.json#chr_0027_tangtang_combo_skill
+TableCfg/StrIdNumTable.json#skill_id.dic.chr_0027_tangtang_combo_skill
+Json/SkillData/chr_0027_tangtang_combo_skill.json#skillId.chr_0027_tangtang_combo_skill
+…共 13 条
 ```
 
-每条模式附 `例:` 行 —— 该模式泛化前的真实定位符(即 patterns.json 的 example)。
-
-规则的生成数据(哪个 id 的哪些定位符)追溯 `ids.jsonl` 中 `pid` 指向它的组。
+规则的生成数据(哪个 id 的哪些定位符)追溯 `ids.jsonl` 中 `pid` 指向它的组;
+patterns.json 的 `example` 字段保留每条模式对应的真实定位符。
 
 ## 跟版与边界
 
