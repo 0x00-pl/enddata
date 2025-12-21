@@ -62,6 +62,15 @@ python3 -m http.server 8321 --bind 127.0.0.1 --directory dist
 - `web/build.mjs` 的 walk 会跳过 `skillGroupMap` 子树——组对象的 `icon` 字段
   不是干员/物品图标引用,勿移除该跳过逻辑。
 
+## id 关联映射(idmap)
+
+- 查找/核对 id 对应关系(引用是否存在、定义在哪、被谁引用)优先用 idmap,
+  不要手工拼字符串猜测:`enddata idmap build` 重建 `data/id_map/`,
+  `enddata idmap relate <file#path>` 返回同组定位符列表;程序化用法见
+  `tools/id_links.py`(ids.jsonl 逐行 id → defs/refs)与 docs/id-map.md。
+- 2026-09 已用其核验 characters.py 全部 id 链接(重定向完备、无悬空引用);
+  扫描黑名单 SCAN_BLACKLIST 排除 i18n 与关卡侧资源目录,优先于范围与 --dir。
+
 ## 提交
 
 conventional commits 中文描述(`feat(scope): …`),按主题拆分;并行开发中的
