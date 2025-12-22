@@ -368,9 +368,10 @@ def _apply_patterns(patterns: list[DescPattern], sent: str,
 
 
 def _parse_desc(desc: str | None) -> dict | None:
-    """一条描述 → {demands, productions}(两张 regex 表)。
+    """一条描述 → {demands, productions, activation?}(两张 regex 表)。
 
     demands 为展示文案(含「被消耗」「被施加」等修饰),productions 为资源词条;
+    activation 是发动条件句(含「可以发动」)中的需求子集,供连携技上提 trigger;
     技力/终结技能量/失衡等已有 blackboard 数值的资源不在词表(避免与数值重复计)。
     """
     if not desc:
@@ -378,28 +379,40 @@ def _parse_desc(desc: str | None) -> dict | None:
     plain = _DESC_TAG_RE.sub(r"\1", desc)
     demands: list[str] = []
     productions: list[str] = []
+    activation: list[str] = []
     for sent in re.split(r"[\n。;;]", plain):
         sent_demands, spans = _apply_patterns(_DEMAND_PATTERNS, sent)
         sent_productions, _ = _apply_patterns(_PRODUCE_PATTERNS, sent, spans)
         demands += [t for t in sent_demands if t not in demands]
         productions += [t for t in sent_productions if t not in productions]
+        if "可以发动" in sent:
+            activation += [t for t in sent_demands if t not in activation]
     if not demands and not productions:
         return None
-    return {"demands": demands, "productions": productions}
+    # 「处于X」已表达持有;同描述内其他谓语句回提的裸 X 视为重复
+    demands = [t for t in demands if f"处于{t}" not in demands]
+    out = {"demands": demands, "productions": productions}
+    if activation:
+        out["activation"] = activation
+    return out
 
 
 # ---------------------------------------------------------------- ④ 收集汇总
 def _attach_desc_res(skills: list[SkillRes]) -> None:
     """针对每条技能描述提取需求和产出,就地写入 descRes。
 
-    连携技的发动条件即触发需求,上提为 trigger(展示用);破防为默认条件且属
-    失衡机制(报告按需求忽略),不单独保留。上提后其余全空 → 不留空壳 descRes。
+    连携技需求列只展示发动条件:含「可以发动」句子里的需求上提为 trigger
+    (破防为默认条件且属失衡机制,报告按需求忽略,剔除);其余句子的需求
+    (附加效果的消耗/击碎等)非发动条件,随 demands 一并剔除。上提后其余
+    全空 → 不留空壳 descRes。
     """
     for m in skills:
         desc_res = _parse_desc(m.desc)
+        activation = (desc_res or {}).pop("activation", None) or []
         if m.slot == "连携技":
-            trigger = (desc_res or {}).pop("demands", None) or []
-            m.trigger = [t for t in trigger if t != "破防"]
+            if desc_res:
+                desc_res.pop("demands", None)
+            m.trigger = [t for t in activation if "破防" not in t]
         else:
             m.trigger = []
         m.descRes = desc_res if (desc_res and (desc_res.get("demands")
