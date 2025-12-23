@@ -242,9 +242,15 @@ def _post_purify(text: str) -> list[str]:
     return [f"净化{prefix}{t}" for t in terms]
 
 
+def _post_enter_event(text: str) -> list[str]:
+    """他动进入事件:「当有敌人进入(导电)状态」→ 进入xx(敌人进入该状态是
+    触发事件;捕获段含「或」列举,逐词加前缀)。"""
+    return [f"进入{t}" for t in _extract_terms(text)]
+
+
 def _post_passive_consume(text: str) -> list[str]:
-    """被动消耗:「(灼热附着)被消耗」→ xx被消耗。"""
-    return [f"{t}被消耗" for t in _extract_terms(text)]
+    """被动消耗:「(源石结晶)被消耗」→ 消耗xx(与消耗事件同一口径)。"""
+    return [f"消耗{t}" for t in _extract_terms(text)]
 
 
 def _post_cond_apply(text: str) -> list[str]:
@@ -272,6 +278,13 @@ def _post_state(text: str) -> list[str]:
     return out
 
 
+def _post_hold_state(text: str) -> list[str]:
+    """持有条件:「目标已经处于(寒冷附着或冻结)状态」→ 处于xx(目标处于该
+    状态是触发条件;展示截断于「状/的/时/后」边界,不吞后续谓语)。"""
+    text = re.split(r"[状的时后]", text, 1)[0]
+    return [f"处于{t}" for t in _extract_terms(text)]
+
+
 def _post_demand_phrase(text: str) -> list[str]:
     """需求短语:「消耗目标的导电状态」→ 导电。
 
@@ -281,6 +294,27 @@ def _post_demand_phrase(text: str) -> list[str]:
     if "被施加" in text:
         text = text.split("被施加")[0]
     return _extract_terms(text)
+
+
+def _post_consume_event(text: str) -> list[str]:
+    """他动消耗事件:「(战技构成序列)消耗(源石结晶)时」→ 消耗xx。
+
+    消耗是其他技能/单位的动作,本条目在该消耗发生时生效,展示保留动词,
+    区别于本条目自身的消耗成本(需求短语,裸词条)。
+    """
+    return [f"消耗{t}" for t in _extract_terms(text)]
+
+
+def _post_apply_event(text: str) -> list[str]:
+    """他动施加事件/定语:「(佩丽卡)对敌人施加(导电)后」「(连携技X)施加的
+    (导电)」→ 施加xx(施加动作来自其他技能/单位,本条目作用或生效于其上,
+    区别于本条目自身的施加动作)。"""
+    return [f"施加{t}" for t in _extract_terms(text)]
+
+
+def _post_literal(text: str) -> list[str]:
+    """固定短语:捕获内容本身即需求文案(机制触发,无资源词条),原样保留。"""
+    return [text]
 
 
 def _post_all_terms(text: str) -> list[str]:
@@ -298,9 +332,15 @@ class DescPattern(NamedTuple):
 
 # 需求 regex 表(优先级即列表顺序;捕获组统一命名 demand)
 _DEMAND_PATTERNS: list[DescPattern] = [
-    # 被动消耗:「(源石结晶)被消耗/被吸收」→ xx被消耗
+    # 进入事件:「当有敌人进入(导电)状态或…」→ 进入xx(敌人进入该状态是
+    # 触发事件;置于首位使展示顺序与句序一致)
+    DescPattern("进入事件",
+                re.compile(rf"进入(?P<demand>[^，。;\n]{{0,16}}?)[状时后]"),
+                _post_enter_event),
+    # 被动消耗:「(源石结晶)被消耗/被吸收」→ 消耗xx(捕获段排除「或」,
+    # 「A或B被消耗」只取贴近被字的 B,不吞列举词)
     DescPattern("被动消耗",
-                re.compile(rf"(?P<demand>[^，。;\n]{{0,8}})被(?:消耗|吸收|转化)"),
+                re.compile(rf"(?P<demand>[^，。;或\n]{{0,8}})被(?:消耗|吸收|转化)"),
                 _post_passive_consume),
     # 被字状态:「被冻结」「被附着源石结晶」→ 被xx
     DescPattern("状态前缀",
@@ -310,11 +350,53 @@ _DEMAND_PATTERNS: list[DescPattern] = [
                 re.compile(
                     rf"(?:每当|当|若|如果|一旦|每次)[^。;\n]{{0,12}}?被施加(?P<demand>[^，。;\n]{{0,10}})"),
                 _post_cond_apply),
-    # 需求短语:「消耗/带有/处于/存在/拥有/已满/进入/命中 + 片段」→ 片段内词条
+    # 被动施加:「(句首)被施加(法术附着)时」→ 被施加xx(承受型触发;句中的
+    # 「目标被施加缓速」是施加陈述,仍由产出表接管)
+    DescPattern("被动施加",
+                re.compile(r"^被施加(?P<demand>[^，。;\n]{0,10})"),
+                _post_cond_apply),
+    # 条件持有:「如果敌人身上附着(源石结晶)」→ xx(敌人已有该状态,是需求而非
+    # 施加动作;占用 span,免被产出表的「附着」截胡)
+    DescPattern("条件持有",
+                re.compile(rf"身上附着(?P<demand>[^，。;\n]{{0,10}})"), _post_terms),
+    # 定语持有:「附着(源石结晶)的敌人」→ xx(持有该状态的敌人才是触发条件,
+    # 并非本条目施加;捕获段排除「或」以免吞掉「A附着或B附着的敌人」;
+    # 占用 span,免被产出表的「附着」截胡)
+    DescPattern("定语持有",
+                re.compile(rf"附着(?P<demand>[^，。;或\n]{{0,8}})的敌人"), _post_terms),
+    # 消耗事件:「(战技构成序列)消耗(源石结晶)时/后」→ 消耗xx(消耗动作来自
+    # 其他技能/单位,本条目被动生效;「消耗的X」是定语回指,交由需求短语)
+    DescPattern("消耗事件",
+                re.compile(rf"消耗(?!的)(?P<demand>[^，。;\n]{{0,16}}?)[时后]"),
+                _post_consume_event),
+    # 施加事件:「(佩丽卡)对敌人施加(导电)后」→ 施加xx(本条目在该施加后
+    # 生效;「成功施加」是技能自身动作的结果陈述,「被施加」是承受语态,均不算)
+    DescPattern("施加事件",
+                re.compile(rf"施加(?<!成功施加)(?<!被)(?!的)(?P<demand>[^，。;\n]{{0,16}}?)[时后]"),
+                _post_apply_event),
+    # 施加定语:「(连携技X)施加的(导电)」→ 施加xx(被施加状态是本条目的
+    # 作用对象,非本条目产出;「施加的Y持续时间+N」是延长本方状态时长,
+    # 负向先行跳过,落回产出表归为产出 Y)
+    DescPattern("施加定语",
+                re.compile(rf"施加的(?![^，。;\n]{{0,14}}持续时间)(?P<demand>[^，。;\n]{{0,16}})"),
+                _post_apply_event),
+    # 处于状态:「目标已经处于(寒冷附着或冻结)状态」→ 处于xx(持有条件,
+    # 与消耗/施加/进入事件同为带谓语展示)。捕获段保持贪心以维持原有 span
+    # 遮挡范围,展示由后处理在「状/的/时/后」边界截断
+    DescPattern("处于状态",
+                re.compile(rf"处于(?P<demand>[^，。;并且\n]{{0,16}})"),
+                _post_hold_state),
+    # 需求短语:「消耗/带有/存在/拥有/已满/进入/命中/使用/击碎 + 片段」
+    # → 片段内词条(使用/击碎 = 动用已有资源;捕获段以「并/且」为界不跨子句,
+    # 免把后续谓语如「并强制施加导电」并进本条需求、挡掉其产出提取)
     DescPattern("需求短语",
                 re.compile(
-                    rf"(?:消耗|带有|处于|存在|拥有|已满|进入|命中)(?P<demand>[^，。;\n]{{0,16}})"),
+                    rf"(?:消耗|带有|存在|拥有|已满|进入|命中|使用|击碎)(?P<demand>[^，。;并且\n]{{0,16}})"),
                 _post_demand_phrase),
+    # 机制触发:「主控干员受到攻击后可以发动」→ 主控干员受到攻击
+    DescPattern("主控受击",
+                re.compile(r"(?P<demand>主控干员受到攻击)"),
+                _post_literal),
     # 发动条件:整句含「可以发动」,句内词条全部视为需求
     DescPattern("发动条件",
                 re.compile(r"(?=[^。;\n]*可以发动)(?P<demand>[^。;\n]*)"), _post_all_terms),
@@ -359,7 +441,8 @@ def _apply_patterns(patterns: list[DescPattern], sent: str,
                 continue
             if _DESC_NEG_KW.search(sent[max(0, m.start() - 6):m.start()]):
                 continue
-            items = [i for i in tpl.post(m.group(group)) if i and i not in out]
+            items = [i for i in tpl.post(m.group(group))
+                     if i and i not in out and f"处于{i}" not in out]
             if not items:
                 continue
             spans.append(m.span())
