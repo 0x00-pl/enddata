@@ -262,9 +262,10 @@ def _post_state(text: str) -> list[str]:
     """被字状态:「被冻结」「被(附着)源石结晶」→ 被xx。
 
     「施加」开头的片段(「被施加缓速」,陈述施加行为)交由产出表处理,此处丢弃;
+    「强制」开头(「被强制冻结」是施加动作的结果)同样交由产出表;
     链式片段(「冻结或被附着源石结晶」)逐词取各自的前缀。
     """
-    if text.startswith("施加"):
+    if text.startswith("施加") or text.startswith("强制"):
         return []
     out: list[str] = []
     rest = text
@@ -410,10 +411,10 @@ _PRODUCE_PATTERNS: list[DescPattern] = [
                 re.compile(rf"净化(?P<produce>[^，。;\n]{{0,16}})"),
                 _post_purify),
     # 施加/承受/转化:「施加导电」「转化为猎矢」「敌人持续受到缓速」
-    # 「(目标)被施加缓速」(陈述句)→ xx
+    # 「(目标)被施加缓速」「将被强制冻结」(施加动作的被动语态)→ xx
     DescPattern("施加产出",
                 re.compile(
-                    rf"(?:被施加|施加|附加|附带|附着|受到|转化为)(?P<produce>[^，。;\n]{{0,16}})"),
+                    rf"(?:被施加|被强制|施加|附加|附带|附着|受到|转化为)(?P<produce>[^，。;\n]{{0,16}})"),
                 _post_terms),
     # 获得/生成:「获得启示」「生成青霆剑」「召唤盾卫」→ xx
     DescPattern("获得产出",
