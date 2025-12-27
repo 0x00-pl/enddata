@@ -151,7 +151,9 @@ def _extract_skill_res(entry: dict) -> list[SkillRes]:
         for sk in members:
             lv = (sk.get("levels") or [{}])[-1]
             pool.update(lv.get("blackboard") or {})
-        group_desc = _fill_placeholders(_strip_tags(g.get("desc")), pool)
+        group_desc_src = g.get("desc") or "".join(filter(
+            None, (g.get(f"conditionPostDesc{i}") for i in (1, 2)))) or None
+        group_desc = _fill_placeholders(_strip_tags(group_desc_src), pool)
         for sk in members:
             own = sk.get("desc")
             parsed = analyze_skill(sk, slot, g.get("name"),
