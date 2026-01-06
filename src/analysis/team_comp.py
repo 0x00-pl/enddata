@@ -460,9 +460,10 @@ _PRODUCE_PATTERNS: list[DescPattern] = [
                 re.compile(rf"(?:获得|生成|召唤|返还|恢复)(?P<produce>[^，。;\n]{{0,12}})"),
                 _post_terms),
     # 造成:「造成倒地/击飞/猛击」→ xx(直接谓语的施加;置于表尾,不与
-    # 施加/获得产出争抢同一片段;「造成基于X的Y」是倍率句,负向先行跳过)
+    # 施加/获得产出争抢同一片段;「造成基于X的Y」是倍率句、「造成X触发…」
+    # 是触发引述,负向先行跳过)
     DescPattern("造成产出",
-                re.compile(rf"造成(?!基于)(?P<produce>[^，。;\n]{{0,16}})"),
+                re.compile(rf"造成(?!(?:基于|[^，。;\n]{{0,8}}触发))(?P<produce>[^，。;\n]{{0,16}})"),
                 _post_terms),
 ]
 
