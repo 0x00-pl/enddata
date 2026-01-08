@@ -222,7 +222,11 @@ _DESC_TERMS = (
 _T = "(?:" + "|".join(map(re.escape, sorted(_DESC_TERMS, key=len, reverse=True))) + ")"
 _TERM_RE = re.compile(_T)
 # 否定排除:「不消耗技力与导电」「即使未消耗……」「不再施加灼热附着」
-_DESC_NEG_KW = re.compile(r"(?:不|未|无需|不能)(?:再)?(?:消耗|施加)")
+# 「无法被施加」;守卫窗口含命中首字,覆盖不/未 + 被 + 动词首字的形态
+_DESC_NEG_KW = re.compile(r"(?:不|未|无需|不能|无法)(?:再)?被?[消耗施]")
+# 同描述内「处于X」命中后,消耗/命中句又回提裸词条 X 时,裸词条被条目过滤
+# 丢弃并登记于此;汇总阶段以裸词条替换「处于X」(自身消耗动作优先于持有条件)
+_held_state_bare: list[str] = []
 
 
 # ---- 后处理函数:regex 捕获的片段 → 最终展示文案(list[str];[] = 丢弃该命中) ----
@@ -485,10 +489,17 @@ def _apply_patterns(patterns: list[DescPattern], sent: str,
         for m in tpl.regex.finditer(sent):
             if any(m.start() < e and s < m.end() for s, e in spans):
                 continue
-            if _DESC_NEG_KW.search(sent[max(0, m.start() - 6):m.start()]):
+            if _DESC_NEG_KW.search(sent[max(0, m.start() - 6):m.start() + 2]):
                 continue
-            items = [i for i in tpl.post(m.group(group))
-                     if i and i not in out and f"处于{i}" not in out]
+            items: list[str] = []
+            for i in tpl.post(m.group(group)):
+                if not i or i in out:
+                    continue
+                hold = f"处于{i}"
+                if hold in out:
+                    _held_state_bare.append(i)
+                    continue
+                items.append(i)
             if not items:
                 continue
             spans.append(m.span())
@@ -506,6 +517,7 @@ def _parse_desc(desc: str | None) -> dict | None:
     if not desc:
         return None
     plain = _DESC_TAG_RE.sub(r"\1", desc)
+    _held_state_bare.clear()
     demands: list[str] = []
     productions: list[str] = []
     activation: list[str] = []
@@ -518,8 +530,10 @@ def _parse_desc(desc: str | None) -> dict | None:
             activation += [t for t in sent_demands if t not in activation]
     if not demands and not productions:
         return None
-    # 「处于X」已表达持有;同描述内其他谓语句回提的裸 X 视为重复
-    demands = [t for t in demands if f"处于{t}" not in demands]
+    # 「处于X」被消耗/命中句压制过裸词条 X 时(自身消耗动作),以裸词条
+    # 替换持有展示(如「若目标处于腐蚀状态，消耗其腐蚀状态」→ 需求 腐蚀)
+    demands = [t[2:] if t.startswith("处于") and t[2:] in _held_state_bare else t
+               for t in demands]
     out = {"demands": demands, "productions": productions}
     if activation:
         out["activation"] = activation
