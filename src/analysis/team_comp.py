@@ -558,10 +558,10 @@ def _attach_desc_res(skills: list[SkillRes]) -> None:
         if m.slot == "连携技":
             if desc_res:
                 desc_res.pop("demands", None)
-            # 破防剔除只针对默认形态(进入/处于破防);「达到N层破防」这类
-            # 叠层阈值条件是具体发动门槛,保留展示
+            # 破防剔除只针对默认机制条件(进入/被施加破防,全连携技通用);
+            # 保留:裸词条破防(叠层阈值)、处于破防(复合持有条件)
             m.trigger = [t for t in activation
-                         if "破防" not in t or t == "破防"]
+                         if "破防" not in t or t in ("破防", "处于破防")]
         else:
             m.trigger = []
         m.descRes = desc_res if (desc_res and (desc_res.get("demands")
