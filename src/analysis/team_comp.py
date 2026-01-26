@@ -534,9 +534,12 @@ def _parse_desc(desc: str | None) -> dict | None:
     if not demands and not productions:
         return None
     # 「处于X」被消耗/命中句压制过裸词条 X 时(自身消耗动作),以裸词条
-    # 替换持有展示(如「若目标处于腐蚀状态，消耗其腐蚀状态」→ 需求 腐蚀)
+    # 替换持有展示(如「若目标处于腐蚀状态，消耗其腐蚀状态」→ 需求 腐蚀);
+    # 触发句的持有展示同样让位(如 一息万变 命中即消耗 电磁附着)
     demands = [t[2:] if t.startswith("处于") and t[2:] in _held_state_bare else t
                for t in demands]
+    activation = [t[2:] if t.startswith("处于") and t[2:] in demands else t
+                  for t in activation]
     out = {"demands": demands, "productions": productions}
     if activation:
         out["activation"] = activation
