@@ -311,12 +311,11 @@ def _post_demand_phrase(text: str) -> list[str]:
 
 
 def _post_consume_event(text: str) -> list[str]:
-    """他动消耗事件:「(战技构成序列)消耗(源石结晶)时」→ 消耗xx。
+    """他动消耗事件:「(战技构成序列)消耗(源石结晶)时」→ 裸词条。
 
-    消耗是其他技能/单位的动作,本条目在该消耗发生时生效,展示保留动词,
-    区别于本条目自身的消耗成本(需求短语,裸词条)。
-    """
-    return [f"消耗{t}" for t in _extract_terms(text)]
+    消耗是其他技能/单位的动作,本条目在该消耗发生时生效;展示与
+    自身消耗动作一致,均记裸词条。"""
+    return _extract_terms(text)
 
 
 def _post_apply_event(text: str) -> list[str]:
