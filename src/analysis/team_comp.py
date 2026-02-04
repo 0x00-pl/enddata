@@ -479,7 +479,7 @@ _PRODUCE_PATTERNS: list[DescPattern] = [
                 _post_terms),
     # 获得/生成:「获得启示」「生成青霆剑」「召唤盾卫」→ xx
     DescPattern("获得产出",
-                re.compile(rf"(?:获得|生成|召唤|返还|恢复)(?P<produce>[^，。;\n]{{0,12}})"),
+                re.compile(rf"(?:获得(?!的)|生成|召唤|返还|恢复)(?P<produce>[^，。;\n]{{0,12}})"),
                 _post_terms),
     # 造成:「造成倒地/击飞/猛击」→ xx(直接谓语的施加;置于表尾,不与
     # 施加/获得产出争抢同一片段;「造成基于X的Y」是倍率句、「造成X触发…」
