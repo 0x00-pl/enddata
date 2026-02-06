@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import argparse
 
-from analysis import team_comp
+from analysis import gacha, team_comp
 from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, settlements, weapons
 from tools import id_links, tables, versions
@@ -92,9 +92,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="进阶分析:基于 data/ 数据集二次计算(产物入 data/analysis/ 与 reports/)",
     )
     ana_sub = ana.add_subparsers(dest="analysis_target", required=True,
-                                 metavar="{team}")
+                                 metavar="{team,gacha}")
     ana_sub.add_parser(
         "team", help="配队分析:技能/天赋/潜能的需求与产出资源解析 → reports/team-analysis.md",
+    )
+    ana_sub.add_parser(
+        "gacha", help="抽卡分析:寻访概率计算(卡池状态机模拟 + 解析分布对拍)→ 控制台报告",
     )
 
     idm = sub.add_parser(
@@ -118,6 +121,8 @@ def main(argv=None) -> None:
     if args.command == "analysis":
         if args.analysis_target == "team":
             team_comp.main()
+        elif args.analysis_target == "gacha":
+            gacha.main()
         return
 
     # idmap 域
