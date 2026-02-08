@@ -664,6 +664,122 @@ def sample_pmf(samples: list[int]) -> list[float]:
     return out
 
 
+# ---------------------------------------------------------------- ④ 版本概率曲线
+def cdf_expectation(cdf_arr: list[float]) -> float:
+    """由累积分布求期望抽数:E[T] = 1 + Σ_{n≥1} P(T > n)(生存函数求和)。"""
+    return 1.0 + sum(1.0 - p for p in cdf_arr)
+
+
+def version_key(v: str) -> tuple[int, ...]:
+    """版本号 → 可比较元组(1.10 > 1.9)。"""
+    return tuple(int(x) for x in v.split("."))
+
+
+def version_banners(version: str) -> list[GachaPool]:
+    """截至 version(含)的全部首发限定池(按版本顺序平铺)。"""
+    return [p for v, pools in sorted(POOLS.items(), key=lambda kv: version_key(kv[0]))
+            if version_key(v) <= version_key(version)
+            for p in pools
+            if isinstance(p, LimitedGacha) and not isinstance(p, RerunGacha)]
+
+
+def collection_cdf(version: str, trials: int = 5_000,
+                   seed: int = DEFAULT_SEED) -> tuple[list[float], float]:
+    """「平铺全图鉴」策略(strategy_until_owned:逐池抽到当期干员到手、拿齐
+    即停、无限定UP的池跳过)下,截至 version 的全部限定UP在 N 付费抽内
+    集齐的概率曲线(模拟,含顺路获得与跳过)。返回 (CDF, 期望付费抽数),
+    期望与曲线同口径 —— 由所画 CDF 生存函数求和得出。"""
+    plan = version_banners(version)
+    rng = random.Random(seed)
+    paid: list[int] = []
+    for _ in range(trials):
+        g = GachaGlobalState()
+        for pool in plan:
+            pool.reset(g)
+            pool.rng = rng
+            run_banner(pool, strategy_until_owned)
+        paid.append(g.paid_pulls)
+    arr = cdf(sample_pmf(paid))
+    return arr, cdf_expectation(arr)
+
+
+def collection_cdf_upper(version: str) -> tuple[list[float], float]:
+    """同一口径的解析上界(各池独立、期初 pity=0、未计顺路):当期干员首达
+    分布逐池卷积后的 CDF。返回 (CDF, 期望付费抽数)。"""
+    plan = version_banners(version)
+    pmf = target_paid_pmf(type(plan[0]))
+    for _ in plan[1:]:
+        pmf = conv(pmf, target_paid_pmf(LimitedGacha))
+    arr = cdf(pmf)
+    return arr, cdf_expectation(arr)
+
+
+def render_collection_chart(version: str,
+                            curves: list[tuple[str, list[float], str, float]],
+                            out_path: Path) -> Path:
+    """全图鉴集齐概率折线图(手写 SVG,零依赖):横坐标付费抽数、纵坐标
+    集齐概率;curves = [(图例, CDF, 颜色, 期望抽数)],每条曲线配一条
+    同色竖虚线标注期望抽数。"""
+    w, h = 760, 460
+    ml, mr, mt, mb = 64, 20, 46, 52
+    pw, ph = w - ml - mr, h - mt - mb
+    x_max = max(len(c) for _, c, _, _ in curves) + 1  # cdf 第 i 项 = 前 i 抽
+    x_step = 100 if x_max <= 600 else (200 if x_max <= 1200 else 400)
+    grid, axes = [], []
+
+    def X(n: float) -> float:
+        return ml + n / x_max * pw
+
+    def Y(p: float) -> float:
+        return mt + ph * (1.0 - p)
+
+    for gy in [i / 5 for i in range(6)]:              # 纵轴 0/20/…/100%
+        grid.append(f'<line x1="{ml}" y1="{Y(gy):.1f}" x2="{w - mr}" '
+                    f'y2="{Y(gy):.1f}" stroke="#e0e0e0"/>')
+        axes.append(f'<text x="{ml - 8}" y="{Y(gy) + 4:.1f}" text-anchor="end" '
+                    f'font-size="12" fill="#444">{gy:.0%}</text>')
+    n = 0
+    while n <= x_max:                                  # 横轴刻度
+        grid.append(f'<line x1="{X(n):.1f}" y1="{mt}" x2="{X(n):.1f}" '
+                    f'y2="{mt + ph}" stroke="#e0e0e0"/>')
+        axes.append(f'<text x="{X(n):.1f}" y="{mt + ph + 18}" text-anchor="middle" '
+                    f'font-size="12" fill="#444">{n}</text>')
+        n += x_step
+    lines = [f'<rect x="{ml}" y="{mt}" width="{pw}" height="{ph}" '
+             f'fill="none" stroke="#666"/>']
+    legend_x = w - mr - 260
+    for li, (label, cdf_arr, color, expect) in enumerate(curves):
+        pts = " ".join(f"{X(i):.1f},{Y(p):.1f}"
+                       for i, p in enumerate(cdf_arr[:x_max]))
+        lines.append(f'<polyline points="{pts}" fill="none" stroke="{color}" '
+                     f'stroke-width="2"/>')
+        ex = X(expect)
+        lines.append(f'<line x1="{ex:.1f}" y1="{mt}" x2="{ex:.1f}" y2="{mt + ph}" '
+                     f'stroke="{color}" stroke-width="1.5" stroke-dasharray="5,4"/>')
+        lines.append(f'<text x="{ex + 5:.1f}" y="{mt + 14 + li * 16}" '
+                     f'font-size="12" fill="{color}">E={expect:.0f}</text>')
+        ly = mt + 20 + li * 22
+        lines.append(f'<line x1="{legend_x}" y1="{ly}" x2="{legend_x + 28}" '
+                     f'y2="{ly}" stroke="{color}" stroke-width="2"/>')
+        lines.append(f'<text x="{legend_x + 34}" y="{ly + 4}" font-size="13" '
+                     f'fill="#222">{label}</text>')
+    svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
+        f'viewBox="0 0 {w} {h}" font-family="sans-serif">'
+        f'<rect x="0" y="0" width="{w}" height="{h}" fill="#ffffff"/>'
+        f'<text x="{w / 2}" y="24" text-anchor="middle" font-size="16" '
+        f'fill="#111">截至 {version} 版本全图鉴集齐概率(平铺策略,付费口径)'
+        f'</text>{"".join(grid)}{"".join(lines)}{"".join(axes)}'
+        f'<text x="{ml + pw / 2}" y="{h - 12}" text-anchor="middle" '
+        f'font-size="13" fill="#444">付费抽数</text>'
+        f'<text x="18" y="{mt + ph / 2}" text-anchor="middle" font-size="13" '
+        f'fill="#444" transform="rotate(-90 18 {mt + ph / 2})">集齐概率</text>'
+        f'</svg>')
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(svg, encoding="utf-8")
+    return out_path
+
+
 # ---------------------------------------------------------------- 干员名
 _CHAR_NAMES: dict[str, str] = {}
 
@@ -775,8 +891,15 @@ def render_report(col_pmf: list[float], col_samples: list[int],
 
 
 # ---------------------------------------------------------------- 主函数
-def run() -> None:
-    """控制台输出对拍与全图鉴摘要;报告写入 reports/gacha-analysis.md。"""
+def run(plot_version: str | None = None,
+        method: str = "both") -> None:
+    """控制台输出对拍与全图鉴摘要;报告写入 reports/gacha-analysis.md。
+
+    plot_version 给定时,额外绘制截至该版本的全图鉴集齐概率曲线
+    (平铺策略:横坐标付费抽数、纵坐标集齐概率,SVG 零依赖)。
+    method 选择概率计算方式:analytic = 解析(卷积上界,快、保守);
+    simulate = 状态机蒙特卡洛(含顺路/跳过与下期券);both = 两者都画。
+    """
     # 单池保底分布对拍(模拟 vs 解析):取 1.0 首个限定池(名单不影响当期首达)
     pool = POOLS["1.0"][0]
     ana = {
@@ -818,9 +941,25 @@ def run() -> None:
     REPORT_PATH.write_text(report, encoding="utf-8")
     print(f"  {REPORT_PATH}")
 
+    if plot_version:
+        plan = version_banners(plot_version)
+        if not plan:
+            raise SystemExit(f"版本 {plot_version} 没有首发限定池")
+        curves = []
+        if method in ("both", "simulate"):
+            sim_cdf, sim_e = collection_cdf(plot_version)
+            curves.append(("模拟(含顺路/跳过)", sim_cdf, "#1565c0", sim_e))
+        if method in ("both", "analytic"):
+            ana_cdf, ana_e = collection_cdf_upper(plot_version)
+            curves.append(("解析上界(未计顺路)", ana_cdf, "#ef6c00", ana_e))
+        path = render_collection_chart(
+            plot_version, curves,
+            REPORTS_DIR / f"gacha-collection-{plot_version}.svg")
+        print(f"  {path}(平铺全图鉴策略,{len(plan)} 个首发池,方式 {method})")
 
-def main() -> None:
-    run()
+
+def main(plot_version: str | None = None, method: str = "both") -> None:
+    run(plot_version, method)
 
 
 if __name__ == "__main__":

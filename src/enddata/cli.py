@@ -96,8 +96,17 @@ def build_parser() -> argparse.ArgumentParser:
     ana_sub.add_parser(
         "team", help="配队分析:技能/天赋/潜能的需求与产出资源解析 → reports/team-analysis.md",
     )
-    ana_sub.add_parser(
+    gacha_p = ana_sub.add_parser(
         "gacha", help="抽卡分析:寻访概率计算(卡池状态机模拟 + 解析分布对拍)→ 控制台报告",
+    )
+    gacha_p.add_argument(
+        "--plot", metavar="VERSION", dest="plot_version", default=None,
+        help="绘制截至该版本的全图鉴集齐概率曲线(平铺策略),如 --plot 1.4",
+    )
+    gacha_p.add_argument(
+        "--method", choices=("both", "analytic", "simulate"), default="both",
+        help="概率计算方式:analytic=解析卷积上界(快、保守);"
+             "simulate=状态机蒙特卡洛(含顺路/跳过与下期券);both=两者都画",
     )
 
     idm = sub.add_parser(
@@ -122,7 +131,7 @@ def main(argv=None) -> None:
         if args.analysis_target == "team":
             team_comp.main()
         elif args.analysis_target == "gacha":
-            gacha.main()
+            gacha.main(args.plot_version, args.method)
         return
 
     # idmap 域
