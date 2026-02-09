@@ -1,6 +1,6 @@
 # 抽卡分析报告
 
-- 生成时间:2026-09-18T08:58:58+00:00(UTC);数据源:rmxlinux/EndfieldData@main(build initial_10024360-6_main_10024360-6);卡池安排 = GachaCharPoolTable 快照,概率参数 = GachaCharPoolTypeTable,6★ 名单 = GachaCharPoolContentTable
+- 生成时间:2026-09-18T09:26:31+00:00(UTC);数据源:rmxlinux/EndfieldData@main(build initial_10024360-6_main_10024360-6);卡池安排 = GachaCharPoolTable 快照,概率参数 = GachaCharPoolTypeTable,6★ 名单 = GachaCharPoolContentTable
 - 全图鉴口径:集齐 11 名限定首发当期干员(联合/复刻池为重复获取机会,不占主路径);抽数 = 付费寻访次数(赠送十连已按必领必用折入)
 
 ## 一、各版本 UP 卡池安排
