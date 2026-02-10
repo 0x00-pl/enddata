@@ -104,9 +104,9 @@ def build_parser() -> argparse.ArgumentParser:
         help="绘制截至该版本的全图鉴集齐概率曲线(平铺策略),如 --plot 1.4",
     )
     gacha_p.add_argument(
-        "--method", choices=("both", "analytic", "simulate"), default="both",
-        help="概率计算方式:analytic=解析卷积上界(快、保守);"
-             "simulate=状态机蒙特卡洛(含顺路/跳过与下期券);both=两者都画",
+        "--method", choices=("both", "analytic", "simulate"), default="simulate",
+        help="概率计算方式:simulate=状态机蒙特卡洛(默认,含顺路/跳过与下期券);"
+             "analytic=解析卷积上界(快、保守);both=两者都画",
     )
 
     idm = sub.add_parser(

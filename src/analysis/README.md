@@ -46,7 +46,10 @@
   池开局兑换;赠送十连必须整抽,策略不可在免费段中断)。
   **抽卡策略**:`strategy(pool, g) -> bool` 以(当期卡池状态, 全局状态)决定本抽
   是否继续,`run_banner()` 按策略驱动;内置 `strategy_until_owned`(图鉴:拿齐
-  即停)。
+  即停)。各版本全勤(零氪)免费抽数(社区统计口径,不含外部激励)见
+  `VERSION_FREE_PULLS` 常量与 `total_free_pulls(version)`,报告中作全勤对照;
+  大小月卡按每版本增量估算(`PASS_PULLS_DELTA`,1.5 实测 +18),概率图上与
+  零氪线一并画出并标注与期望的差。
   两套实现互相对拍:① `simulate()` 驱动 `pull()` 的规则直演(固定种子),
   ② 解析分布(逐抽概率表 + 首个UP首达 DP + 赠送十连并入;全图鉴抽数 = 单池
   分布卷积)。产物:`reports/gacha-analysis.md`(版本 UP 卡池安排含同池往期提升

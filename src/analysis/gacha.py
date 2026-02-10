@@ -416,6 +416,36 @@ POOLS: dict[str, list[GachaPool]] = {
 }
 
 
+# 各版本全勤(零氪)可获得的免费寻访次数:游戏内常规产出(版本活动、任务、
+# 签到、维护补偿、地图与成就新增等),不含直播/拉新等外部激励。1.0 含开服
+# 一次性资源(新手、全地图探索、成就等)。数字取自 B 站社区统计(2026-09 查询):
+# 让你爱上学习 1.0=414 / 1.1=109 / 1.4=135.9,次元啾啾 1.3≈87.9,千海羽
+# 1.5≈85(总抽数口径;其中约 15% 为常驻池专用凭证),1.2 取零氪 98.7~107
+# 区间约 100。与源表无对应,新版本人工维护。
+VERSION_FREE_PULLS: dict[str, int] = {
+    "1.0": 414, "1.1": 109, "1.2": 100, "1.3": 88, "1.4": 136, "1.5": 85,
+}
+
+
+def total_free_pulls(version: str) -> int:
+    """开服至 version(含)全勤可获得的累计免费寻访次数。"""
+    return sum(n for v, n in VERSION_FREE_PULLS.items()
+               if version_key(v) <= version_key(version))
+
+
+PASS_PULLS_DELTA = 18
+# 大小月卡相对零氪的每版本抽数增量(估算):1.5 实测吻合(零氪总 85 →
+# 月卡 103,千海羽统计);其他版本无逐版数据,按固定增量估算。
+
+
+def total_pass_pulls(version: str) -> int:
+    """开服至 version(含),大小月卡玩家可获得的累计寻访次数
+    (零氪累计 + 每版本增量 × 已开放版本数;估算口径)。"""
+    n_versions = sum(1 for v in VERSION_FREE_PULLS
+                     if version_key(v) <= version_key(version))
+    return total_free_pulls(version) + PASS_PULLS_DELTA * n_versions
+
+
 # ---------------------------------------------------------------- 抽卡策略
 Strategy = Callable[[GachaPool, GachaGlobalState], bool]
 """策略函数:(当期卡池状态 GachaPool, 全局状态 GachaGlobalState) -> 本抽是否继续。"""
@@ -716,10 +746,22 @@ def collection_cdf_upper(version: str) -> tuple[list[float], float]:
 
 def render_collection_chart(version: str,
                             curves: list[tuple[str, list[float], str, float]],
-                            out_path: Path) -> Path:
+                            out_path: Path,
+                            marks: list[tuple[str, float, str, str]] = ()
+                            ) -> Path:
     """全图鉴集齐概率折线图(手写 SVG,零依赖):横坐标付费抽数、纵坐标
     集齐概率;curves = [(图例, CDF, 颜色, 期望抽数)],每条曲线配一条
-    同色竖虚线标注期望抽数。"""
+    同色竖虚线标注期望抽数;marks = [(标签, 抽数, 颜色, 与期望的差)],
+    以实线竖线画出(如零氪全勤/大小月卡)。每条竖线与主曲线(第一条)的
+    交点画圆点并标注概率值。"""
+
+    def prob_at(cdf_arr: list[float], x: float) -> float:
+        """竖线位置在主曲线上的概率(线性插值)。"""
+        i = int(x)
+        if i >= len(cdf_arr) - 1:
+            return cdf_arr[-1]
+        return cdf_arr[i] + (cdf_arr[i + 1] - cdf_arr[i]) * (x - i)
+
     w, h = 760, 460
     ml, mr, mt, mb = 64, 20, 46, 52
     pw, ph = w - ml - mr, h - mt - mb
@@ -747,22 +789,48 @@ def render_collection_chart(version: str,
         n += x_step
     lines = [f'<rect x="{ml}" y="{mt}" width="{pw}" height="{ph}" '
              f'fill="none" stroke="#666"/>']
-    legend_x = w - mr - 260
+    main_cdf = curves[0][1]                    # 交点标注的主曲线(模拟)
     for li, (label, cdf_arr, color, expect) in enumerate(curves):
         pts = " ".join(f"{X(i):.1f},{Y(p):.1f}"
                        for i, p in enumerate(cdf_arr[:x_max]))
         lines.append(f'<polyline points="{pts}" fill="none" stroke="{color}" '
                      f'stroke-width="2"/>')
-        ex = X(expect)
+        ex, ey = X(expect), Y(prob_at(main_cdf, expect))
         lines.append(f'<line x1="{ex:.1f}" y1="{mt}" x2="{ex:.1f}" y2="{mt + ph}" '
                      f'stroke="{color}" stroke-width="1.5" stroke-dasharray="5,4"/>')
-        lines.append(f'<text x="{ex + 5:.1f}" y="{mt + 14 + li * 16}" '
-                     f'font-size="12" fill="{color}">E={expect:.0f}</text>')
-        ly = mt + 20 + li * 22
-        lines.append(f'<line x1="{legend_x}" y1="{ly}" x2="{legend_x + 28}" '
+        if li == 0:     # 首条曲线:E 标注放竖线左侧,给相邻竖线的标签让位
+            lines.append(f'<text x="{ex - 5:.1f}" y="{mt + 14}" '
+                         f'text-anchor="end" font-size="12" '
+                         f'fill="{color}">E={expect:.0f}</text>')
+        else:
+            lines.append(f'<text x="{ex + 5:.1f}" y="{mt + 14 + li * 16}" '
+                         f'font-size="12" fill="{color}">E={expect:.0f}</text>')
+        if li == 0:                            # 主曲线:期望交点圆点 + 概率值
+            lines.append(f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="3.5" '
+                         f'fill="{color}"/>')
+            lines.append(f'<text x="{ex + 6:.1f}" y="{ey - 8:.1f}" '
+                         f'font-size="12" font-weight="bold" '
+                         f'fill="{color}">{prob_at(main_cdf, expect):.0%}</text>')
+    for li, (label, _c, color, _e) in enumerate(curves):
+        # 图例:左上角竖排(该区域曲线贴底,空白安全)
+        ly = mt + 10 + li * 20
+        lines.append(f'<line x1="{ml + 10}" y1="{ly}" x2="{ml + 38}" '
                      f'y2="{ly}" stroke="{color}" stroke-width="2"/>')
-        lines.append(f'<text x="{legend_x + 34}" y="{ly + 4}" font-size="13" '
+        lines.append(f'<text x="{ml + 44}" y="{ly + 4}" font-size="13" '
                      f'fill="#222">{label}</text>')
+    label_layer = mt + 14 + len(curves) * 16
+    for mi, (label, x, color, note) in enumerate(marks):
+        mx, my = X(x), Y(prob_at(main_cdf, x))
+        lines.append(f'<line x1="{mx:.1f}" y1="{mt}" x2="{mx:.1f}" '
+                     f'y2="{mt + ph}" stroke="{color}" stroke-width="1.5"/>')
+        lines.append(f'<circle cx="{mx:.1f}" cy="{my:.1f}" r="3.5" '
+                     f'fill="{color}"/>')
+        lines.append(f'<text x="{mx + 6:.1f}" y="{my - 8:.1f}" '
+                     f'font-size="12" font-weight="bold" '
+                     f'fill="{color}">{prob_at(main_cdf, x):.0%}</text>')
+        lines.append(f'<text x="{mx + 5:.1f}" '
+                     f'y="{label_layer + mi * 16}" font-size="12" '
+                     f'fill="{color}">{label} {x:.0f}({note})</text>')
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
         f'viewBox="0 0 {w} {h}" font-family="sans-serif">'
@@ -819,6 +887,8 @@ def render_report(col_pmf: list[float], col_samples: list[int],
     free = [s[1] for s in col_samples]
     total = [s[2] for s in col_samples]
     col_cdf, sim_cdf = cdf(col_pmf), cdf(sample_pmf(paid))
+    last_ver = [v for v, pools in POOLS.items() if first_banners()[-1] in pools][0]
+    free_total = total_free_pulls(last_ver)
     lines = [
         "# 抽卡分析报告", "",
         f"- 生成时间:{now}(UTC);数据源:rmxlinux/EndfieldData@main"
@@ -882,6 +952,10 @@ def render_report(col_pmf: list[float], col_samples: list[int],
         f"期望付费 {sum(paid) / len(paid):.0f} 抽"
         f"(赠送 {sum(free) / len(free):.0f}、合计 {sum(total) / len(total):.0f}),"
         f"P90 {pulls_needed(sample_pmf(paid), 0.9)} 抽",
+        f"- 全勤对照:开服至 {last_ver} 全勤累计约 {free_total} 抽"
+        "(VERSION_FREE_PULLS,社区统计口径,含约 15% 常驻池专用凭证、"
+        "不含外部激励),与模拟需求基本持平 —— 零氪全勤接近可集齐,"
+        "需配合联合/复刻池补票精打细算",
         "- 两列差异 = 顺路收益与继承效应:25% 的6★落在往期干员(后续池目标"
         "已拥有即跳过)、赠送十连命中时下一池继承保底计数;解析列按各池独立、"
         "期初 pity=0 计算,故恒为保守上界",
@@ -892,13 +966,13 @@ def render_report(col_pmf: list[float], col_samples: list[int],
 
 # ---------------------------------------------------------------- 主函数
 def run(plot_version: str | None = None,
-        method: str = "both") -> None:
+        method: str = "simulate") -> None:
     """控制台输出对拍与全图鉴摘要;报告写入 reports/gacha-analysis.md。
 
     plot_version 给定时,额外绘制截至该版本的全图鉴集齐概率曲线
     (平铺策略:横坐标付费抽数、纵坐标集齐概率,SVG 零依赖)。
-    method 选择概率计算方式:analytic = 解析(卷积上界,快、保守);
-    simulate = 状态机蒙特卡洛(含顺路/跳过与下期券);both = 两者都画。
+    method 选择概率计算方式:simulate = 状态机蒙特卡洛(默认,含顺路/
+    跳过与下期券);analytic = 解析(卷积上界,快、保守);both = 两者都画。
     """
     # 单池保底分布对拍(模拟 vs 解析):取 1.0 首个限定池(名单不影响当期首达)
     pool = POOLS["1.0"][0]
@@ -934,6 +1008,8 @@ def run(plot_version: str | None = None,
           f"上限 {len(first_banners()) * LimitedGacha.hardGuarantee} 抽;"
           f"模拟均值 付费 {sum(paid) / len(paid):.0f} + 赠送 {sum(free) / len(free):.0f}"
           f" = 合计 {sum(total) / len(total):.0f} 抽(含顺路)")
+    print(f"  全勤对照:开服至 1.5 累计约 {total_free_pulls('1.5')} 抽"
+          "(社区统计,不含外部激励)")
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
     report = render_report(col_pmf, col_samples, now)
@@ -952,13 +1028,21 @@ def run(plot_version: str | None = None,
         if method in ("both", "analytic"):
             ana_cdf, ana_e = collection_cdf_upper(plot_version)
             curves.append(("解析上界(未计顺路)", ana_cdf, "#ef6c00", ana_e))
+        exp0 = curves[0][3]
+        zero = total_free_pulls(plot_version)
+        marks = [
+            ("零氪全勤", zero, "#2e7d32", f"{zero - exp0:+.0f}"),
+            ("大小月卡", total_pass_pulls(plot_version), "#6a1b9a",
+             f"{total_pass_pulls(plot_version) - exp0:+.0f}"),
+        ]
         path = render_collection_chart(
             plot_version, curves,
-            REPORTS_DIR / f"gacha-collection-{plot_version}.svg")
-        print(f"  {path}(平铺全图鉴策略,{len(plan)} 个首发池,方式 {method})")
+            REPORTS_DIR / f"gacha-collection-{plot_version}.svg", marks)
+        print(f"  {path}(平铺全图鉴策略,{len(plan)} 个首发池,方式 {method};"
+              f"零氪 {zero}、大小月卡 {marks[1][1]},括号为与期望的差)")
 
 
-def main(plot_version: str | None = None, method: str = "both") -> None:
+def main(plot_version: str | None = None, method: str = "simulate") -> None:
     run(plot_version, method)
 
 
