@@ -100,8 +100,12 @@ def build_parser() -> argparse.ArgumentParser:
         "gacha", help="抽卡分析:寻访概率计算(卡池状态机模拟 + 解析分布对拍)→ 控制台报告",
     )
     gacha_p.add_argument(
-        "--plot", metavar="VERSION", dest="plot_version", default=None,
-        help="绘制截至该版本的全图鉴集齐概率曲线(平铺策略),如 --plot 1.4",
+        "version", nargs="?", default=None, metavar="VERSION",
+        help="目标版本(如 1.4):限定 --plot 的统计范围与全勤对照截止,缺省为最新版本",
+    )
+    gacha_p.add_argument(
+        "--plot", action="store_true",
+        help="绘制版本全图鉴集齐概率曲线(平铺策略,零依赖 SVG)",
     )
     gacha_p.add_argument(
         "--method", choices=("both", "analytic", "simulate"), default="simulate",
@@ -131,7 +135,7 @@ def main(argv=None) -> None:
         if args.analysis_target == "team":
             team_comp.main()
         elif args.analysis_target == "gacha":
-            gacha.main(args.plot_version, args.method)
+            gacha.main(args.version, args.plot, args.method)
         return
 
     # idmap 域

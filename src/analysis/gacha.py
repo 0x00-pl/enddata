@@ -24,8 +24,9 @@ GachaCharPoolTypeTable 一致,单位 = 每百万分率 pm;采集侧暂无 gacha 
                   按基础概率出卡、与保底完全互不影响(不推进也不重置主保底)、
                   不计入累计寻访次数 → 付费抽数 = 有效抽数,必领必用时等价于
                   在付费第30抽后插入一段独立10连
-    累计60次      赠下期十连券(testimonialPullCount=60):入全局状态(next_ten_tickets),
-                  下一期限定池开局兑换,十连必须整抽
+    累计60次      赠下期十连券(testimonialPullCount=60):入全局状态
+                  (next_ten_tickets[pool_id],绑定档期上下一期限定池,仅该池
+                  可用),下一期限定池开局兑换,十连必须整抽
     其他          每240次赠UP潜能信物(intervalAutoRewardPerPullCount,只影响期望
                   份数,不改分布);常驻池累计300次自选六星(choicePackPullCount);
                   联合寻访(辉光庆典) 独立保底、无120必得;6★分配 50% 双UP平分 +
@@ -54,6 +55,7 @@ from __future__ import annotations
 
 import json
 import random
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -91,7 +93,9 @@ class GachaGlobalState:
     total_pulls: int = 0            # 累计经历抽数(含赠送)
     free_pulls: int = 0             # 其中赠送抽数
     paid_pulls: int = 0             # 其中付费抽数
-    next_ten_tickets: int = 0       # 手中的下期限定十连券(跨期资产,池触发时 +1)
+    next_ten_tickets: dict[str, int] = field(default_factory=dict)
+    # 下期限定十连券:pool_id → 张数。发券时绑定档期上的下一个限定池,
+    # 仅该池开局可兑换(id 校验),不可转移到别的池使用。
     rerun_progress: dict[str, dict] = field(default_factory=dict)
     # 重构寻访(RerunGacha)跨轮继承的进度:pool_id -> {pulls, up_got,
     # free_ten_left, free_ten_granted, next_ticket_granted}。限定寻访每期
@@ -147,6 +151,7 @@ class GachaPool:
     nextTenTicketAt: int = 60
     pool_name: str = "寻访池"
     progress_in_global: bool = False  # 进度入全局状态跨轮继承(重构寻访 = True)
+    next_pool_id: str = ""            # 下期券绑定的池 id(POOLS 档期推导)
 
     def __init__(self, global_state: GachaGlobalState | None = None,
                  rng: random.Random | None = None, *,
@@ -294,7 +299,9 @@ class GachaPool:
         if (self.nextTenTicketAt and not self.next_ticket_granted
                 and self.pulls >= self.nextTenTicketAt):
             self.next_ticket_granted = True
-            self.g.next_ten_tickets += 1
+            if self.next_pool_id:      # 券绑定下期限定池,仅该池可用
+                self.g.next_ten_tickets[self.next_pool_id] = \
+                    self.g.next_ten_tickets.get(self.next_pool_id, 0) + 1
 
 
 # ---------------------------------------------------------------- 五类卡池
@@ -416,6 +423,13 @@ POOLS: dict[str, list[GachaPool]] = {
 }
 
 
+# 下期十连券绑定:按档期顺序,每个限定/复刻池的 60 抽档券对应下一个
+# 上线的限定类池(末位无下期,不发);联合寻访不发下期券。
+_RERUN_SEQ = [p for pools in POOLS.values() for p in pools
+              if isinstance(p, LimitedGacha)]
+for _cur, _nxt in zip(_RERUN_SEQ, _RERUN_SEQ[1:]):
+    _cur.next_pool_id = _nxt.pool_id
+
 # 各版本全勤(零氪)可获得的免费寻访次数:游戏内常规产出(版本活动、任务、
 # 签到、维护补偿、地图与成就新增等),不含直播/拉新等外部激励。1.0 含开服
 # 一次性资源(新手、全地图探索、成就等)。数字取自 B 站社区统计(2026-09 查询):
@@ -473,8 +487,8 @@ def run_banner(pool: GachaPool, strategy: Strategy) -> list[Pull]:
     if not strategy(pool, pool.g):
         return out                        # 本池目标已拿齐:跳过,不兑券
     if (pool.pulls == 0 and pool.free_ten_left == 0
-            and pool.g.next_ten_tickets > 0):
-        pool.g.next_ten_tickets -= 1      # 下期限定十连券:本池开局兑换
+            and pool.g.next_ten_tickets.get(pool.pool_id, 0) > 0):
+        pool.g.next_ten_tickets[pool.pool_id] -= 1   # id 对应的券:本池开局兑换
         pool.free_ten_left += FREE_TEN_SIZE
     while True:
         if pool.free_ten_left:            # 十连必须一起抽出,不可只抽一半
@@ -713,13 +727,85 @@ def version_banners(version: str) -> list[GachaPool]:
             if isinstance(p, LimitedGacha) and not isinstance(p, RerunGacha)]
 
 
-def collection_cdf(version: str, trials: int = 5_000,
+def latest_version() -> str:
+    """POOLS 中最新的版本号。"""
+    return max(POOLS, key=version_key)
+
+
+def resolve_plan(target: str | None) -> tuple[str, str, str, list[GachaPool]]:
+    """目标 → (标签, 所属版本, 标题, 平铺池列表)。
+
+    语法:
+        pool_id | 池名称   单个卡池(special_1_4_1 / 临渊望北;含复刻池)
+        <版本>             该版本的卡池列表(1.4 → 临渊望北、晨星于此闪耀)
+        <版本>[切片]       版本内切片,Python 语法(1.0[:1] → 只含熔火灼痕)
+        [A..]B             跨版本累积平铺(..1.4 = 开服至 1.4;1.2.. = 1.2 起最新)
+    缺省 = 最新版本全部首发池。联合寻访仅支持模拟口径。
+    """
+
+    def plan_of(ver: str) -> list[GachaPool]:
+        return [p for p in POOLS[ver]
+                if isinstance(p, LimitedGacha) and not isinstance(p, RerunGacha)]
+
+    def single(p: GachaPool, ver: str):
+        return p.pool_id, ver, f"「{p.name}」当期干员集齐概率", [p]
+
+    if not target:
+        target = latest_version()
+
+    # 单个卡池(pool_id 或名称,含复刻)
+    for ver, pools in POOLS.items():
+        for p in pools:
+            if target in (p.pool_id, p.name):
+                return single(p, ver)
+
+    # 版本 + 可选切片:1.0[:1](切片语法同 Python)
+    m = re.fullmatch(r"(.+?)\[([^\[\]:]*)(?::([^\[\]:]*))?(?::([^\[\]:]*))?\]", target)
+    if m:
+        base, spec = m.group(1), m.group(2, 3, 4)
+        if base not in POOLS:
+            raise SystemExit(f"未知版本:{base}(可用:{'、'.join(POOLS)})")
+        args = [int(x) if x and x.strip() else None for x in spec]
+        plan = plan_of(base)[slice(*args)]
+        if not plan:
+            raise SystemExit(f"{target} 切片结果为空")
+        if len(plan) == 1:
+            return single(plan[0], base)
+        return target, base, f"{target} 全图鉴集齐概率", plan
+
+    # 跨版本累积:1.0..1.4 / ..1.4 / 1.2..
+    if ".." in target:
+        a, _, b = target.partition("..")
+        lo = version_key(a) if a else None
+        hi = version_key(b) if b else None
+        plan = [p for v in sorted(POOLS, key=version_key)
+                if (lo is None or version_key(v) >= lo)
+                and (hi is None or version_key(v) <= hi)
+                for p in plan_of(v)]
+        if not plan:
+            raise SystemExit(f"{target} 没有命中首发限定池")
+        return target, b or a or latest_version(), f"{target} 全图鉴集齐概率", plan
+
+    # 纯版本号:该版本的卡池列表
+    try:
+        version_key(target)
+    except ValueError:
+        raise SystemExit(f"未知版本或卡池:{target}(版本:{'、'.join(POOLS)};"
+                         f"卡池可用 pool_id/名称,切片如 1.0[:1],范围如 ..1.4)")
+    plan = plan_of(target)
+    if not plan:
+        raise SystemExit(f"版本 {target} 没有首发限定池(复刻池用 pool_id 指定)")
+    if len(plan) == 1:
+        return single(plan[0], target)
+    return target, target, f"{target} 全图鉴集齐概率", plan
+
+
+def collection_cdf(plan: list[GachaPool], trials: int = 5_000,
                    seed: int = DEFAULT_SEED) -> tuple[list[float], float]:
     """「平铺全图鉴」策略(strategy_until_owned:逐池抽到当期干员到手、拿齐
-    即停、无限定UP的池跳过)下,截至 version 的全部限定UP在 N 付费抽内
-    集齐的概率曲线(模拟,含顺路获得与跳过)。返回 (CDF, 期望付费抽数),
+    即停、无限定UP的池跳过)下,plan 全部限定UP在 N 付费抽内集齐的概率
+    曲线(模拟,含顺路获得与跳过)。返回 (CDF, 期望付费抽数),
     期望与曲线同口径 —— 由所画 CDF 生存函数求和得出。"""
-    plan = version_banners(version)
     rng = random.Random(seed)
     paid: list[int] = []
     for _ in range(trials):
@@ -733,10 +819,13 @@ def collection_cdf(version: str, trials: int = 5_000,
     return arr, cdf_expectation(arr)
 
 
-def collection_cdf_upper(version: str) -> tuple[list[float], float]:
+def collection_cdf_upper(plan: list[GachaPool]) -> tuple[list[float], float]:
     """同一口径的解析上界(各池独立、期初 pity=0、未计顺路):当期干员首达
-    分布逐池卷积后的 CDF。返回 (CDF, 期望付费抽数)。"""
-    plan = version_banners(version)
+    分布逐池卷积后的 CDF。返回 (CDF, 期望付费抽数)。
+    需全部池有硬保底(联合寻访无界,只支持模拟)。"""
+    if any(not p.hardGuarantee for p in plan):
+        raise SystemExit("所选范围含无硬保底的池(联合寻访),解析上界不可用,"
+                         "请用 --method simulate")
     pmf = target_paid_pmf(type(plan[0]))
     for _ in plan[1:]:
         pmf = conv(pmf, target_paid_pmf(LimitedGacha))
@@ -744,7 +833,7 @@ def collection_cdf_upper(version: str) -> tuple[list[float], float]:
     return arr, cdf_expectation(arr)
 
 
-def render_collection_chart(version: str,
+def render_collection_chart(title: str,
                             curves: list[tuple[str, list[float], str, float]],
                             out_path: Path,
                             marks: list[tuple[str, float, str, str]] = ()
@@ -836,7 +925,7 @@ def render_collection_chart(version: str,
         f'viewBox="0 0 {w} {h}" font-family="sans-serif">'
         f'<rect x="0" y="0" width="{w}" height="{h}" fill="#ffffff"/>'
         f'<text x="{w / 2}" y="24" text-anchor="middle" font-size="16" '
-        f'fill="#111">截至 {version} 版本全图鉴集齐概率(平铺策略,付费口径)'
+        f'fill="#111">{title}(平铺策略,付费口径)'
         f'</text>{"".join(grid)}{"".join(lines)}{"".join(axes)}'
         f'<text x="{ml + pw / 2}" y="{h - 12}" text-anchor="middle" '
         f'font-size="13" fill="#444">付费抽数</text>'
@@ -965,11 +1054,12 @@ def render_report(col_pmf: list[float], col_samples: list[int],
 
 
 # ---------------------------------------------------------------- 主函数
-def run(plot_version: str | None = None,
+def run(version: str | None = None, plot: bool = False,
         method: str = "simulate") -> None:
     """控制台输出对拍与全图鉴摘要;报告写入 reports/gacha-analysis.md。
 
-    plot_version 给定时,额外绘制截至该版本的全图鉴集齐概率曲线
+    version 为目标版本(全勤对照截止版本;配合 --plot 指定绘图范围),
+    缺省取最新版本。plot=True 绘制截至该版本的全图鉴集齐概率曲线
     (平铺策略:横坐标付费抽数、纵坐标集齐概率,SVG 零依赖)。
     method 选择概率计算方式:simulate = 状态机蒙特卡洛(默认,含顺路/
     跳过与下期券);analytic = 解析(卷积上界,快、保守);both = 两者都画。
@@ -1008,7 +1098,8 @@ def run(plot_version: str | None = None,
           f"上限 {len(first_banners()) * LimitedGacha.hardGuarantee} 抽;"
           f"模拟均值 付费 {sum(paid) / len(paid):.0f} + 赠送 {sum(free) / len(free):.0f}"
           f" = 合计 {sum(total) / len(total):.0f} 抽(含顺路)")
-    print(f"  全勤对照:开服至 1.5 累计约 {total_free_pulls('1.5')} 抽"
+    label, ver, title, plan = resolve_plan(version)
+    print(f"  全勤对照:开服至 {ver} 累计约 {total_free_pulls(ver)} 抽"
           "(社区统计,不含外部激励)")
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S+00:00")
@@ -1017,33 +1108,35 @@ def run(plot_version: str | None = None,
     REPORT_PATH.write_text(report, encoding="utf-8")
     print(f"  {REPORT_PATH}")
 
-    if plot_version:
-        plan = version_banners(plot_version)
-        if not plan:
-            raise SystemExit(f"版本 {plot_version} 没有首发限定池")
+    if plot:
         curves = []
         if method in ("both", "simulate"):
-            sim_cdf, sim_e = collection_cdf(plot_version)
+            sim_cdf, sim_e = collection_cdf(plan)
             curves.append(("模拟(含顺路/跳过)", sim_cdf, "#1565c0", sim_e))
         if method in ("both", "analytic"):
-            ana_cdf, ana_e = collection_cdf_upper(plot_version)
+            ana_cdf, ana_e = collection_cdf_upper(plan)
             curves.append(("解析上界(未计顺路)", ana_cdf, "#ef6c00", ana_e))
         exp0 = curves[0][3]
-        zero = total_free_pulls(plot_version)
-        marks = [
-            ("零氪全勤", zero, "#2e7d32", f"{zero - exp0:+.0f}"),
-            ("大小月卡", total_pass_pulls(plot_version), "#6a1b9a",
-             f"{total_pass_pulls(plot_version) - exp0:+.0f}"),
-        ]
+        zero = total_free_pulls(ver)
+        marks = []
+        if len(plan) > 1:                  # 全局零氪/月卡线只对版本图有意义
+            marks = [
+                ("零氪全勤", zero, "#2e7d32", f"{zero - exp0:+.0f}"),
+                ("大小月卡", total_pass_pulls(ver), "#6a1b9a",
+                 f"{total_pass_pulls(ver) - exp0:+.0f}"),
+            ]
         path = render_collection_chart(
-            plot_version, curves,
-            REPORTS_DIR / f"gacha-collection-{plot_version}.svg", marks)
-        print(f"  {path}(平铺全图鉴策略,{len(plan)} 个首发池,方式 {method};"
-              f"零氪 {zero}、大小月卡 {marks[1][1]},括号为与期望的差)")
+            title, curves,
+            REPORTS_DIR / f"gacha-collection-{label}.svg", marks)
+        tail_note = (f";零氪 {zero}、大小月卡 {marks[1][1]},括号为与期望的差"
+                     if marks else "")
+        print(f"  {path}(平铺全图鉴策略,{len(plan)} 个首发池,"
+              f"方式 {method}{tail_note})")
 
 
-def main(plot_version: str | None = None, method: str = "simulate") -> None:
-    run(plot_version, method)
+def main(version: str | None = None, plot: bool = False,
+         method: str = "simulate") -> None:
+    run(version, plot, method)
 
 
 if __name__ == "__main__":
