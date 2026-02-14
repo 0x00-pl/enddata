@@ -28,7 +28,10 @@ GachaCharPoolTypeTable 一致,单位 = 每百万分率 pm;采集侧暂无 gacha 
                   (next_ten_tickets[pool_id],绑定档期上下一期限定池,仅该池
                   可用),下一期限定池开局兑换,十连必须整抽
     其他          每240次赠UP潜能信物(intervalAutoRewardPerPullCount,只影响期望
-                  份数,不改分布);常驻池累计300次自选六星(choicePackPullCount);
+                  份数,不改分布);保障配额按星级累积(4★+2/5★+20/6★+200 厘抽,
+                  期望每抽≈5厘,复刻与联合池翻倍),满 250 厘自动兑 1 张限定池
+                  寻访券(免费获得、照常计保底,约 2% 回馈);
+                  常驻池累计300次自选六星(choicePackPullCount);
                   联合寻访(辉光庆典) 独立保底、无120必得;6★分配 50% 双UP平分 +
     50% 名单内常驻平分;30/60/120抽累计赠礼见 JointGacha 注释
 
@@ -66,6 +69,9 @@ from tools.tables import DATA_DIR, REPORTS_DIR
 # ---------------------------------------------------------------- 常量
 RATE_SCALE = 1_000_000        # 源表概率单位:每百万分率
 FREE_TEN_SIZE = 10            # 赠送十连规模
+QUOTA_PER_STAR = {4: 2, 5: 20, 6: 200}  # 保障配额:按星级每抽增加(单位=厘抽,期望每抽≈5厘)
+QUOTA_TICKET_COST = 250       # 兑换 1 张限定池寻访券所需配额(=0.25 抽价值)
+BANNER_TICKETS = 5            # 每个限定卡池开启时可购买的当期卡池券张数
 SHARE_CURRENT = 0.50          # 6★ 命中后:当期干员份额
 SHARE_RATEUP = 0.25           # 往期两期限定干员合计份额(平分)
 SHARE_STANDARD = 0.25         # 名单内常驻6★合计份额(平分)
@@ -93,6 +99,8 @@ class GachaGlobalState:
     total_pulls: int = 0            # 累计经历抽数(含赠送)
     free_pulls: int = 0             # 其中赠送抽数
     paid_pulls: int = 0             # 其中付费抽数
+    quota: int = 0                  # 保障配额存量(单位 = 厘抽,即 0.001 抽价值)
+    quota_tickets: int = 0          # 配额兑换的限定池寻访券(单抽,任意限定池)
     next_ten_tickets: dict[str, int] = field(default_factory=dict)
     # 下期限定十连券:pool_id → 张数。发券时绑定档期上的下一个限定池,
     # 仅该池开局可兑换(id 校验),不可转移到别的池使用。
@@ -149,7 +157,12 @@ class GachaPool:
     star5SoftGuarantee: int = 10
     freeTenGrantAt: int = 30
     nextTenTicketAt: int = 60
+    intervalRewardAt: int = 240    # 每累计 N 次赠当期UP潜能信物(0 = 无)
+    quota_scale: int = 1           # 保障配额倍率(复刻/联合池 0.8 抽价值 = 2)
     pool_name: str = "寻访池"
+
+    # 抽取优先级:赠送十连 → 当期卡池券(每池开启 BANNER_TICKETS 张)→
+    # 配额兑换券 → 付费寻访。
     progress_in_global: bool = False  # 进度入全局状态跨轮继承(重构寻访 = True)
     next_pool_id: str = ""            # 下期券绑定的池 id(POOLS 档期推导)
 
@@ -159,7 +172,8 @@ class GachaPool:
                  up_ids: tuple[str, ...] = (),
                  guarantee_id: str = "",
                  rateup_ids: tuple[str, ...] = (),
-                 standard_ids: tuple[str, ...] = ()):
+                 standard_ids: tuple[str, ...] = (),
+                 sign_in_tickets: int = 5):
         self.g = global_state or GachaGlobalState()
         self.rng = rng or random.Random()
         self.pool_id = pool_id
@@ -169,11 +183,16 @@ class GachaPool:
         self.guarantee_id = guarantee_id               # 120硬保底对象(联合池为空)
         self.rateup_ids = rateup_ids                   # 往期限定段:25% 平分
         self.standard_ids = standard_ids or _STD6      # 名单内常驻6★:25% 平分
+        self.sign_in_tickets = sign_in_tickets         # 登录签到送当期凭证张数
         self.pulls = 0                 # 本池累计有效(付费)寻访 = 大保底计数
         self.up_got = 0                # 已获得当期干员次数(硬保底上限1)
         self.free_ten_left = 0         # 待抽的赠送十连余量
         self.free_ten_granted = False  # 累计30次赠十连是否已发
         self.next_ticket_granted = False  # 累计60次赠下期十连券是否已发
+        self.interval_got = 0           # 已领取的 240 抽循环潜能信物数
+        self.exchange_left = 0          # 开局兑换的配额券余量(正常寻访)
+        # 当期免费券 = 可购 5 张 + 登录签到送当期凭证(缺签到的池按实际张数)
+        self.banner_ticket_left = BANNER_TICKETS + self.sign_in_tickets
 
     def reset(self, global_state: GachaGlobalState | None = None) -> None:
         """重置当期卡池状态(配置保留;可注入新的全局状态)。
@@ -191,12 +210,16 @@ class GachaPool:
             self.free_ten_left = saved["free_ten_left"]
             self.free_ten_granted = saved["free_ten_granted"]
             self.next_ticket_granted = saved["next_ticket_granted"]
+            self.interval_got = saved["interval_got"]
         else:
             self.pulls = 0
             self.up_got = 0
             self.free_ten_left = 0
             self.free_ten_granted = False
             self.next_ticket_granted = False
+            self.interval_got = 0
+        self.exchange_left = 0
+        self.banner_ticket_left = BANNER_TICKETS + self.sign_in_tickets
 
     def _persist_progress(self) -> None:
         """重构寻访:当前进度写回全局状态,供下次卡池(下一轮)继承。"""
@@ -206,6 +229,7 @@ class GachaPool:
                 "free_ten_left": self.free_ten_left,
                 "free_ten_granted": self.free_ten_granted,
                 "next_ticket_granted": self.next_ticket_granted,
+                "interval_got": self.interval_got,
             }
 
     # -- 概率 --
@@ -234,11 +258,21 @@ class GachaPool:
             if star == 6:
                 six_id = self._pick_six()
                 g.owned.add(six_id)
+            self._grant_quota(star)
             self._persist_progress()
             return Pull(star, star == 6, True, g.pity, self.pulls, six_id)
-        self.pulls += 1
-        g.total_pulls += 1
-        g.paid_pulls += 1
+        if self.banner_ticket_left:       # 当期卡池券:免费获得,照常计保底
+            self.banner_ticket_left -= 1
+            g.total_pulls += 1
+            g.free_pulls += 1
+        elif self.exchange_left:          # 配额兑换券:免费获得,照常计保底
+            self.exchange_left -= 1
+            g.total_pulls += 1
+            g.free_pulls += 1
+        else:
+            self.pulls += 1
+            g.total_pulls += 1
+            g.paid_pulls += 1
         g.pity += 1                                 # 抽后即本抽的周期序数
         g.five_pity += 1
         forced = (bool(self.hardGuarantee) and bool(self.guarantee_id)
@@ -262,6 +296,7 @@ class GachaPool:
             six_id = None
             star = 4
         self._grant()
+        self._grant_quota(star)
         self._persist_progress()
         return Pull(star, star == 6 and six_id in self.up_ids,
                     False, g.pity, self.pulls, six_id)
@@ -278,6 +313,17 @@ class GachaPool:
 
     def _pick_six(self) -> str:
         return self._pick_segment(self.rng.random(), self)
+
+    def _grant_quota(self, star: int) -> None:
+        """保障配额:按本次星级累加(×池倍率),满 QUOTA_TICKET_COST 自动
+        兑换 1 张限定池寻访券(免费获得,正常计保底与累计)。"""
+        gain = QUOTA_PER_STAR.get(star, 0) * self.quota_scale
+        if not gain:
+            return
+        self.g.quota += gain
+        while self.g.quota >= QUOTA_TICKET_COST:
+            self.g.quota -= QUOTA_TICKET_COST
+            self.g.quota_tickets += 1
 
     def _free_star(self) -> int:
         """赠送抽数的星级:基础概率独立判定(无十连保底,不动任何计数)。"""
@@ -302,6 +348,11 @@ class GachaPool:
             if self.next_pool_id:      # 券绑定下期限定池,仅该池可用
                 self.g.next_ten_tickets[self.next_pool_id] = \
                     self.g.next_ten_tickets.get(self.next_pool_id, 0) + 1
+        while (self.intervalRewardAt
+               and self.pulls >= (self.interval_got + 1) * self.intervalRewardAt):
+            self.interval_got += 1     # 循环潜能信物:额外当期份,不影响保底
+            if self.guarantee_id:
+                self.g.owned.add(self.guarantee_id)
 
 
 # ---------------------------------------------------------------- 五类卡池
@@ -318,16 +369,18 @@ class RerunGacha(LimitedGacha):     # type 4 复刻寻访(官方「重构寻访�
     # 硬保底不跨期。进度保存在全局状态 rerun_progress[pool_id],reset 时恢复、
     # 随抽存档(progress_in_global = True)。
     progress_in_global = True
+    quota_scale = 2                 # 保障配额翻倍(0.8 抽价值)
 
 
 class JointGacha(GachaPool):        # type 3 特殊寻访(1.2 首个复刻池「辉光庆典」):
     pool_name = "联合寻访"          # 独立保底计数(不与常驻/限定池互通,表内
     hardGuarantee = 0               # shareSoftGuarantee=false);无「120必得当期」,
     nextTenTicketAt = 0             # 6★分配不走通用 50/25/25 —— 重载见 _pick_six。
-    # 累计赠礼(仅限一次,不影响出货分布):30抽赠加急招募十连(不计保底,
-    # 同样产出保障配额);60抽赠基础寻访凭证×10(用于常驻池,故不发下期券);
-    # 120抽赠调用凭证(当期4名干员任选其一,不占保底);120抽起循环信物自选。
-    # 每抽保障配额翻倍(复刻 0.8 vs 常规 0.4 抽价值),价值口径不建模。
+    intervalRewardAt = 0            # 累计赠礼(仅限一次,不影响出货分布):30抽赠
+    # 加急招募十连(不计保底,同样产出保障配额);60抽赠基础寻访凭证×10(用于
+    # 常驻池,故不发下期券);120抽赠调用凭证(当期4名干员任选其一,不占保底);
+    # 120抽起循环信物自选。保障配额翻倍(0.8 vs 常规 0.4 抽价值)→ quota_scale=2。
+    quota_scale = 2
 
     def _pick_six(self) -> str:
         """辉光庆典分配:50% 双UP平分(莱万汀/洁尔佩塔各25%)+ 50% 名单内
@@ -339,6 +392,7 @@ class JointGacha(GachaPool):        # type 3 特殊寻访(1.2 首个复刻池「
 
 class StandardGacha(GachaPool):     # type 2 常驻寻访:无UP(累计300次自选六星)
     pool_name = "常驻寻访"
+    intervalRewardAt = 0
     hardGuarantee = 0
     upRate = 0
     freeTenGrantAt = 0
@@ -347,6 +401,7 @@ class StandardGacha(GachaPool):     # type 2 常驻寻访:无UP(累计300次自�
 
 class BeginnerGacha(GachaPool):     # type 1 新手寻访:无提升段,40抽封顶必出6★
     pool_name = "新手寻访"
+    intervalRewardAt = 0
     star6RatePromotePullCount = ()
     star6RatePromoteValue = ()
     softGuarantee = 40
@@ -372,7 +427,8 @@ POOLS: dict[str, list[GachaPool]] = {
                      rateup_ids=()),
         LimitedGacha(pool_id="special_1_0_2", name="热烈色彩",
                      guarantee_id="chr_0017_yvonne",                    # 伊冯
-                     rateup_ids=("chr_0016_laevat",)),
+                     rateup_ids=("chr_0016_laevat",),
+                     sign_in_tickets=0),                                # 快照无签到活动
         LimitedGacha(pool_id="special_1_0_3", name="轻飘飘的信使",
                      guarantee_id="chr_0013_aglina",                    # 洁尔佩塔
                      rateup_ids=("chr_0016_laevat", "chr_0017_yvonne")),
@@ -490,6 +546,9 @@ def run_banner(pool: GachaPool, strategy: Strategy) -> list[Pull]:
             and pool.g.next_ten_tickets.get(pool.pool_id, 0) > 0):
         pool.g.next_ten_tickets[pool.pool_id] -= 1   # id 对应的券:本池开局兑换
         pool.free_ten_left += FREE_TEN_SIZE
+    if pool.pulls == 0 and pool.exchange_left == 0 and pool.g.quota_tickets > 0:
+        pool.exchange_left = pool.g.quota_tickets     # 配额券:本池开局全兑
+        pool.g.quota_tickets = 0
     while True:
         if pool.free_ten_left:            # 十连必须一起抽出,不可只抽一半
             out.append(pool.pull())
@@ -517,6 +576,7 @@ def simulate(pool: GachaPool, trials: int = DEFAULT_TRIALS,
     for _ in range(trials):
         pool.reset(GachaGlobalState(pity=pity))
         pool.rng = rng
+        pool.banner_ticket_left = pool.exchange_left = 0   # 对拍口径:纯保底机制
         got6 = got5 = gotu = False
         while not (got6 and got5 and (gotu or not has_target)):
             r = pool.pull()
@@ -709,11 +769,6 @@ def sample_pmf(samples: list[int]) -> list[float]:
 
 
 # ---------------------------------------------------------------- ④ 版本概率曲线
-def cdf_expectation(cdf_arr: list[float]) -> float:
-    """由累积分布求期望抽数:E[T] = 1 + Σ_{n≥1} P(T > n)(生存函数求和)。"""
-    return 1.0 + sum(1.0 - p for p in cdf_arr)
-
-
 def version_key(v: str) -> tuple[int, ...]:
     """版本号 → 可比较元组(1.10 > 1.9)。"""
     return tuple(int(x) for x in v.split("."))
@@ -750,8 +805,10 @@ def resolve_plan(target: str | None) -> tuple[str, str, str, list[GachaPool]]:
     def single(p: GachaPool, ver: str):
         return p.pool_id, ver, f"「{p.name}」当期干员集齐概率", [p]
 
-    if not target:
+    if not target:                     # 缺省:最新版本及之前的全部首发池
         target = latest_version()
+        plan = version_banners(target)
+        return target, target, f"截至 {target} 版本全图鉴集齐概率", plan
 
     # 单个卡池(pool_id 或名称,含复刻)
     for ver, pools in POOLS.items():
@@ -803,8 +860,9 @@ def resolve_plan(target: str | None) -> tuple[str, str, str, list[GachaPool]]:
 def collection_cdf(plan: list[GachaPool], trials: int = 5_000,
                    seed: int = DEFAULT_SEED) -> tuple[list[float], float]:
     """「平铺全图鉴」策略(strategy_until_owned:逐池抽到当期干员到手、拿齐
-    即停、无限定UP的池跳过)下,plan 全部限定UP在 N 付费抽内集齐的概率
-    曲线(模拟,含顺路获得与跳过)。返回 (CDF, 期望付费抽数),
+    即停、无限定UP的池跳过)下,plan 全部限定UP在 N 次**总寻访**(付费+
+    游戏内免费券,与 VERSION_FREE_PULLS 同口径)内集齐的概率
+    曲线(模拟,含顺路获得与跳过)。返回 (CDF, 期望总抽数),
     期望与曲线同口径 —— 由所画 CDF 生存函数求和得出。"""
     rng = random.Random(seed)
     paid: list[int] = []
@@ -814,14 +872,14 @@ def collection_cdf(plan: list[GachaPool], trials: int = 5_000,
             pool.reset(g)
             pool.rng = rng
             run_banner(pool, strategy_until_owned)
-        paid.append(g.paid_pulls)
+        paid.append(g.total_pulls)
     arr = cdf(sample_pmf(paid))
     return arr, cdf_expectation(arr)
 
 
 def collection_cdf_upper(plan: list[GachaPool]) -> tuple[list[float], float]:
-    """同一口径的解析上界(各池独立、期初 pity=0、未计顺路):当期干员首达
-    分布逐池卷积后的 CDF。返回 (CDF, 期望付费抽数)。
+    """解析上界(付费口径近似,未计签到券/配额券;模拟曲线为总口径):
+    当期干员首达分布逐池卷积后的 CDF。返回 (CDF, 期望付费抽数)。
     需全部池有硬保底(联合寻访无界,只支持模拟)。"""
     if any(not p.hardGuarantee for p in plan):
         raise SystemExit("所选范围含无硬保底的池(联合寻访),解析上界不可用,"
@@ -909,14 +967,16 @@ def render_collection_chart(title: str,
                      f'fill="#222">{label}</text>')
     label_layer = mt + 14 + len(curves) * 16
     for mi, (label, x, color, note) in enumerate(marks):
-        mx, my = X(x), Y(prob_at(main_cdf, x))
+        inside = x <= x_max                # 超出量程(如单/双池图遇全局累计线)
+        mx, my = X(min(x, x_max)), Y(prob_at(main_cdf, x))
         lines.append(f'<line x1="{mx:.1f}" y1="{mt}" x2="{mx:.1f}" '
                      f'y2="{mt + ph}" stroke="{color}" stroke-width="1.5"/>')
-        lines.append(f'<circle cx="{mx:.1f}" cy="{my:.1f}" r="3.5" '
-                     f'fill="{color}"/>')
-        lines.append(f'<text x="{mx + 6:.1f}" y="{my - 8:.1f}" '
-                     f'font-size="12" font-weight="bold" '
-                     f'fill="{color}">{prob_at(main_cdf, x):.0%}</text>')
+        if inside:                         # 量程内才标注交点概率
+            lines.append(f'<circle cx="{mx:.1f}" cy="{my:.1f}" r="3.5" '
+                         f'fill="{color}"/>')
+            lines.append(f'<text x="{mx + 6:.1f}" y="{my - 8:.1f}" '
+                         f'font-size="12" font-weight="bold" '
+                         f'fill="{color}">{prob_at(main_cdf, x):.0%}</text>')
         lines.append(f'<text x="{mx + 5:.1f}" '
                      f'y="{label_layer + mi * 16}" font-size="12" '
                      f'fill="{color}">{label} {x:.0f}({note})</text>')
@@ -925,10 +985,10 @@ def render_collection_chart(title: str,
         f'viewBox="0 0 {w} {h}" font-family="sans-serif">'
         f'<rect x="0" y="0" width="{w}" height="{h}" fill="#ffffff"/>'
         f'<text x="{w / 2}" y="24" text-anchor="middle" font-size="16" '
-        f'fill="#111">{title}(平铺策略,付费口径)'
+        f'fill="#111">{title}(平铺策略,总抽数口径)'
         f'</text>{"".join(grid)}{"".join(lines)}{"".join(axes)}'
         f'<text x="{ml + pw / 2}" y="{h - 12}" text-anchor="middle" '
-        f'font-size="13" fill="#444">付费抽数</text>'
+        f'font-size="13" fill="#444">总寻访次数(含游戏内免费券)</text>'
         f'<text x="18" y="{mt + ph / 2}" text-anchor="middle" font-size="13" '
         f'fill="#444" transform="rotate(-90 18 {mt + ph / 2})">集齐概率</text>'
         f'</svg>')
@@ -937,6 +997,7 @@ def render_collection_chart(title: str,
     return out_path
 
 
+# ---------------------------------------------------------------- ⑤ 倒数坐标图
 # ---------------------------------------------------------------- 干员名
 _CHAR_NAMES: dict[str, str] = {}
 
@@ -975,7 +1036,7 @@ def render_report(col_pmf: list[float], col_samples: list[int],
     paid = [s[0] for s in col_samples]
     free = [s[1] for s in col_samples]
     total = [s[2] for s in col_samples]
-    col_cdf, sim_cdf = cdf(col_pmf), cdf(sample_pmf(paid))
+    col_cdf, sim_cdf = cdf(col_pmf), cdf(sample_pmf(total))
     last_ver = [v for v, pools in POOLS.items() if first_banners()[-1] in pools][0]
     free_total = total_free_pulls(last_ver)
     lines = [
@@ -985,7 +1046,8 @@ def render_report(col_pmf: list[float], col_samples: list[int],
         "概率参数 = GachaCharPoolTypeTable,6★ 名单 = GachaCharPoolContentTable",
         f"- 全图鉴口径:集齐 {sum(len(p.up_ids) for p in first_banners())} 名"
         "限定首发当期干员(联合/复刻池为重复获取机会,不占主路径);"
-        "抽数 = 付费寻访次数(赠送十连已按必领必用折入)",
+        "抽数 = 总寻访次数(付费 + 签到券/配额券/赠送十连等游戏内免费券,"
+        "与 VERSION_FREE_PULLS 同口径,免费行为不重复叠加)",
         "",
         "## 一、各版本 UP 卡池安排", "",
         "| 版本 | 卡池 | 类型 | 当期干员 | 同池概率提升(往期) |",
@@ -1023,7 +1085,7 @@ def render_report(col_pmf: list[float], col_samples: list[int],
         "- 命中6★后 25% 顺路获得前两期限定干员(各 12.5%)、25% 获得常驻6★",
         "",
         "## 四、全图鉴所需抽数(逐池抽到当期干员到手,120硬保底兜底)", "",
-        "| 总付费抽数 N | 解析上界(未计顺路) | 模拟(含顺路/跳过) |",
+        "| 总抽数 N | 解析上界(付费口径近似) | 模拟(总口径,含顺路/跳过) |",
         "|---|---|---|",
     ]
     for n in (600, 700, 800, 850, 900, 1000, 1100, 1200, 1320):
@@ -1032,19 +1094,20 @@ def render_report(col_pmf: list[float], col_samples: list[int],
         lines.append(f"| ≤ {n} | {_pct(a)} | {_pct(s)} |")
     lines += [
         "",
-        f"- 解析上界(各池独立、期初 pity=0、未计顺路):期望 {expectation(col_pmf):.0f} 抽,"
+        f"- 解析上界(付费口径近似,各池独立、期初 pity=0、未计顺路):期望 {expectation(col_pmf):.0f} 抽,"
         f"中位数 {pulls_needed(col_pmf, 0.5)} 抽,P90 {pulls_needed(col_pmf, 0.9)} 抽,"
         f"P95 {pulls_needed(col_pmf, 0.95)} 抽,上限 {len(first_banners()) * LimitedGacha.hardGuarantee} 抽"
         "(= 每池都吃满120硬保底)",
         f"- 模拟({len(col_samples)} 次,策略 = 每池抽到当期干员到手,"
         "顺路获得的往期干员可使后续池直接跳过):"
-        f"期望付费 {sum(paid) / len(paid):.0f} 抽"
-        f"(赠送 {sum(free) / len(free):.0f}、合计 {sum(total) / len(total):.0f}),"
-        f"P90 {pulls_needed(sample_pmf(paid), 0.9)} 抽",
-        f"- 全勤对照:开服至 {last_ver} 全勤累计约 {free_total} 抽"
-        "(VERSION_FREE_PULLS,社区统计口径,含约 15% 常驻池专用凭证、"
-        "不含外部激励),与模拟需求基本持平 —— 零氪全勤接近可集齐,"
-        "需配合联合/复刻池补票精打细算",
+        f"期望总抽数 {sum(total) / len(total):.0f}"
+        f"(其中付费 {sum(paid) / len(paid):.0f} + 免费券 {sum(free) / len(free):.0f}),"
+        f"P90 {pulls_needed(sample_pmf(total), 0.9)} 抽",
+        f"- 全勤对照(总口径):开服至 {last_ver} 全勤累计约 {free_total} 抽"
+        "(VERSION_FREE_PULLS,已含签到券/配额券/赠送十连等免费抽;不含外部激励)"
+        f" vs 模拟合计 {sum(total) / len(total):.0f} 抽 —— 零氪全勤差约 "
+        f"{sum(total) / len(total) - free_total:.0f} 抽,大小月卡(约 "
+        f"{total_pass_pulls(last_ver)} 抽)基本覆盖",
         "- 两列差异 = 顺路收益与继承效应:25% 的6★落在往期干员(后续池目标"
         "已拥有即跳过)、赠送十连命中时下一池继承保底计数;解析列按各池独立、"
         "期初 pity=0 计算,故恒为保守上界",
@@ -1058,9 +1121,9 @@ def run(version: str | None = None, plot: bool = False,
         method: str = "simulate") -> None:
     """控制台输出对拍与全图鉴摘要;报告写入 reports/gacha-analysis.md。
 
-    version 为目标版本(全勤对照截止版本;配合 --plot 指定绘图范围),
-    缺省取最新版本。plot=True 绘制截至该版本的全图鉴集齐概率曲线
-    (平铺策略:横坐标付费抽数、纵坐标集齐概率,SVG 零依赖)。
+    version 为目标版本或卡池(全勤对照截止版本;配合 --plot 指定统计范围),
+    缺省取最新版本。plot=True 绘制集齐概率曲线(横坐标总寻访次数、
+    纵坐标集齐概率,SVG 零依赖)。
     method 选择概率计算方式:simulate = 状态机蒙特卡洛(默认,含顺路/
     跳过与下期券);analytic = 解析(卷积上界,快、保守);both = 两者都画。
     """
