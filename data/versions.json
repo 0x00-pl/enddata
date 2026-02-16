@@ -29,9 +29,15 @@
       "sha": "cbca0c6e",
       "date": "2026-09-02",
       "subject": "9764758"
+    },
+    "DeftSolutions-dev/IL2CPP-Dumper": {
+      "branch": "main",
+      "sha": "a6937bd",
+      "date": "2026-04-28",
+      "subject": "Add Arknights Endfield 1.2.4 sample dumps"
     }
   },
-  "updatedAt": "2026-09-17T01:27:04+00:00",
+  "updatedAt": "2026-09-19T11:06:43+00:00",
   "game": {
     "build": "initial_10024360-6_main_10024360-6",
     "checkedAt": "2026-09-16T10:30:07+00:00"

@@ -132,6 +132,8 @@ fffdan vfs 降为备源与路径模式参考。敌人图片与 wiki 图(bbs.hycd
 | **养成数值验证** | P2 重克隆 CaffuChin0/zmdgraph(见 git.retired);P1 本表成长曲线自洽校验 |
 | **版本监控** | **P0 rmxlinux main 提交**;P1 fffdan `/version`(HTTP);P2 4n3u manifest |
 | **公告/卡池** | **P0 BiologyHazard archive**(git,需要时克隆);P2 ak-archive(已退役,可恢复) |
+| **客户端代码结构**(类面/字段/协议) | **P0 DeftSolutions-dev/IL2CPP-Dumper**(git,1.2.4 桩 dump;不含方法体,玩法逻辑走 IFix 热修) |
+| **玩法调度逻辑**(工厂传输优先级等) | 无源:服务器权威 + IFix 补丁,两端均不在任何 git 数据源内;仅可运行时实测 |
 | **玩家个人数据** | R Skport API(无 git,唯一渠道,需用户凭据) |
 
 ## 三、数据类别 × 来源 × 渠道
@@ -148,16 +150,17 @@ fffdan vfs 降为备源与路径模式参考。敌人图片与 wiki 图(bbs.hycd
 | **养成数值交叉验证** | zmdgraph(git,数据内嵌 js) | — | 本地 git | 参考 |
 | **版本更新监控** | rmxlinux main 提交(git) | 宏山档案局 /version(HTTP);P2 4n3u manifest | 本地 git + HTTP | ✅ 在用(`enddata version`) |
 | **公告/卡池资讯** | BiologyHazard/endfield-archive-library(git) | — | 本地 git | ⏳ 规划 |
+| **客户端代码结构** | DeftSolutions-dev/IL2CPP-Dumper(1.2.4 桩 dump,git) | — | 本地 git | ✅ 在用(2026-09-19 起,结构参考) |
 | **玩家个人数据**(练度/抽卡) | 无 git(Skport 官方 API) | skport-api-docs 仅为文档(git) | HTTP+签名 | ⏳ 规划(用户自选导入) |
 
 ## 四、统计(2026-09-16)
 
-### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-17 实测
+### 本地 git 仓库(`sources/`,已 gitignore)——2026-09-19 实测
 
 | 指标 | 值 |
 |---|---|
-| 仓库总数 | **5**(审查前 13,累计退役 9) |
-| 总体积 | **约 20.3 GB**(555me 图标源 17G 为大头;rmxlinux/jei-web 已完整物化,不再走 partial 懒取) |
+| 仓库总数 | **6**(审查前 13,累计退役 9;2026-09-19 新增 IL2CPP dump) |
+| 总体积 | **约 20.5 GB**(555me 图标源 17G 为大头;rmxlinux/jei-web 已完整物化,不再走 partial 懒取) |
 | 主源核心表本地可直读 | **24/24(100%,零网络)** |
 
 | 仓库 | 体积 | 角色 |
@@ -167,6 +170,7 @@ fffdan vfs 降为备源与路径模式参考。敌人图片与 wiki 图(bbs.hycd
 | JamboChen/endfield-calc | 69M | 产线精校数据(craftingTime/电力) |
 | AndreaFrederica/jei-web | 114M | 森空岛 Wiki 包(敌人中文名,规划) |
 | AixLnyt/skport-api-docs | 0.24M | 官方 API 文档 |
+| DeftSolutions-dev/IL2CPP-Dumper | 187M | **客户端代码面**(1.2.4 桩 dump ×2 格式 + dumper 工具源码) |
 
 ### 数据集产出(`data/`,构建于 rmxlinux@main 2026-09-08)
 

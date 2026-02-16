@@ -56,6 +56,7 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 | ★ [天师工具箱 end-tools.fffdan.com](https://end-tools.fffdan.com) | Blazor WASM 工具箱(Database/Gameplay/Web 三模块,.NET 单文件打包):数据浏览(`/data/tables`、`/data/operators/{charId}`)、战斗模拟器(`/simulator/upgrade`)、配方查询、**vfs 资源浏览器**(`/vfsexplorer`) | 无自有数据 API:其 TableCfg 与图标均从 endfield-assets 的 vfs 加载(Database.wasm 二进制字符串证实);其代码是 vfs 路径模式的权威参考 |
 | ★ [AndreaFrederica/jei-web](https://github.com/AndreaFrederica/jei-web)(26★) | `public/packs/aef-skland/recipes.json`(**8.5MB 配方图**)+ 森空岛 Wiki 全量物品包(物品 191/装备 165/武器 62/**威胁 56**/干员 24/设备 65…) | 生产配方交叉验证;**敌人中文名**在「威胁」分区;物品图标备用源 |
 | ★ [JamboChen/endfield-calc](https://github.com/JamboChen/endfield-calc)(117★) | **320 条手工精校配方**(`{inputs, outputs, facilityId, craftingTime}`)+ `power.ts` 电力、`facilities.ts` 设施、LP 产线求解器 | 产线规划器的参考实现与耗时数据源 |
+| ★ [DeftSolutions-dev/IL2CPP-Dumper](https://github.com/DeftSolutions-dev/IL2CPP-Dumper)(110★) | 终末地客户端 **IL2CPP dump**(1.2.4,165 程序集 ×2 格式):类面/字段偏移/方法签名(含 RVA)/IFix 热修映射;仓库另含 dumper 工具源码 | **代码结构参考**:工厂 ECS 组件、操作协议、UI 数据流(见下专节) |
 | [NagiYume/AKEDatabase](https://github.com/NagiYume/AKEDatabase)(36★) | 在线查询工具,自带多语言数据(akedata.wiki) | 对照 |
 
 ### fffdan 工具家族资源接口(已实测验证,已接入)
@@ -119,6 +120,24 @@ jsdelivr → raw → 一图流 COS(备源)→ GitHub API blob**,本地命中时�
 已克隆核对(endfield-calc):其配方含 `craftingTime`(秒)字段,而我们的 TableCfg
 `FactoryMachineCraftTable` 对应字段是 `totalProgress=12000 / progressRound=2`,两者换算
 关系未定;产线规划若需精确耗时,优先从 calc 的精校数据取,或以实测校准 `totalProgress`。
+
+### 客户端 IL2CPP dump(已实测验证,已接入 ★)
+
+[DeftSolutions-dev/IL2CPP-Dumper](https://github.com/DeftSolutions-dev/IL2CPP-Dumper) 原生为
+IL2CPP 提取工具("Created for Arknights: Endfield"),仓库内附带终末地 **1.2.4** 的 dump 产物
+(`Arknights Endfield 1.2.4/`,2026-04-28 提交):`IL2CPP_Dump_Normal/`(C# 形态,91M)与
+`IL2CPP_Dump_AI/`(行标记 grep/LLM 友好格式,78M),各 165 个程序集;本地克隆共 187M。
+
+- **定位**:客户端**代码结构面**参考——类/字段(含偏移)/方法签名(含 RVA)。工厂相关集中在
+  `Gameplay.Beyond.dll.cs`(`Beyond.Gameplay.RemoteFactory` 命名空间:ECS 组件 payload、
+  `RemoteFactoryCoreSystem` 的 `Message_Op*` 操作协议全集、存取线连通图
+  `RemoteFactoryFreeBusGraphManager`)与 `FactoryUnsafe.Gameplay.Beyond.dll.cs`
+- **能力边界(2026-09-19 实查)**:桩 dump 不含方法体;玩法逻辑大量走 **IFix 热修**
+  (Gameplay.Beyond 内 3 万+ `IFix.IDMAP0` 映射),且工厂物品传输为**服务器权威**
+  (`ServerChapterInfo` 镜像 proto 事件)——离散调度/优先级顺序不可从中还原,
+  需要 IFix 补丁包或运行时实测
+- **版本注意**:dump 为 1.2.4(2026-04),落后当前 TableCfg(2026-09);数值一律以 TableCfg
+  为准,此处只作代码结构参考。注册于 `config/sources.json` 的 `gamecode_dump`
 
 ### 一图流(yituliu)数据镜像(已实测验证,应急备源 ★)
 

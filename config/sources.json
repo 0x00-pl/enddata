@@ -32,6 +32,12 @@
         "repo": "AixLnyt/skport-api-docs",
         "partial": false,
         "role": "Skport API 文档(小仓库全量)"
+      },
+      {
+        "repo": "DeftSolutions-dev/IL2CPP-Dumper",
+        "branch": "main",
+        "partial": false,
+        "role": "终末地客户端 IL2CPP dump(1.2.4 程序集桩 187MB:类面/字段偏移/方法签名/IFix 热修映射)"
       }
     ],
     "retired": [
@@ -268,6 +274,20 @@
       "desc": "官方游戏 API 响应自动存档(参考端点结构)",
       "repo": "daydreamer-json/ak-endfield-api-archive",
       "branch": "main"
+    },
+    "gamecode_dump": {
+      "desc": "终末地客户端 IL2CPP dump:游戏程序集的类面/字段偏移/方法签名(含 RVA)与 IFix 热修方法映射,用于还原客户端代码结构(工厂 ECS 组件、操作协议、UI 数据流)",
+      "repo": "DeftSolutions-dev/IL2CPP-Dumper",
+      "branch": "main",
+      "dump_dir": "Arknights Endfield 1.2.4",
+      "normal_dir": "IL2CPP_Dump_Normal",
+      "ai_dir": "IL2CPP_Dump_AI",
+      "key_files": [
+        "Arknights Endfield 1.2.4/IL2CPP_Dump_Normal/Gameplay.Beyond.dll.cs",
+        "Arknights Endfield 1.2.4/IL2CPP_Dump_Normal/FactoryUnsafe.Gameplay.Beyond.dll.cs",
+        "Arknights Endfield 1.2.4/IL2CPP_Dump_Normal/Common.Beyond.dll.cs"
+      ],
+      "note": "2026-09-19 接入,dump 于 2026-04-28 提交(游戏 1.2.4,165 程序集 ×2 格式,Normal 91M + AI 78M)。仅桩不含方法体:玩法逻辑大量走 IFix 热修(Gameplay.Beyond 内 3 万+ IDMAP 映射,如 RemoteFactoryCoreSystem 的 Message_Op*),工厂物品传输为服务器权威(ServerChapterInfo 镜像 proto 事件),故离散调度优先级不可从中还原;可还原的是客户端结构面(组件 payload 字段、存取线连通图 RemoteFactoryFreeBusGraphManager、操作协议全集)。版本落后当前(TableCfg 2026-09),数值一律以 TableCfg 为准,此处只作代码结构参考。工具源码(Dump/、Mapper/)与 dump 产物同仓"
     }
   }
 }

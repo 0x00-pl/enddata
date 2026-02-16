@@ -92,7 +92,7 @@ enddata/
 │       ├── id_links.py         # id 关联映射:定位符扫描 + 循环 LCS 规则归纳(enddata idmap)
 │       ├── placeholders.py     # 描述 {key:fmt} 占位符回填(算式键/paramN 回退,采集/分析共用)
 │       └── versions.py         # data/versions.json 读写 + enddata version 报告
-├── sources/                # 数据源(5 个本地 git 克隆,gitignore;含图标源完整克隆盘上约 17G,经血统审查)
+├── sources/                # 数据源(6 个本地 git 克隆,gitignore;含图标源完整克隆盘上约 17G,经血统审查)
 ├── data/                   # 生成的数据:各产物目录(每条一个 <id>.json + index.json)+ meta + versions.json(数据集 gitignore)
 ├── reports/                # 生成的报告(build-report.md、team-analysis.md,入库)
 ├── web/                    # ③ 网页展示的源码(唯一手写前端源码,不含生成产物)
