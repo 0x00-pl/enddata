@@ -92,7 +92,7 @@ function renderOverview() {
     <p class="note">数据源:${esc(m.source.repo)}@${esc(m.source.branch)} · 构建于 ${esc(m.generatedAt)} (UTC) · 点击列表条目查看详情</p>
     <table><tbody>
       <tr><td class="dim">战斗数据</td><td>干员等级成长曲线、职业、武器类型、敌人属性模板(生命/攻击/防御、抗性、霸体)已入库;技能数值(SkillPatchTable)已抓取,待加工。</td></tr>
-      <tr><td class="dim">生产数据</td><td>手工配方(大世界烹饪)、机器配方(工厂产线)、飞船制造已入库;电力/物流/流派加成待扩展。</td></tr>
+      <tr><td class="dim">生产数据</td><td>手工配方(大世界制作)、基建工厂产线配方(按生产设施与进料相别分组)、飞船制造已入库;电力/物流/流派加成待扩展。</td></tr>
       <tr><td class="dim">计划中</td><td>技能与 Buff 数值解析、配方产物图标。</td></tr>
     </tbody></table>`;
 }
@@ -170,6 +170,19 @@ function recipeSide(side) {
 
 const recipeCategory = (r) => r.showingName ?? r.machineName ?? null;
 
+/* 站点命名:游戏内工厂即玩家俗称的"基建",machine 站点按基建产线展示 */
+const STATION_ORDER = ["manual", "machine", "spaceship"];
+const STATION_NAME = { manual: "手工制作", machine: "基建工厂", spaceship: "飞船制造" };
+const STATION_BADGE = { manual: "手工", machine: "基建", spaceship: "飞船" };
+
+/* 机器配方组后缀 → 进料相别(同机多模式:灌装/拆解按溶液、气体等进料区分配方组) */
+const PHASE_CN = { normal: "常规", liquid: "液相", gasliquid: "气液", gas: "气相",
+                   liquidtrans: "液转", gastrans: "气转", solidtrans: "固转" };
+const recipePhase = (r) => {
+  const m = /_(normal|gasliquid|liquidtrans|gastrans|solidtrans|liquid|gas)$/.exec(r.formulaGroupId ?? "");
+  return m ? PHASE_CN[m[1]] : null;
+};
+
 let recipeDetailsLoading = false;
 
 /* 清单式数据集(recipes/items)通用:按清单批量拉取子文件,载入一次后缓存。
@@ -226,37 +239,88 @@ function renderRecipes() {
   const q = state.search.recipes ?? "";
   const st = state.filters.recipes ?? "";
   const cat = state.filters.recipeCat ?? "";
+  const catKey = (r) => recipeCategory(r) ?? "未分类";
   const byStation = state.data.recipes.filter((r) => !st || r.station === st);
-  const cats = [...new Set(byStation.map(recipeCategory).filter(Boolean))].sort();
+  const catCount = {};
+  byStation.forEach((r) => { const k = catKey(r); catCount[k] = (catCount[k] ?? 0) + 1; });
+  const cats = Object.keys(catCount).sort((a, b) => {
+    const ta = Math.min(...byStation.filter((r) => catKey(r) === a).map((r) => r.showingType ?? 0));
+    const tb = Math.min(...byStation.filter((r) => catKey(r) === b).map((r) => r.showingType ?? 0));
+    return ta - tb || catCount[b] - catCount[a];
+  });
   const catEff = cats.includes(cat) ? cat : "";
   const hit = (r) => match(r.name, q) || match(r.formulaDesc, q)
-    || match(r.outcomes.map((o) => o.group[0].name).join(), q);
-  const list = byStation.filter((r) => (!catEff || recipeCategory(r) === catEff) && hit(r));
+    || match(r.outcomes.map((o) => o.group[0].name).join(), q)
+    || match(r.ingredients.flatMap((i) => i.group.map((g) => g.name)).join(), q);
+  const list = byStation.filter((r) => (!catEff || catKey(r) === catEff) && hit(r));
+  const totalBy = (s) => state.data.recipes.filter((r) => r.station === s).length;
+  const stations = STATION_ORDER.filter((s) => list.some((r) => r.station === s));
+
+  /* 分类区块:summary 折叠,表格列按站点差异显示(机器:相别/耗时;手工/飞船:稀有度) */
+  const categorySection = (s, name, rows) => {
+    const phases = [...new Set(rows.map(recipePhase).filter(Boolean))];
+    const showPhase = s === "machine" && phases.length > 1;
+    const showTime = rows.some((r) => r.craftTimeSec != null);
+    const showRarity = rows.some((r) => r.rarity != null);
+    const machine = rows.find((r) => r.machineId);
+    return `<details class="rgroup" open>
+      <summary title="${esc(machine?.machineId ?? name)}">
+        <span class="rg-name">${esc(name)}</span><span class="rg-cnt">${rows.length} 条</span>
+        ${phases.length > 1 ? phases.map((p) =>
+          `<span class="badge phase">${esc(p)} ${rows.filter((r) => recipePhase(r) === p).length}</span>`).join("") : ""}
+      </summary>
+      <table><thead><tr><th>产物</th><th>原料</th>
+        ${showPhase ? "<th>相别</th>" : ""}${showTime ? "<th>耗时</th>" : ""}${showRarity ? "<th>稀有度</th>" : ""}
+      </tr></thead><tbody>
+      ${rows.map((r) => {
+        const out = r.outcomes[0]?.group[0];
+        return `<tr class="clickable" data-detail="recipes" data-sub="${esc(r.station)}" data-id="${esc(r.id)}">
+          <td>${esc(r.name || out?.name || r.id)}${r.name && out && r.name !== out.name ? ` <span class="dim">${esc(out.name)}</span>` : ""} ×${out?.count ?? 1}</td>
+          <td><div class="recipe-line">${recipeSide(r.ingredients) || '<span class="opt">—</span>'}</div></td>
+          ${showPhase ? `<td>${recipePhase(r) ? `<span class="badge">${esc(recipePhase(r))}</span>` : "—"}</td>` : ""}
+          ${showTime ? `<td class="num">${r.craftTimeSec != null ? `${trimN(r.craftTimeSec)}s` : "—"}</td>` : ""}
+          ${showRarity ? `<td>${rarityTag(r.rarity)}</td>` : ""}
+        </tr>`;
+      }).join("")}
+      </tbody></table>
+    </details>`;
+  };
+
   return `
-    ${toolbar("recipes", "搜索配方 / 产物名…", `
+    ${toolbar("recipes", "搜索配方 / 产物 / 原料名…", `
       <select onchange="window.__filter('recipes', this.value)">
         <option value="">全部站点</option>
-        <option value="manual" ${st === "manual" ? "selected" : ""}>手工制作</option>
-        <option value="machine" ${st === "machine" ? "selected" : ""}>工厂机器</option>
-        <option value="spaceship" ${st === "spaceship" ? "selected" : ""}>飞船制造</option>
+        ${STATION_ORDER.map((s) => `<option value="${s}" ${st === s ? "selected" : ""}>${STATION_NAME[s]}</option>`).join("")}
       </select>
       <select onchange="window.__filter('recipeCat', this.value)">
         <option value="">全部分类</option>
         ${cats.map((c) => `<option ${c === catEff ? "selected" : ""}>${esc(c)}</option>`).join("")}
       </select>`)}
-    <p class="note">手工配方按游戏内分类(精制食药/应急食药/随身装置/种植调配/素材转化),
-      工业配方按生产设施;data/recipes/ 按站点(manual/machine/spaceship)分子目录存放。</p>
-    <table><thead><tr><th>产物</th><th>配方</th><th>分类</th><th>站点</th></tr></thead><tbody>
-    ${list.map((r) => {
-      const out = r.outcomes[0]?.group[0];
-      return `<tr class="clickable" data-detail="recipes" data-sub="${esc(r.station)}" data-id="${esc(r.id)}">
-        <td>${esc(r.name || (out?.name ?? r.id))} ×${out?.count ?? 1}</td>
-        <td><div class="recipe-line">${recipeSide(r.ingredients) || '<span class="opt">—</span>'}</div></td>
-        <td class="dim">${esc(recipeCategory(r) ?? "—")}</td>
-        <td><span class="badge ${r.station}">${{ manual: "手工", machine: "工厂", spaceship: "飞船" }[r.station]}</span></td>
-      </tr>`;
-    }).join("")}
-    </tbody></table>`;
+    <p class="note">共 ${state.data.recipes.length} 条配方:
+      ${STATION_ORDER.filter(totalBy).map((s) => `${STATION_NAME[s]} ${totalBy(s)}`).join(" · ")}
+      ${list.length !== state.data.recipes.length ? `,当前匹配 ${list.length} 条` : ""}。
+      按站点与分类分组展示:手工/飞船按游戏内分类(应急食药/精制食药/随身装置/种植调配/素材转化等),
+      基建工厂按生产设施(灌装机/拆解机/精炼炉/…),同设施多进料模式以相别(液相/气液/气相/常规)细分,点击分类标题可折叠。</p>
+    ${stations.map((s) => {
+      const rows = list.filter((r) => r.station === s);
+      const grouped = new Map();
+      rows.forEach((r) => {
+        if (!grouped.has(catKey(r))) grouped.set(catKey(r), []);
+        grouped.get(catKey(r)).push(r);
+      });
+      const entries = [...grouped.entries()].map(([name, rs]) => {
+        rs.sort((a, b) => (a.sortId ?? 0) - (b.sortId ?? 0) || a.id.localeCompare(b.id));
+        return [name, rs];
+      });
+      // 机器分类按配方数降序;手工/飞船沿用分类下拉的 showingType 顺序
+      if (s === "machine") entries.sort((a, b) => b[1].length - a[1].length);
+      else entries.sort((a, b) => cats.indexOf(a[0]) - cats.indexOf(b[0]));
+      return `<section class="rstation">
+        <h3 class="rstation-h"><span class="badge ${s}">${STATION_BADGE[s]}</span>${STATION_NAME[s]}
+          <span class="dim">${rows.length} 条 · ${entries.length} 个分类</span></h3>
+        ${entries.map(([name, rs]) => categorySection(s, name, rs)).join("")}
+      </section>`;
+    }).join("") || '<div class="empty-state">无匹配结果</div>'}`;
 }
 
 function renderEquips() {
@@ -368,7 +432,7 @@ function detailCharacters(d) {
         <div class="bb-line">${(sk.levels ?? []).map((l) =>
           `<span class="bb">Lv${l.level ?? "?"}:${fmtBB(l.blackboard) || "—"}</span>`).join("")}</div>
       </div>`).join("")}`;
-      }).join("") || dimP}
+      }).join("") || dimP})())}
     ${sec("潜能 / 天赋", (d.potentials ?? []).map((p) => `
       <div class="block"><h5>${esc(p.name ?? `潜能 ${p.level}`)}</h5>
         ${p.desc ? `<p class="desc">${esc(p.desc)}</p>` : ""}
@@ -439,15 +503,15 @@ function detailItems(d) {
 }
 
 function detailRecipes(d) {
-  const st = { manual: "手工", machine: "工厂", spaceship: "飞船" }[d.station];
   return `
     <h3>${esc(d.name || d.formulaDesc || (d.outcomes?.[0]?.group?.[0]?.name ?? d.id))}</h3>
-    <div class="sub"><span class="badge ${d.station}">${st ?? d.station}</span> · ${esc(d.id)}</div>
+    <div class="sub"><span class="badge ${d.station}">${STATION_BADGE[d.station] ?? d.station}</span>
+      ${esc(STATION_NAME[d.station] ?? d.station)} · ${esc(d.id)}</div>
     ${sec("原料", `<div class="recipe-line">${recipeSide(d.ingredients) || '<span class="opt">—</span>'}</div>`)}
     ${sec("产物", `<div class="recipe-line">${recipeSide(d.outcomes)}</div>`)}
     ${kvTable([
       ["分类", esc(recipeCategory(d) ?? "—")],
-      ...(d.formulaGroupId ? [["配方组", `${esc(d.formulaDesc ?? "")} <span class="dim">${esc(d.formulaGroupId)}</span>`]] : []),
+      ...(d.formulaGroupId ? [["配方组", `${esc(d.formulaDesc ?? "")} <span class="dim">${esc(d.formulaGroupId)}</span>${recipePhase(d) ? ` <span class="badge">${esc(recipePhase(d))}</span>` : ""}`]] : []),
       ["制造耗时", d.craftTimeSec ? `${d.craftTimeSec} 秒` : "—"],
       ["生产设施", d.facility ? esc(d.facility) : "—"],
       ["稀有度", d.rarity ?? "—"],
