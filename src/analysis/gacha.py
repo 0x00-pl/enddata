@@ -261,17 +261,18 @@ class GachaPool:
             self._grant_quota(star)
             self._persist_progress()
             return Pull(star, star == 6, True, g.pity, self.pulls, six_id)
-        if self.banner_ticket_left:       # 当期卡池券:免费获得,照常计保底
+        free_kind = None                  # 免费券:当期卡池券 / 配额兑换券
+        if self.banner_ticket_left:
             self.banner_ticket_left -= 1
-            g.total_pulls += 1
-            g.free_pulls += 1
-        elif self.exchange_left:          # 配额兑换券:免费获得,照常计保底
+            free_kind = "banner"
+        elif self.exchange_left:
             self.exchange_left -= 1
-            g.total_pulls += 1
+            free_kind = "exchange"
+        self.pulls += 1                   # 免费券与付费同权:计入本池累计,
+        g.total_pulls += 1                # 推进 120 硬保底与 30/60/240 赠礼档
+        if free_kind:
             g.free_pulls += 1
         else:
-            self.pulls += 1
-            g.total_pulls += 1
             g.paid_pulls += 1
         g.pity += 1                                 # 抽后即本抽的周期序数
         g.five_pity += 1
@@ -769,6 +770,11 @@ def sample_pmf(samples: list[int]) -> list[float]:
 
 
 # ---------------------------------------------------------------- ④ 版本概率曲线
+def cdf_expectation(cdf_arr: list[float]) -> float:
+    """由累积分布求期望抽数:E[T] = 1 + Σ_{n≥1} P(T > n)(生存函数求和)。"""
+    return 1.0 + sum(1.0 - p for p in cdf_arr)
+
+
 def version_key(v: str) -> tuple[int, ...]:
     """版本号 → 可比较元组(1.10 > 1.9)。"""
     return tuple(int(x) for x in v.split("."))
@@ -979,7 +985,7 @@ def render_collection_chart(title: str,
                          f'fill="{color}">{prob_at(main_cdf, x):.0%}</text>')
         lines.append(f'<text x="{mx + 5:.1f}" '
                      f'y="{label_layer + mi * 16}" font-size="12" '
-                     f'fill="{color}">{label} {x:.0f}({note})</text>')
+                     f'fill="{color}">{label} {x:.0f} {note}</text>')
     svg = (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{w}" height="{h}" '
         f'viewBox="0 0 {w} {h}" font-family="sans-serif">'
@@ -1175,7 +1181,7 @@ def run(version: str | None = None, plot: bool = False,
         curves = []
         if method in ("both", "simulate"):
             sim_cdf, sim_e = collection_cdf(plan)
-            curves.append(("模拟(含顺路/跳过)", sim_cdf, "#1565c0", sim_e))
+            curves.append(("模拟", sim_cdf, "#1565c0", sim_e))
         if method in ("both", "analytic"):
             ana_cdf, ana_e = collection_cdf_upper(plan)
             curves.append(("解析上界(未计顺路)", ana_cdf, "#ef6c00", ana_e))
@@ -1184,9 +1190,11 @@ def run(version: str | None = None, plot: bool = False,
         marks = []
         if len(plan) > 1:                  # 全局零氪/月卡线只对版本图有意义
             marks = [
-                ("零氪全勤", zero, "#2e7d32", f"{zero - exp0:+.0f}"),
+                ("零氪全勤", zero, "#2e7d32",
+                 f"{zero - exp0:+.0f}({(zero - exp0) / exp0:+.0%})"),
                 ("大小月卡", total_pass_pulls(ver), "#6a1b9a",
-                 f"{total_pass_pulls(ver) - exp0:+.0f}"),
+                 f"{total_pass_pulls(ver) - exp0:+.0f}"
+                 f"({(total_pass_pulls(ver) - exp0) / exp0:+.0%})"),
             ]
         path = render_collection_chart(
             title, curves,
