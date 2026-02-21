@@ -1,11 +1,12 @@
 """抽卡分析:寻访概率计算(卡池状态机模拟 + 解析分布,两套实现互相对拍)。
 
 架构:每类卡池一个子类,继承 GachaPool 基类;基类 pull() 实现单抽状态机 ——
-每抽一次即更新全局状态(GachaGlobalState:6★/5★保底计数 + 已拥有干员,同类型
-池之间继承)与当前卡池状态(GachaPool 实例属性:本池累计寻访/当期UP获得/赠送
-十连档位,即「当期卡池状态」)。池差异全部以类属性表达(概率字段名与源表
-GachaCharPoolTypeTable 一致,单位 = 每百万分率 pm;采集侧暂无 gacha 数据集,
-参数内嵌注明出处)。POOLS 按游戏版本给出每期卡池对象(配置单例,模拟前 reset)。
+每抽一次即更新全局状态(GachaGlobalState:6★/5★保底计数、已拥有干员、累计
+抽数、保障配额、下期券等跨池资产)与当前卡池状态(GachaPool 实例属性:本池
+累计寻访/当期UP获得/赠送十连档位)。池差异全部以类属性表达(概率字段名与
+源表 GachaCharPoolTypeTable 一致,单位 = 每百万分率 pm;采集侧暂无 gacha
+数据集,参数内嵌注明出处)。POOLS 按游戏版本给出每期卡池对象(配置单例,
+模拟前 reset)。
 
 规则口径(限定寻访;源表 type 0 + GachaCharPoolContentTable 名单 + 规则文字):
     单抽基础概率  6★ 0.8% / 5★ 8% / 4★ 91.2%
@@ -20,39 +21,37 @@ GachaCharPoolTypeTable 一致,单位 = 每百万分率 pm;采集侧暂无 gacha 
                   计数;往期/常驻6★不触发也不推迟它)。复刻寻访例外:重构寻访
                   重新上线时整体继承上一轮累计进度(含硬保底),见 RerunGacha
     十连保底      每10次有效寻访必出5★及以上(6★同样满足并重置计数)
-    赠送十连      本池累计30次赠当期十连(freeTenPullRewardPullCount=[30,0,0]):
-                  按基础概率出卡、与保底完全互不影响(不推进也不重置主保底)、
-                  不计入累计寻访次数 → 付费抽数 = 有效抽数,必领必用时等价于
-                  在付费第30抽后插入一段独立10连
-    累计60次      赠下期十连券(testimonialPullCount=60):入全局状态
-                  (next_ten_tickets[pool_id],绑定档期上下一期限定池,仅该池
-                  可用),下一期限定池开局兑换;为正常寻访口径(计保底与
-                  累计,与 30 抽加急招募的赠送口径不同),十连必须整抽
-    其他          每240次赠UP潜能信物(intervalAutoRewardPerPullCount,只影响期望
-                  份数,不改分布);保障配额按星级累积(4★+2/5★+20/6★+200 厘抽,
-                  期望每抽≈5厘,复刻与联合池翻倍),满 250 厘自动兑 1 张限定池
-                  寻访券(免费获得、照常计保底,约 2% 回馈);
-                  常驻池累计300次自选六星(choicePackPullCount);
-                  联合寻访(辉光庆典) 独立保底、无120必得;6★分配 50% 双UP平分 +
-    50% 名单内常驻平分;30/60/120抽累计赠礼见 JointGacha 注释
+    赠送十连      本池累计30次赠当期十连(加急招募,仅限一次):按基础概率出卡、
+                  与保底完全互不影响、不计入累计寻访次数 → 付费抽数 = 有效抽数,
+                  必领必用时等价于在付费第30抽后插入一段独立10连
+    累计60次      赠下期十连券:入全局状态(next_ten_tickets[pool_id],绑定档期
+                  上下一期限定池,仅该池可用),下一期限定池开局兑换;为正常
+                  寻访口径(计保底与累计,与 30 抽加急招募不同),十连必须整抽
+    保障配额      每次寻访 +1(复刻/联合寻访翻倍 = 0.8 抽价值);第 2 次及后续
+                  获取相同 6★/5★ 干员额外 +50/+10 并转化为对应干员信物×1;
+                  满 25 配额自动兑 1 张限定池寻访券(免费但照常计保底)
+    循环信物      每240次赠当期UP潜能信物(intervalAutoRewardPerPullCount,
+                  不影响保底计数,计入满潜份数)
+    其他          常驻池累计300次自选六星(choicePackPullCount);
+                  联合寻访(辉光庆典)独立保底、无120必得,6★分配 50% 双UP平分 +
+                  50% 名单内常驻平分;30/60/120抽累计赠礼见 JointGacha 注释
 
-卡池名单(six 池内容)= 常驻6★ + 当期 + 前两期当期角色,来自
-GachaCharPoolContentTable 快照;1.0 开服期名单同样按快照(含同期/后续期角色)。
+卡池名单 = 常驻6★ + 当期 + 前两期当期角色,来自 GachaCharPoolContentTable
+快照;1.0 开服期按时间口径取前两期(快照名单含后续期角色,属数据怪象)。
 
 两套实现:
-    ① simulate()        驱动 GachaPool.pull() 的规则直演(固定种子可复现)
-    ② 解析函数          逐抽概率表 + 「当期干员首达」分布 DP(50%/6★ 段)+
-                        赠送十连并入;全图鉴抽数 = 单池当期首达分布卷积
-                        (未计顺路获得的上界,模拟为准)
-    ③ run()             控制台输出对拍偏差,报告写入 reports/gacha-analysis.md
-                        (版本卡池安排 + 全图鉴所需抽数统计)
+    ① simulate()   驱动 GachaPool.pull() 的规则直演(固定种子可复现)
+    ② 解析函数     逐抽概率表 + 「当期干员首达」分布 DP + 赠送十连并入;
+                   全图鉴抽数 = 单池当期首达分布卷积(未计顺路获得的上界)
+    ③ run()        控制台输出对拍偏差,报告写入 reports/gacha-analysis.md
 
 抽卡策略:策略函数 strategy(pool, g) -> bool 以「当期卡池状态(大保底计数
 pulls 等)+ 全局状态(已拥有干员 owned、累计小保底 pity)」决定本抽是否继续,
-run_banner() 按策略驱动一个卡池。
+run_banner() 按策略驱动一个卡池;内置 strategy_until_owned(图鉴:拿齐即停)
+与 strategy_until_owned_60(拿齐后累计 ≥50 顺路抽满 60 拿下期券)。
 
 用法:
-    poetry run enddata analysis gacha    # 或 analysis.gacha.main()
+    poetry run enddata analysis gacha [VERSION] [--plot] [--method M]
 """
 
 from __future__ import annotations
@@ -70,12 +69,23 @@ from tools.tables import DATA_DIR, REPORTS_DIR
 # ---------------------------------------------------------------- 常量
 RATE_SCALE = 1_000_000        # 源表概率单位:每百万分率
 FREE_TEN_SIZE = 10            # 赠送十连规模
+BANNER_TICKETS = 5            # 每个限定卡池开启时可购买的当期卡池券张数
+SHARE_CURRENT = 0.50          # 6★ 命中后:当期干员份额
+SHARE_RATEUP = 0.25           # 往期两期限定干员合计份额(平分)
+SHARE_STANDARD = 0.25         # 名单内常驻6★合计份额(平分)
 QUOTA_DUP_6STAR = 100         # 重复获取相同6星干员:+50 官方配额(并转化信物×1)
 QUOTA_DUP_5STAR = 20          # 重复获取相同5星干员:+10 官方配额(并转化信物×1)
 QUOTA_TICKET_COST = 50        # 兑换 1 张限定池寻访券所需配额(= 25 官方配额 = 1 抽)
-# 基础每寻访配额(+1)为辉光庆典等特殊寻访的额外规则,普通限定池没有
+DEFAULT_SEED = 20260918       # 模拟固定种子(可复现,对拍口径稳定)
+DEFAULT_TRIALS = 30_000       # 单池保底分布模拟次数
+COLLECTION_TRIALS = 8_000     # 全图鉴抽数模拟次数
+REPORT_PATH = REPORTS_DIR / "gacha-analysis.md"
+# 小月卡与大月卡(通行证)数值;版本天数由上线日期表推导
 VERSION_DAYS = 42             # 兜底:最新版本的天数估算(无后续日期可推时)
 PASS_DAILY_CRYSTAL = 200      # 小月卡每日嵌晶玉(与天数相关)
+CRYSTAL_PER_PULL = 500        # 每次寻访所需嵌晶玉
+STONE_PER_PULL = 75           # 1 衍质源石 = 75 嵌晶玉
+PASS_PROTOCOL_REFUND = 36     # 协议定制(大小月卡独有):返还衍质源石×36
 # 版本上线日期(社区资料/估算;锚点:2026-01-24 开服、2026-02-24 信使池结束、
 # 2026-08-20 前后 1.5 开放——与 1.4 统计 09-01 完结吻合)。版本天数由相邻
 # 上线日期差推导,日期偏差会直接传导到小月卡累计。
@@ -84,19 +94,6 @@ VERSION_START_DATES: dict[str, str] = {
     "1.3": "2026-05-28", "1.4": "2026-07-09", "1.5": "2026-08-20",
     "1.5.2": "2026-09-17",
 }
-CRYSTAL_PER_PULL = 500        # 每次寻访所需嵌晶玉
-STONE_PER_PULL = 75           # 1 衍质源石 = 75 嵌晶玉
-PASS_PROTOCOL_REFUND = 36     # 协议定制(大小月卡独有):返还衍质源石×36
-    # 注:源石配给(消耗 29/返还 32 衍质源石)零氪玩家同样完成,已含在
-    # VERSION_FREE_PULLS 统计中,不在大小月卡增量里重复计算。
-BANNER_TICKETS = 5            # 每个限定卡池开启时可购买的当期卡池券张数
-SHARE_CURRENT = 0.50          # 6★ 命中后:当期干员份额
-SHARE_RATEUP = 0.25           # 往期两期限定干员合计份额(平分)
-SHARE_STANDARD = 0.25         # 名单内常驻6★合计份额(平分)
-DEFAULT_SEED = 20260918       # 模拟固定种子(可复现,对拍口径稳定)
-DEFAULT_TRIALS = 30_000       # 单池保底分布模拟次数
-COLLECTION_TRIALS = 8_000     # 全图鉴抽数模拟次数
-REPORT_PATH = REPORTS_DIR / "gacha-analysis.md"
 
 
 # ---------------------------------------------------------------- 状态与结果
@@ -108,7 +105,8 @@ class GachaGlobalState:
     即「累计小保底」);five_pity = 5★及以上十连保底计数;owned = 已拥有干员
     (任何6★命中时由 pull() 写入)。total_pulls/free_pulls/paid_pulls = 累计
     经历的抽数与其中赠送/付费拆分(赠送抽数计入总抽数但不推进保底);
-    池重置(reset)不影响本状态。
+    next_ten_tickets = 下期限定十连券(发券时绑定下一个限定池,仅该池可用);
+    rerun_progress = 重构寻访跨轮继承的进度。池重置(reset)不影响本状态。
     """
 
     pity: int = 0
@@ -120,13 +118,7 @@ class GachaGlobalState:
     quota: int = 0                  # 保障配额存量(单位 = 厘抽,即 0.001 抽价值)
     quota_tickets: int = 0          # 配额兑换的限定池寻访券(单抽,任意限定池)
     next_ten_tickets: dict[str, int] = field(default_factory=dict)
-    # 下期限定十连券:pool_id → 张数。发券时绑定档期上的下一个限定池,
-    # 仅该池开局可兑换(id 校验),不可转移到别的池使用。
     rerun_progress: dict[str, dict] = field(default_factory=dict)
-    # 重构寻访(RerunGacha)跨轮继承的进度:pool_id -> {pulls, up_got,
-    # free_ten_left, free_ten_granted, next_ticket_granted}。限定寻访每期
-    # 全新、不入此表;重构寻访重新上线时由此恢复(官方「已从历史重构寻访
-    # 中累计继承 N 次寻访记录」)。
 
 
 @dataclass(frozen=True)
@@ -138,7 +130,7 @@ class Pull:
     free: bool             # 是否赠送抽数(不计保底、不计累计)
     pity: int              # 抽后全局 6★保底计数
     pulls: int             # 抽后本池累计寻访次数(赠送抽数不增;付费轴)
-    up_id: str | None = None  # 命中的6★干员(UP干员或常驻;5★/4★为 None)
+    up_id: str | None = None  # 命中的干员(6★/5★;4★为 None)
 
 
 # ---------------------------------------------------------------- 卡池基类
@@ -146,8 +138,9 @@ class GachaPool:
     """寻访池基类:pull() 实现单抽状态机,池差异以类属性表达(默认 = 限定寻访)。
 
     当期卡池状态 = 实例属性(pulls 累计寻访即「大保底计数」、up_got 已获得当期
-    干员、free_ten_* 赠送十连档位);池配置(pool_id/name/干员名单)在构造时注入,
-    reset() 重置状态供模拟复用(POOLS 中的对象为配置单例)。
+    干员、free_ten_* / banner_ticket_left / exchange_left 免费券余量);池配置
+    (pool_id/name/干员名单)在构造时注入,reset() 重置状态供模拟复用(POOLS
+    中的对象为配置单例)。
 
     类属性(概率单位 pm;字段名与 GachaCharPoolTypeTable 一致):
         star6BaseRate / star5BaseRate      6★/5★ 单抽基础概率
@@ -158,6 +151,8 @@ class GachaPool:
         star5SoftGuarantee                 每 N 次有效寻访必出5★及以上
         freeTenGrantAt                     本池累计 N 次赠当期十连(0 = 无)
         nextTenTicketAt                    本池累计 N 次赠下期十连券(0 = 无)
+        intervalRewardAt                   每累计 N 次赠当期UP潜能信物(0 = 无)
+        quota_base                         每寻访基础配额(特殊寻访 +1,普通限定 0)
 
     实例配置:
         guarantee_id  当期干员(120硬保底对象;联合池为空)
@@ -175,15 +170,13 @@ class GachaPool:
     star5SoftGuarantee: int = 10
     freeTenGrantAt: int = 30
     nextTenTicketAt: int = 60
-    intervalRewardAt: int = 240    # 每累计 N 次赠当期UP潜能信物(0 = 无)
+    intervalRewardAt: int = 240
     quota_base: int = 0            # 每寻访基础配额(特殊寻访 +1,普通限定 0)
     pool_name: str = "寻访池"
-
-    # 抽取优先级:赠送十连 → 当期卡池券(每池开启 BANNER_TICKETS 张)→
-    # 配额兑换券 → 付费寻访。
     progress_in_global: bool = False  # 进度入全局状态跨轮继承(重构寻访 = True)
     next_pool_id: str = ""            # 下期券绑定的池 id(POOLS 档期推导)
 
+    # 抽取优先级:赠送十连 → 当期卡池券(可购 5 + 签到 5)→ 配额兑换券 → 付费
     def __init__(self, global_state: GachaGlobalState | None = None,
                  rng: random.Random | None = None, *,
                  pool_id: str = "", name: str = "",
@@ -202,14 +195,13 @@ class GachaPool:
         self.rateup_ids = rateup_ids                   # 往期限定段:25% 平分
         self.standard_ids = standard_ids or _STD6      # 名单内常驻6★:25% 平分
         self.sign_in_tickets = sign_in_tickets         # 登录签到送当期凭证张数
-        self.pulls = 0                 # 本池累计有效(付费)寻访 = 大保底计数
+        self.pulls = 0                 # 本池累计寻访 = 大保底计数
         self.up_got = 0                # 已获得当期干员次数(硬保底上限1)
         self.free_ten_left = 0         # 待抽的赠送十连余量
         self.free_ten_granted = False  # 累计30次赠十连是否已发
         self.next_ticket_granted = False  # 累计60次赠下期十连券是否已发
         self.interval_got = 0           # 已领取的 240 抽循环潜能信物数
-        self.exchange_left = 0          # 开局兑换的配额券余量(正常寻访)
-        # 当期免费券 = 可购 5 张 + 登录签到送当期凭证(缺签到的池按实际张数)
+        self.exchange_left = 0          # 免费券余量(下期券/配额券,正常寻访)
         self.banner_ticket_left = BANNER_TICKETS + self.sign_in_tickets
 
     def reset(self, global_state: GachaGlobalState | None = None) -> None:
@@ -268,7 +260,7 @@ class GachaPool:
         """单次寻访:优先消耗赠送抽数(基础概率,不动任何计数);否则为有效
         寻访 —— 推进全局保底计数与本池累计,结算星级/干员与累计赠礼。"""
         g, rng = self.g, self.rng
-        if self.free_ten_left:
+        if self.free_ten_left:                     # 加急招募:不计保底
             self.free_ten_left -= 1
             g.total_pulls += 1
             g.free_pulls += 1
@@ -276,12 +268,12 @@ class GachaPool:
             dup = False
             if star == 6:
                 six_id = self._pick_six()
-                dup = six_id in g.owned             # 重复获取(第 2 次及后续)
+                dup = six_id in g.owned            # 第 2 次及后续获取
                 g.owned.add(six_id)
             self._grant_quota(star, six_id, dup)
             self._persist_progress()
             return Pull(star, star == 6, True, g.pity, self.pulls, six_id)
-        free_kind = None                  # 免费券:当期卡池券 / 配额兑换券
+        free_kind = None                  # 当期卡池券 / 配额兑换券:计保底不计付费
         if self.banner_ticket_left:
             self.banner_ticket_left -= 1
             free_kind = "banner"
@@ -445,17 +437,18 @@ class BeginnerGacha(GachaPool):     # type 1 新手寻访:无提升段,40抽封�
     nextTenTicketAt = 0
 
 
+# 干员名单(源 = GachaCharPoolContentTable;各池一致)
+_STD6 = ("chr_0009_azrila", "chr_0015_lifeng", "chr_0025_ardelia",
+         "chr_0026_lastrite", "chr_0029_pograni")
+_STD5 = ("chr_0004_pelica", "chr_0005_chen", "chr_0006_wolfgd", "chr_0007_ikut",
+         "chr_0011_seraph", "chr_0012_avywen", "chr_0014_aurora",
+         "chr_0018_dapan", "chr_0024_deepfin")
+
 # 各版本 UP 卡池安排(配置单例;源 = TableCfg/GachaCharPoolTable 快照 +
 # GachaCharPoolContentTable 6★ 名单,池名经 I18nTextTable_CN 反查。
 # up_ids = 当期段(50% 平分对象;限定/复刻池即当期干员,联合池为双UP);
 # rateup_ids = 名单内往期限定干员(前两期当期角色;1.0 开服期名单按快照);
 # standard_ids = 名单内常驻6★,缺省为限定池标准 5 人名单)。
-_STD6 = ("chr_0009_azrila", "chr_0015_lifeng", "chr_0025_ardelia",
-         "chr_0026_lastrite", "chr_0029_pograni")
-# 5★ 干员名单(各池一致;源 = GachaCharPoolContentTable starLevel=5)
-_STD5 = ("chr_0004_pelica", "chr_0005_chen", "chr_0006_wolfgd", "chr_0007_ikut",
-         "chr_0011_seraph", "chr_0012_avywen", "chr_0014_aurora",
-         "chr_0018_dapan", "chr_0024_deepfin")
 POOLS: dict[str, list[GachaPool]] = {
     # 1.0 开服期按时间口径:往期段 = 已结束的前两期首发池(快照名单另含
     # 后续期角色,属数据怪象,不采用 —— 否则会产生虚假的顺路收益)
@@ -516,18 +509,29 @@ POOLS: dict[str, list[GachaPool]] = {
     ],
 }
 
-
 # 下期十连券绑定:按档期顺序,每个限定/复刻池的 60 抽档券对应下一个
 # 上线的限定类池(末位无下期,不发);联合寻访不发下期券。
-_RERUN_SEQ = [p for pools in POOLS.values() for p in pools
-              if isinstance(p, LimitedGacha)]
-for _cur, _nxt in zip(_RERUN_SEQ, _RERUN_SEQ[1:]):
+for _cur, _nxt in zip((p for pools in POOLS.values() for p in pools
+                       if isinstance(p, LimitedGacha)),
+                      [p for pools in POOLS.values() for p in pools
+                       if isinstance(p, LimitedGacha)][1:]):
     _cur.next_pool_id = _nxt.pool_id
 
 
+# ---------------------------------------------------------------- 全勤资源
 VERSION_FREE_PULLS: dict[str, int] = {
     "1.0": 267, "1.1": 96, "1.2": 114, "1.3": 82, "1.4": 111, "1.5": 85,
 }
+
+
+def version_key(v: str) -> tuple[int, ...]:
+    """版本号 → 可比较元组(1.10 > 1.9)。"""
+    return tuple(int(x) for x in v.split("."))
+
+
+def latest_version() -> str:
+    """POOLS 中最新的版本号。"""
+    return max(POOLS, key=version_key)
 
 
 def total_free_pulls(version: str) -> int:
@@ -617,14 +621,14 @@ def run_banner(pool: GachaPool, strategy: Strategy) -> list[Pull]:
     return out
 
 
-# ---------------------------------------------------------------- ① 模拟
+# ---------------------------------------------------------------- ① 单池模拟
 def simulate(pool: GachaPool, trials: int = DEFAULT_TRIALS,
              seed: int = DEFAULT_SEED, pity: int = 0) -> dict[str, list[float]]:
     """驱动 pull() 的规则直演:首个6★/5★+/当期干员的付费抽数经验分布。
 
     pool 为 POOLS 配置单例(每 trial 前重置);一趟寻访历史同时统计三个首达
     事件;「当期干员」需要 guarantee_id 与硬保底(联合池不统计,分布无界)。
-    pity 表达入池时继承的6★保底。
+    对拍口径:清空当期券/配额券,只验证保底机制。pity 表达入池时继承的6★保底。
     """
     rng = random.Random(seed)
     six = [0] * pool.softGuarantee
@@ -779,6 +783,11 @@ def pulls_needed(pmf: list[float], q: float) -> int:
     return len(pmf)
 
 
+def cdf_expectation(cdf_arr: list[float]) -> float:
+    """由累积分布求期望抽数:E[T] = 1 + Σ_{n≥1} P(T > n)(生存函数求和)。"""
+    return 1.0 + sum(1.0 - p for p in cdf_arr)
+
+
 # ---------------------------------------------------------------- ③ 全图鉴
 def first_banners() -> list[GachaPool]:
     """全图鉴首发池:各版本限定寻访(排除复刻;联合池为往期UP重复机会,
@@ -829,15 +838,15 @@ def sample_pmf(samples: list[int]) -> list[float]:
     return out
 
 
-# ---------------------------------------------------------------- ④ 版本概率曲线
-def cdf_expectation(cdf_arr: list[float]) -> float:
-    """由累积分布求期望抽数:E[T] = 1 + Σ_{n≥1} P(T > n)(生存函数求和)。"""
-    return 1.0 + sum(1.0 - p for p in cdf_arr)
-
-
+# ---------------------------------------------------------------- ④ 版本与绘图
 def version_key(v: str) -> tuple[int, ...]:
     """版本号 → 可比较元组(1.10 > 1.9)。"""
     return tuple(int(x) for x in v.split("."))
+
+
+def latest_version() -> str:
+    """POOLS 中最新的版本号。"""
+    return max(POOLS, key=version_key)
 
 
 def version_banners(version: str) -> list[GachaPool]:
@@ -846,11 +855,6 @@ def version_banners(version: str) -> list[GachaPool]:
             if version_key(v) <= version_key(version)
             for p in pools
             if isinstance(p, LimitedGacha) and not isinstance(p, RerunGacha)]
-
-
-def latest_version() -> str:
-    """POOLS 中最新的版本号。"""
-    return max(POOLS, key=version_key)
 
 
 def resolve_plan(target: str | None) -> tuple[str, str, str, list[GachaPool]]:
@@ -1287,7 +1291,7 @@ def run(version: str | None = None, plot: bool = False,
         path = render_collection_chart(
             title, curves,
             REPORTS_DIR / f"gacha-collection-{label}.svg", marks)
-        tail_note = (f";零氪 {zero}、大小月卡 {marks[1][1]},括号为与期望的差"
+        tail_note = (f";零氪 {zero}、大小月卡 {pass_supply},括号为与期望的差"
                      if marks else "")
         print(f"  {path}(平铺全图鉴策略,{len(plan)} 个首发池,"
               f"方式 {method}{tail_note})")
