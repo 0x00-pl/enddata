@@ -183,6 +183,9 @@ const recipePhase = (r) => {
   return m ? PHASE_CN[m[1]] : null;
 };
 
+/* 机器配方所需气体环境(FactoryEnvDisplayTable GenEnv;0=无要求不在表中) */
+const GAS_ENV_CN = { 0: "无要求", 1: "稳定", 2: "湿润", 3: "酸性" };
+
 let recipeDetailsLoading = false;
 
 /* 清单式数据集(recipes/items)通用:按清单批量拉取子文件,载入一次后缓存。
@@ -512,6 +515,7 @@ function detailRecipes(d) {
     ${kvTable([
       ["分类", esc(recipeCategory(d) ?? "—")],
       ...(d.formulaGroupId ? [["配方组", `${esc(d.formulaDesc ?? "")} <span class="dim">${esc(d.formulaGroupId)}</span>${recipePhase(d) ? ` <span class="badge">${esc(recipePhase(d))}</span>` : ""}`]] : []),
+      ...(d.station === "machine" ? [["气体环境", GAS_ENV_CN[d.gasEnv] ?? d.gasEnv ?? "—"]] : []),
       ["制造耗时", d.craftTimeSec ? `${d.craftTimeSec} 秒` : "—"],
       ["生产设施", d.facility ? esc(d.facility) : "—"],
       ["稀有度", d.rarity ?? "—"],

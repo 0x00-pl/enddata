@@ -10,6 +10,10 @@
 分类:手工/飞船配方带 showingType(→ showingName 中文名),手工另有 craftFilterType
       (0=普通手工,素材转化按 1/2/3 细分)与配方名 name;机器配方无 showingType,
       以生产设施为分类(machineName),并带 formulaDesc/formulaGroupId 配方组。
+全字段保留:条目先落加工/派生字段(名称反查、原料产物解析、设施中文名),再把源表
+      其余字段原样透传(机器 gasEnv/buffers/progressRound/totalProgress/signal、
+      手工 defaultUnlock/itemId、飞船 level/roomAttrType/totalProgress 等)——上游
+      新增字段不需要改本模块即自动进入数据集,不会因白名单遗漏而丢字段。
 目录:data/recipes/<station>/<recipeId>.json(manual/machine/spaceship),
       展示分类与设施等字段保留在条目与索引中,不做目录层级。
 """
@@ -118,10 +122,21 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
             out.append({"group": group})
         return out
 
+    def merge_raw(src: dict, rec: dict, transformed: set[str]) -> dict:
+        """源表未加工字段原样并入条目(transformed 里的字段已换成解析后的形态,不保留原形)。
+
+        白名单只登记真正加工过的字段,其余(含上游新增,如机器表 gasEnv)一律透传,
+        保证数据集不丢源表字段。
+        """
+        for k, v in src.items():
+            if k not in transformed:
+                rec[k] = v
+        return rec
+
     recipes = []
     for rid, r in raw["FactoryManualCraftTable"].items():
         sh_name = showing.get(int(r["showingType"])) if r.get("showingType") is not None else None
-        recipes.append({
+        rec = {
             "id": rid, "station": "manual",
             "name": t(r.get("name")),
             "showingType": r.get("showingType"), "showingName": sh_name,
@@ -129,27 +144,31 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
             "rarity": r.get("rarity"), "domainId": r.get("domainId"), "sortId": r.get("sortId"),
             "ingredients": resolve_side(r.get("ingredients")),
             "outcomes": resolve_side(r.get("outcomes")),
-        })
+        }
+        recipes.append(merge_raw(r, rec, {"name", "ingredients", "outcomes"}))
     for rid, r in raw["FactoryMachineCraftTable"].items():
-        recipes.append({
+        rec = {
             "id": rid, "station": "machine",
             "machineId": r.get("machineId"),
             "machineName": building_name.get(r.get("machineId")),
             "formulaGroupId": r.get("formulaGroupId"),
             "formulaDesc": t(r.get("formulaDesc")),
-            "rarity": r.get("rarity"), "sortId": r.get("sortId"),
+            "sortId": r.get("sortId"),
+            "gasEnv": r.get("gasEnv", 0),   # 源表缺省补 0(无要求);有值时被 merge_raw 原值覆盖。1=稳定,2=湿润,3=酸性
             "ingredients": resolve_side(r.get("ingredients")),
             "outcomes": resolve_side(r.get("outcomes")),
-        })
+        }
+        recipes.append(merge_raw(r, rec, {"formulaDesc", "ingredients", "outcomes"}))
     for rid, r in raw["SpaceshipManufactureFormulaTable"].items():
         sh_name = showing.get(int(r["showingType"])) if r.get("showingType") is not None else None
-        recipes.append({
+        rec = {
             "id": rid, "station": "spaceship",
             "showingType": r.get("showingType"), "showingName": sh_name,
             "rarity": r.get("rarity"), "sortId": r.get("sortId"),
             "ingredients": [],
             "outcomes": resolve_side([{"id": r["outcomeItemId"], "count": r.get("perCapacity", 1)}]),
-        })
+        }
+        recipes.append(merge_raw(r, rec, {"outcomeItemId", "perCapacity"}))
 
     # endfield-calc join:按配方 ID(两侧同为游戏小写 ID)补充制造耗时与生产设施;
     # calc 只有产线配方,手工/飞船配方预期不命中。数据缺失时字段整体留空,不影响主流程。

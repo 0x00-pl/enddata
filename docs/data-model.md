@@ -218,6 +218,17 @@ activityCoupons, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
 `filling_bottled_copper_acid` → 灌装机 / 沉积酸(灌装))。机器配方的 `group` 是**同槽
 原料**(游戏内同时消耗,如灌装=空瓶+溶液,非可替代项);手工配方 group 长度恒为 1;
 飞船制造表只登记产物,`ingredients` 为空数组。
+**源表字段全量保留**:采集侧只替换加工形态(i18n 反查后的名称、解析后的原料/产物、
+合并进 `outcomes` 的 `outcomeItemId`/`perCapacity`),其余字段原样透传,上游新增字段
+不需要改采集代码即自动进入数据集。各站透传字段:
+- 机器:`gasEnv` 所需气体环境(0=无要求,1=稳定,2=湿润,3=酸性,4=息壤,取值见
+  `FactoryEnvDisplayTable.GenEnv`;当前数据仅 0/1/3)、`buffers`(产出物计数缓冲,如
+  活动 pair 配方)、`progressRound`/`totalProgress`(多轮进度配方:2/10/20 轮,总进度
+  12000~120000,如组件类 10 轮×单轮 6000)、`signal`(恒 0)
+- 手工:`itemId` 制成物物品 ID、`defaultUnlock`(当前全 false)
+- 飞船:`level` 舱室等级(1~3)、`roomAttrType` 舱室属性类型、`totalProgress`
+  (容量总进度,如 92000)
+机器源表没有 rarity 列,条目不再输出恒 null 的 `rarity`(手工/飞船照常)。
 `craftTimeSec`(制造耗时,秒)与 `facility`(生产设施 ID)来自 JamboChen/endfield-calc
 (本地克隆,其常量展开后与 TableCfg 同一套小写 ID,按配方 ID join);
 仅机器配方命中(317/317),手工/飞船及 calc 数据缺失时为 null。
