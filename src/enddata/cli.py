@@ -9,6 +9,7 @@
     enddata collection items --online          # 缺原始表时允许联网补抓
     enddata collection characters --force      # 核对远端 HEAD、有更新才增量拉取,随后本地重读
     enddata analysis team                       # 配队分析:技能/天赋/潜能的需求与产出资源解析
+    enddata analysis recipe 铁制零件 10         # 配方用料倒推:最终产物 → 最初用料/--have 清单(自动处理环)
     enddata idmap build                         # 扫描 rmxlinux 源,重建 data/id_map/ 关联规则产物
     enddata idmap relate <file#path>            # 按定位符返回同组定位符列表(path 列表)
     enddata version --record
@@ -20,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 
-from analysis import gacha, team_comp
+from analysis import gacha, recipe_calc, team_comp
 from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, settlements, weapons
 from tools import id_links, tables, versions
@@ -92,7 +93,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="进阶分析:基于 data/ 数据集二次计算(产物入 data/analysis/ 与 reports/)",
     )
     ana_sub = ana.add_subparsers(dest="analysis_target", required=True,
-                                 metavar="{team,gacha}")
+                                 metavar="{team,gacha,recipe}")
     ana_sub.add_parser(
         "team", help="配队分析:技能/天赋/潜能的需求与产出资源解析 → reports/team-analysis.md",
     )
@@ -111,6 +112,26 @@ def build_parser() -> argparse.ArgumentParser:
         "--method", choices=("both", "analytic", "simulate"), default="simulate",
         help="概率计算方式:simulate=状态机蒙特卡洛(默认,含顺路/跳过与下期券);"
              "analytic=解析卷积上界(快、保守);both=两者都画",
+    )
+    recipe_p = ana_sub.add_parser(
+        "recipe", help="配方用料倒推:最终产物 → 最初用料/--have 清单(自动绕开循环依赖)",
+    )
+    recipe_p.add_argument(
+        "item", nargs="?", default=None, metavar="ITEM",
+        help="目标物品(id 或中文名,支持唯一子串);缺省则生成数据概览报告",
+    )
+    recipe_p.add_argument(
+        "qty", nargs="?", default="1",
+        help="目标数量(整数/分数/小数,默认 1;或速率,如 60/min)",
+    )
+    recipe_p.add_argument(
+        "--have", default="", metavar="ITEMS",
+        help="视为可直接获取的物品清单(逗号分隔 id/名称),展开到此为止"
+             "(亦可用于指定循环物品的初始存量)",
+    )
+    recipe_p.add_argument(
+        "--json", action="store_true",
+        help="以 JSON 输出机器可读结果(展开树 + 用料合计 + 制造步骤)",
     )
 
     idm = sub.add_parser(
@@ -136,6 +157,8 @@ def main(argv=None) -> None:
             team_comp.main()
         elif args.analysis_target == "gacha":
             gacha.main(args.version, args.plot, args.method)
+        elif args.analysis_target == "recipe":
+            recipe_calc.main(args.item, args.qty, args.have, args.json)
         return
 
     # idmap 域
