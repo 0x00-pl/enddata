@@ -130,6 +130,11 @@ def build_parser() -> argparse.ArgumentParser:
              "(亦可用于指定循环物品的初始存量)",
     )
     recipe_p.add_argument(
+        "--recipe", action="append", default=[], metavar="ITEM=RECIPE_ID",
+        help="钉选某物品的产出配方(可多次),如 "
+             "--recipe 息壤=xiranite_oven_xiranite_powder_2;钉选后不再尝试其他配方",
+    )
+    recipe_p.add_argument(
         "--json", action="store_true",
         help="以 JSON 输出机器可读结果(展开树 + 用料合计 + 制造步骤)",
     )
@@ -158,7 +163,7 @@ def main(argv=None) -> None:
         elif args.analysis_target == "gacha":
             gacha.main(args.version, args.plot, args.method)
         elif args.analysis_target == "recipe":
-            recipe_calc.main(args.item, args.qty, args.have, args.json)
+            recipe_calc.main(args.item, args.qty, args.have, args.json, args.recipe)
         return
 
     # idmap 域

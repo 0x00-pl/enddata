@@ -62,7 +62,9 @@
 
 - **recipe_calc.py — 配方用料倒推**(`enddata analysis recipe [ITEM] [QTY] [--have 物品,…] [--json]`):
   给定最终产物与数量,沿 recipes/ 配方图回溯用料,直到最初用料(无配方物品,
-  如矿石;附 items 数据集 obtainWays 的获取途径注记)或 `--have` 持有清单;数量全程 `Fraction` 精确计算并附向上取整。
+  如矿石;附 items 数据集 obtainWays 的获取途径注记)或 `--have` 持有清单;
+  `--recipe 物品=配方ID`(可多次)钉选产出配方,跳过默认择路(如息壤钉到
+  xiranite_oven_xiranite_powder_2:碳块×1 路线比稳定碳块×2 省料,但需稳定环境);数量全程 `Fraction` 精确计算并附向上取整。
   口径:同组/同槽原料**同时消耗**(AND,见 collection/recipes.py 的 group 语义),
   拆解配方(dismantler_,回收环)不列为产出途径,副产物不做回收抵扣。
   配方择路 = 主产物 → machine>manual>spaceship → 耗时短 → id。

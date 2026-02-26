@@ -44,6 +44,8 @@
     poetry run enddata analysis recipe 铁制零件 10            # 按中文名查询(控制台)
     poetry run enddata analysis recipe item_iron_cmpt 10      # 按 id 查询
     poetry run enddata analysis recipe 分离芯 60/min          # 速率口径:每分钟材料流量 + 设备数折算
+    poetry run enddata analysis recipe 分离芯 60/min \
+        --recipe 息壤=xiranite_oven_xiranite_powder_2         # 钉选配方:少耗料的碳块路线(需稳定环境)
     poetry run enddata analysis recipe 分离芯 4 --have 清水,锦草种子
     poetry run enddata analysis recipe 蓝铁块 3 --json        # 机器可读输出
 
@@ -331,6 +333,10 @@ class RecipeGraph:
         assert self._obtain is not None
         return self._obtain.get(item)
 
+    def is_gatherable(self, item: str) -> bool:
+        """采集类资源(obtainWays 非空,如 清水=水泵采集):收缩阶段不翻成内部合成。"""
+        return self.obtain_of(item) is not None
+
     def _all_item_ids(self) -> set[str]:
         return set(self._name_pool())
 
@@ -376,44 +382,53 @@ class RecipeGraph:
 MAX_EXTERN_ROUNDS = 32   # 外部投料点自动求解的最大迭代轮数(每轮至少新增一个物品)
 
 def compute(graph: RecipeGraph, target: str, qty: Fraction,
-            provided: frozenset[str] = frozenset()) -> Requirement:
+            provided: frozenset[str] = frozenset(),
+            pinned: dict[str, str] | None = None) -> Requirement:
     """目标物品 ×qty 的用料倒推。
 
+    pinned = {物品: 配方id} 钉选产出配方(如 息壤 → xiranite_oven_xiranite_powder_2,
+    耗料更少的碳块路线);钉选后该物品不再尝试其他产出配方,增长/收缩两阶段均尊重。
     ① 增长:严格展开,被环堵死时收集「净产出判定失败的闭环点」(A, X),
        把环上祖先 A(A 为目标本身时取 X)记为外部投料点后重试 —— 这些物品
        (清水、种子一类)本就来自地图/初始存量,无法从最初用料纯合成;
     ② 收缩:对外部投料点逐个检验「给定其余投料点,它能否严格自产」,
        能则移出(如赤铜块在清水有供给时可用矿石+清水合成),收敛到局部
-       最小投料集 —— 单点可替换保证整体仍严格可行;
+       最小投料集 —— 单点可替换保证整体仍严格可行。采集类资源
+       (obtainWays 非空,如 清水=水泵采集)不参与收缩:保持外部投料,
+       不被提纯回收一类内部合成链顶替;钉选物品同样不翻成外部投料;
     ③ 增长耗尽仍失败才退回宽松模式(环叶兜底)。
     """
+    pin = dict(pinned or {})
     auto: set[str] = set()
     root = None
     for _ in range(MAX_EXTERN_ROUNDS):
         closures: set[tuple[str, str]] = set()
-        root = _expand(graph, target, qty, provided, frozenset(auto), (), True, closures)
+        root = _expand(graph, target, qty, provided, frozenset(auto), (), True, closures, pin)
         if root is not None:
             break
-        new = {a if a != target else x for a, x in closures} - auto - {target}
+        new = {a if (a != target and a not in pin) else x
+               for a, x in closures} - auto - {target} - set(pin)
         if not new:
             root = None
             break
         auto |= new
     if root is None:
-        root = _expand(graph, target, qty, provided, frozenset(auto), (), False, set())
+        root = _expand(graph, target, qty, provided, frozenset(auto), (), False, set(), pin)
         assert root is not None  # 宽松模式必然终止(环叶兜底)
         return _collect(root, strict_ok=False, graph=graph)
 
     while True:  # 收缩:单个投料点可严格自产 ⇒ 移出后整体仍可行(可替换性)
         for a in sorted(auto):
+            if graph.is_gatherable(a):
+                continue  # 采集类资源(清水等)保持外部投料,不翻成内部合成链
             if _expand(graph, a, Fraction(1), provided,
-                       frozenset(auto - {a}), (), True, set()) is not None:
+                       frozenset(auto - {a}), (), True, set(), pin) is not None:
                 auto.discard(a)
                 break
         else:
             break
-    root = _expand(graph, target, qty, provided, frozenset(auto), (), True, set())
-    assert root is not None
+    root = _expand(graph, target, qty, provided, frozenset(auto), (), True, set(), pin)
+    assert root is not None  # 收缩只做可替换的单点移除,整体可行性保持
     return _collect(root, strict_ok=True, graph=graph)
 
 
@@ -515,7 +530,8 @@ def _macro_note(graph: RecipeGraph, node: ReqNode) -> str:
 def _expand(graph: RecipeGraph, item: str, qty: Fraction,
             provided: frozenset[str], extern: frozenset[str],
             path: tuple[tuple[str, str], ...], strict: bool,
-            closures: set[tuple[str, str]]) -> ReqNode | None:
+            closures: set[tuple[str, str]],
+            pinned: dict[str, str] | None = None) -> ReqNode | None:
     """展开物品需求。path = [(物品, 所用配方), …] 祖先链(用于取环上配方表)。
 
     原料命中祖先 → 取环上配方表做净产出判定:净产出则以自持环宏配方供给
@@ -527,7 +543,11 @@ def _expand(graph: RecipeGraph, item: str, qty: Fraction,
         return ReqNode(item, graph.name_of(item), qty, KIND_PROVIDED)
     if item in extern:
         return ReqNode(item, graph.name_of(item), qty, KIND_EXTERN)
-    producers = graph.producers.get(item, [])
+    if pinned and item in pinned:
+        recipe = graph.recipes_by_id.get(pinned[item])
+        producers = [recipe] if recipe and recipe.yield_of(item) > 0 else []
+    else:
+        producers = graph.producers.get(item, [])
     if not producers:
         return ReqNode(item, graph.name_of(item), qty, KIND_RAW)
     for recipe in producers:
@@ -542,7 +562,7 @@ def _expand(graph: RecipeGraph, item: str, qty: Fraction,
                     m_children, ok = [], True
                     for sid, need in macro.side_inputs().items():
                         child = _expand(graph, sid, need * rounds, provided, extern,
-                                        path + ((item, recipe.id),), strict, closures)
+                                        path + ((item, recipe.id),), strict, closures, pinned)
                         if child is None:
                             ok = False
                             break
@@ -559,7 +579,8 @@ def _expand(graph: RecipeGraph, item: str, qty: Fraction,
                 blocked = True
                 break
             child = _expand(graph, ing.id, ing.count * qty / recipe.yield_of(item),
-                            provided, extern, path + ((item, recipe.id),), strict, closures)
+                            provided, extern, path + ((item, recipe.id),), strict,
+                            closures, pinned)
             if child is None:
                 blocked = True
                 break
@@ -882,8 +903,26 @@ def build_report(graph: RecipeGraph, demos: list[tuple[str, Fraction, frozenset[
 
 # ---------------------------------------------------------------- CLI
 def main(item: str | None = None, qty: str = "1", have: str = "",
-         as_json: bool = False) -> None:
+         as_json: bool = False, recipe_pins: list[str] | None = None) -> None:
     graph = RecipeGraph()
+
+    pinned: dict[str, str] = {}
+    for token in recipe_pins or []:
+        target_part, _, recipe_part = token.partition("=")
+        if not recipe_part:
+            sys.exit(f"--recipe 须为 物品=配方ID 形式,收到:{token!r}")
+        iid, cands = graph.resolve(target_part.strip())
+        if iid is None:
+            sys.exit(f"未识别 --recipe 中的物品:{target_part!r}"
+                     + (f";候选:{'、'.join(graph.name_of(c) for c in cands[:8])}" if cands else ""))
+        rid = recipe_part.strip()
+        recipe = graph.recipes_by_id.get(rid)
+        if recipe is None:
+            sys.exit(f"--recipe 未找到配方:{rid!r}")
+        if recipe.yield_of(iid) <= 0:
+            outs = "、".join(s.name for s in recipe.outcomes)
+            sys.exit(f"配方 {rid} 不产出 {graph.name_of(iid)}(产出:{outs})")
+        pinned[iid] = rid
 
     provided_ids: list[str] = []
     for token in filter(None, (t.strip() for t in have.split(","))):
@@ -917,7 +956,7 @@ def main(item: str | None = None, qty: str = "1", have: str = "",
     except ValueError as e:
         sys.exit(str(e))
 
-    req = compute(graph, target, amount, provided)
+    req = compute(graph, target, amount, provided, pinned)
     if as_json:
         print(json.dumps(result_json(req, graph, per_min), ensure_ascii=False, indent=2))
     else:
