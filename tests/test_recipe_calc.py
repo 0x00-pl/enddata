@@ -206,10 +206,12 @@ def test_conservation_invariants(graph):
 
 # ---------------------------------------------------------------- 速率口径(60/min)
 def test_rate_filter_core_60_per_min(graph):
-    """分离芯 60/min:材料流量 + 设备数(产量每分钟 × 单次耗时 ÷ 60,向上取整)。"""
+    """分离芯 60/min:材料流量 + 设备数(产量每分钟 × 单次耗时 ÷ 60,向上取整)。
+    采集类资源(息壤气/清水)保持开采外部投料,息壤走固气转化,无作物种植链。"""
     req = compute(graph, "item_filter_core", Fraction(60))
     assert leaf_map(req) == {
-        ("item_liquid_water", KIND_EXTERN): Fraction(90),
+        ("item_liquid_water", KIND_EXTERN): Fraction(60),
+        ("item_gas_xiranite", KIND_EXTERN): Fraction(30),
         ("item_copper_ore", KIND_RAW): Fraction(60),
         ("item_gas_inert", KIND_RAW): Fraction(30),
     }
@@ -217,22 +219,13 @@ def test_rate_filter_core_60_per_min(graph):
         "tools_proc_filter_core_2": 30,
         "shaper_gas_copper_jar_1": 30,
         "furnance_copper_nugget_1": 60,
-        "xiranite_oven_xiranite_powder_1": 30,
-        "furnance_carbon_enr_1": 60,
-        "furnance_carbon_enr_powder_1": 60,
-        "thickener_plant_moss_enr_powder_1_1": 60,
-        "grinder_plant_moss_powder_1_1": 60,
-        "grinder_plant_moss_powder_3_1": 20,
-        "planter_plant_moss_1_1": 120,
-        "seedcollector_plant_moss_1_1": 60,
-        "planter_plant_moss_3_1": 40,
-        "seedcollector_plant_moss_3_1": 20,
+        "liquid_transmuter_2_solid_xiranite_powder_1": 30,
     }
+    assert req.byproducts == {"item_liquid_sewage": Fraction(60)}
     machines = {r.id: m for r, _, m in machine_counts(req)}
-    assert machines["component" if False else "tools_proc_filter_core_2"] == 1   # 30×2s/60
-    assert machines["furnance_copper_nugget_1"] == 2        # 60×2s/60
-    assert machines["planter_plant_moss_1_1"] == 4          # 120×2s/60
-    assert machines["grinder_plant_moss_powder_3_1"] == 1   # 20×2s/60 → 2/3 向上取整
+    assert machines["tools_proc_filter_core_2"] == 1    # 30×2s/60
+    assert machines["furnance_copper_nugget_1"] == 2    # 60×2s/60
+    assert machines["liquid_transmuter_2_solid_xiranite_powder_1"] == 1
     for r, n, m in machine_counts(req):
         assert m == math_ceil_frac(n * r.craft_time / 60)
         assert r.craft_time and m >= 1
@@ -287,6 +280,78 @@ def test_render_sections(graph):
     for section in ("目标 分离芯", "需求原料", "产出:", "副产物 污水", "制造步骤",
                     "设备需求", "环境需求", "产出链路图", "```mermaid", "flowchart LR"):
         assert section in text, section
+
+
+def test_pinned_recipe(graph):
+    """钉选产出配方:息壤钉到 oven _2(碳块路线)→ 只走该配方,稳定环境需求浮现;
+    默认不钉选时息壤走固气转化(息壤气为采集资源,保持外部投料)。"""
+    req = compute(graph, "item_xiranite_powder", Fraction(1),
+                  pinned={"item_xiranite_powder": "xiranite_oven_xiranite_powder_2"})
+    assert req.strict_ok
+    assert "xiranite_oven_xiranite_powder_2" in req.crafts
+    assert "xiranite_oven_xiranite_powder_1" not in req.crafts
+    assert not any("carbon_enr" in rid or "moss_powder_3" in rid for rid in req.crafts)
+    assert req.required_envs() == [("稳定环境", ["xiranite_oven_xiranite_powder_2"])]
+    default = compute(graph, "item_xiranite_powder", Fraction(1))
+    assert default.crafts == {"liquid_transmuter_2_solid_xiranite_powder_1": 1}
+    assert default.required_envs() == []
+    assert ("item_gas_xiranite", KIND_EXTERN) in leaf_map(default)
+
+
+def test_rate_filter_core_60_per_min_double_pin(graph):
+    """双钉选用例:息壤=oven_2(碳块路线)+ 碳块=芽针精炼。
+    清水为采集资源(obtainWays=水泵采集),保持开采外部投料(105/min),
+    不被「惰性废液→提纯机」回收链顶替;芽针种子自持环供种(净产 1/轮)。"""
+    req = compute(graph, "item_filter_core", Fraction(60), frozenset(),
+                  {"item_xiranite_powder": "xiranite_oven_xiranite_powder_2",
+                   "item_carbon_mtl": "furnance_carbon_material_6"})
+    assert req.strict_ok
+    assert req.crafts == {
+        "tools_proc_filter_core_2": 30,
+        "shaper_gas_copper_jar_1": 30,
+        "furnance_copper_nugget_1": 60,
+        "xiranite_oven_xiranite_powder_2": 30,
+        "furnance_carbon_material_6": 15,
+        "planter_plant_grass_2_1": 15,
+        "seedcollector_plant_grass_2_1": 15,
+    }
+    assert "liquid_purifier_xiranite_poly_1" not in req.crafts
+    assert leaf_map(req) == {
+        ("item_liquid_water", KIND_EXTERN): Fraction(105),
+        ("item_copper_ore", KIND_RAW): Fraction(60),
+        ("item_gas_inert", KIND_RAW): Fraction(30),
+    }
+    assert req.byproducts == {"item_liquid_sewage": Fraction(60)}
+    assert req.required_envs() == [("稳定环境", ["xiranite_oven_xiranite_powder_2"])]
+    seed = find_node(req.root, "item_plant_grass_seed_2")
+    assert seed.macro is not None and seed.macro.net_per_round == 1
+    assert seed.macro_rounds == Fraction(15, 2)
+
+
+def test_rate_filter_core_60_per_min_provided_materials(graph):
+    """原材料清单口径:息壤/清水给定(--have 语义),求解到清单即止,
+    不再向下递归其原料(无洪炉/固气转化/种植链),副产物照常入账。"""
+    req = compute(graph, "item_filter_core", Fraction(60),
+                  frozenset({"item_xiranite_powder", "item_liquid_water"}))
+    assert req.strict_ok
+    assert req.crafts == {
+        "tools_proc_filter_core_2": 30,
+        "shaper_gas_copper_jar_1": 30,
+        "furnance_copper_nugget_1": 60,
+    }
+    assert "xiranite_oven_xiranite_powder_2" not in req.crafts
+    assert "liquid_transmuter_2_solid_xiranite_powder_1" not in req.crafts
+    assert leaf_map(req) == {
+        ("item_xiranite_powder", KIND_PROVIDED): Fraction(30),
+        ("item_liquid_water", KIND_PROVIDED): Fraction(60),
+        ("item_copper_ore", KIND_RAW): Fraction(60),
+        ("item_gas_inert", KIND_RAW): Fraction(30),
+    }
+    xz = find_node(req.root, "item_xiranite_powder")
+    water = find_node(req.root, "item_liquid_water")
+    assert xz.kind == KIND_PROVIDED and xz.children == []     # 到清单即止,无子递归
+    assert water.kind == KIND_PROVIDED and water.children == []
+    assert req.byproducts == {"item_liquid_sewage": Fraction(60)}
 
 
 # ---------------------------------------------------------------- 渲染 / JSON / 报告
