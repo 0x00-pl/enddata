@@ -67,117 +67,52 @@ flowchart LR
    │  └─ 惰气 ×2
    │  ⮡ 配方 shaper_gas_copper_jar_1 ×2 次(赤铜块×2 + 惰气×1 → 赤铜耐压罐×1)
    └─ 息壤 ×2
-      ├─ 稳定碳块 ×4
-      │  └─ 致密碳粉末 ×4
-      │     └─ 细磨荞花粉末 ×4
-      │        ├─ 荞花粉末 ×8
-      │        │  └─ 荞花 ×4
-      │        │     └─ 荞花种子 ×4
-      │        │        ⮡ ⟳ 自持环净产 ×4:planter_plant_moss_1_1×4 次 + seedcollector_plant_moss_1_1×4 次
-      │        │     ⮡ 配方 planter_plant_moss_1_1 ×4 次(荞花种子×1 → 荞花×1)
-      │        │  ⮡ 配方 grinder_plant_moss_powder_1_1 ×4 次(荞花×1 → 荞花粉末×2)
-      │        └─ 砂叶粉末 ×4
-      │           └─ 砂叶 ×1 + 1/3
-      │              └─ 砂叶种子 ×1 + 1/3
-      │                 ⮡ ⟳ 自持环净产 ×1 + 1/3:planter_plant_moss_3_1×1 + 1/3 次 + seedcollector_plant_moss_3_1×1 + 1/3 次
-      │              ⮡ 配方 planter_plant_moss_3_1 ×1 + 1/3 次(砂叶种子×1 → 砂叶×1)
-      │           ⮡ 配方 grinder_plant_moss_powder_3_1 ×1 + 1/3 次(砂叶×1 → 砂叶粉末×3)
-      │        ⮡ 配方 thickener_plant_moss_enr_powder_1_1 ×4 次(荞花粉末×2 + 砂叶粉末×1 → 细磨荞花粉末×1)
-      │     ⮡ 配方 furnance_carbon_enr_powder_1 ×4 次(细磨荞花粉末×1 → 致密碳粉末×1)
-      │  ⮡ 配方 furnance_carbon_enr_1 ×4 次(致密碳粉末×1 → 稳定碳块×1)
-      └─ 清水 ×2
-      ⮡ 配方 xiranite_oven_xiranite_powder_1 ×2 次(稳定碳块×2 + 清水×1 → 息壤×1)
+      └─ 息壤气 ×2
+      ⮡ 配方 liquid_transmuter_2_solid_xiranite_powder_1 ×2 次(息壤气×1 → 息壤×1)
    ⮡ 配方 tools_proc_filter_core_2 ×2 次(赤铜耐压罐×1 + 息壤×1 → 分离芯×2)
 
-需求原料(精确用量 → 实备数量),3 项:
-  [外部投料(环)] 清水           ×6          → 备料 6
+需求原料(精确用量 → 实备数量),4 项:
   [最初用料] 赤铜矿          ×4          → 备料 4(赤铜矿矿点采集)
+  [外部投料(环)] 清水           ×4          → 备料 4
   [最初用料] 惰气           ×2          → 备料 2(惰气矿点采集)
+  [外部投料(环)] 息壤气          ×2          → 备料 2
 产出:目标 分离芯 ×4;副产物 污水 ×4(← furnance_copper_nugget_1)
 制造步骤:
-  furnance_carbon_enr_1 ×4 次  致密碳粉末×1 → 稳定碳块×1
-  furnance_carbon_enr_powder_1 ×4 次  细磨荞花粉末×1 → 致密碳粉末×1
   furnance_copper_nugget_1 ×4 次  赤铜矿×1 + 清水×1 → 赤铜块×1 + 污水×1
-  grinder_plant_moss_powder_1_1 ×4 次  荞花×1 → 荞花粉末×2
-  grinder_plant_moss_powder_3_1 ×1 + 1/3 次  砂叶×1 → 砂叶粉末×3
-  planter_plant_moss_1_1 ×8 次  荞花种子×1 → 荞花×1
-  planter_plant_moss_3_1 ×2 + 2/3 次  砂叶种子×1 → 砂叶×1
-  seedcollector_plant_moss_1_1 ×4 次  荞花×1 → 荞花种子×2
-  seedcollector_plant_moss_3_1 ×1 + 1/3 次  砂叶×1 → 砂叶种子×2
+  liquid_transmuter_2_solid_xiranite_powder_1 ×2 次  息壤气×1 → 息壤×1
   shaper_gas_copper_jar_1 ×2 次  赤铜块×2 + 惰气×1 → 赤铜耐压罐×1
-  thickener_plant_moss_enr_powder_1_1 ×4 次  荞花粉末×2 + 砂叶粉末×1 → 细磨荞花粉末×1
   tools_proc_filter_core_2 ×2 次  赤铜耐压罐×1 + 息壤×1 → 分离芯×2
-  xiranite_oven_xiranite_powder_1 ×2 次  稳定碳块×2 + 清水×1 → 息壤×1
-使用设备:封装机、塑形机、精炼炉、天有洪炉、研磨机、粉碎机、种植机、采种机
+使用设备:封装机、塑形机、精炼炉、固气转化机
 环境需求:无特殊气体环境(全部常规)
 产出链路图(mermaid):
 ```mermaid
 flowchart LR
-  I_item_carbon_enr["稳定碳块"]
-  I_item_carbon_enr_powder["致密碳粉末"]
   I_item_copper_jar["赤铜耐压罐"]
   I_item_copper_nugget["赤铜块"]
   I_item_copper_ore(["赤铜矿"])
   I_item_filter_core(("分离芯<br/>目标 ×4"))
   I_item_gas_inert(["惰气"])
+  I_item_gas_xiranite[["息壤气"]]
   I_item_liquid_sewage["污水"]
   I_item_liquid_water[["清水"]]
-  I_item_plant_moss_1["荞花"]
-  I_item_plant_moss_3["砂叶"]
-  I_item_plant_moss_enr_powder_1["细磨荞花粉末"]
-  I_item_plant_moss_powder_1["荞花粉末"]
-  I_item_plant_moss_powder_3["砂叶粉末"]
-  I_item_plant_moss_seed_1["荞花种子"]
-  I_item_plant_moss_seed_3["砂叶种子"]
   I_item_xiranite_powder["息壤"]
-  R_furnance_carbon_enr_1["精炼炉<br/>furnance_carbon_enr_1"]
-  R_furnance_carbon_enr_powder_1["精炼炉<br/>furnance_carbon_enr_powder_1"]
   R_furnance_copper_nugget_1["精炼炉<br/>furnance_copper_nugget_1"]
-  R_grinder_plant_moss_powder_1_1["粉碎机<br/>grinder_plant_moss_powder_1_1"]
-  R_grinder_plant_moss_powder_3_1["粉碎机<br/>grinder_plant_moss_powder_3_1"]
-  R_planter_plant_moss_1_1["种植机<br/>planter_plant_moss_1_1"]
-  R_planter_plant_moss_3_1["种植机<br/>planter_plant_moss_3_1"]
-  R_seedcollector_plant_moss_1_1["采种机<br/>seedcollector_plant_moss_1_1"]
-  R_seedcollector_plant_moss_3_1["采种机<br/>seedcollector_plant_moss_3_1"]
+  R_liquid_transmuter_2_solid_xiranite_powder_1["固气转化机<br/>liquid_transmuter_2_solid_xiranite_powder_1"]
   R_shaper_gas_copper_jar_1["塑形机<br/>shaper_gas_copper_jar_1"]
-  R_thickener_plant_moss_enr_powder_1_1["研磨机<br/>thickener_plant_moss_enr_powder_1_1"]
   R_tools_proc_filter_core_2["封装机<br/>tools_proc_filter_core_2"]
-  R_xiranite_oven_xiranite_powder_1["天有洪炉<br/>xiranite_oven_xiranite_powder_1"]
-  I_item_carbon_enr -->|"×4"| R_xiranite_oven_xiranite_powder_1
-  I_item_carbon_enr_powder -->|"×4"| R_furnance_carbon_enr_1
   I_item_copper_jar -->|"×2"| R_tools_proc_filter_core_2
   I_item_copper_nugget -->|"×4"| R_shaper_gas_copper_jar_1
   I_item_copper_ore -->|"×4"| R_furnance_copper_nugget_1
   I_item_gas_inert -->|"×2"| R_shaper_gas_copper_jar_1
+  I_item_gas_xiranite -->|"×2"| R_liquid_transmuter_2_solid_xiranite_powder_1
   I_item_liquid_water -->|"×4"| R_furnance_copper_nugget_1
-  I_item_liquid_water -->|"×2"| R_xiranite_oven_xiranite_powder_1
-  I_item_plant_moss_1 -->|"×4"| R_grinder_plant_moss_powder_1_1
-  I_item_plant_moss_1 -->|"×4"| R_seedcollector_plant_moss_1_1
-  I_item_plant_moss_3 -->|"×1 + 1/3"| R_grinder_plant_moss_powder_3_1
-  I_item_plant_moss_3 -->|"×1 + 1/3"| R_seedcollector_plant_moss_3_1
-  I_item_plant_moss_enr_powder_1 -->|"×4"| R_furnance_carbon_enr_powder_1
-  I_item_plant_moss_powder_1 -->|"×8"| R_thickener_plant_moss_enr_powder_1_1
-  I_item_plant_moss_powder_3 -->|"×4"| R_thickener_plant_moss_enr_powder_1_1
-  I_item_plant_moss_seed_1 -->|"×8"| R_planter_plant_moss_1_1
-  I_item_plant_moss_seed_3 -->|"×2 + 2/3"| R_planter_plant_moss_3_1
   I_item_xiranite_powder -->|"×2"| R_tools_proc_filter_core_2
-  R_furnance_carbon_enr_1 -->|"×4"| I_item_carbon_enr
-  R_furnance_carbon_enr_powder_1 -->|"×4"| I_item_carbon_enr_powder
   R_furnance_copper_nugget_1 -->|"×4"| I_item_copper_nugget
   R_furnance_copper_nugget_1 -.->|"×4"| I_item_liquid_sewage
-  R_grinder_plant_moss_powder_1_1 -->|"×8"| I_item_plant_moss_powder_1
-  R_grinder_plant_moss_powder_3_1 -->|"×4"| I_item_plant_moss_powder_3
-  R_planter_plant_moss_1_1 -->|"×8"| I_item_plant_moss_1
-  R_planter_plant_moss_3_1 -->|"×2 + 2/3"| I_item_plant_moss_3
-  R_seedcollector_plant_moss_1_1 -->|"×8"| I_item_plant_moss_seed_1
-  R_seedcollector_plant_moss_3_1 -->|"×2 + 2/3"| I_item_plant_moss_seed_3
+  R_liquid_transmuter_2_solid_xiranite_powder_1 -->|"×2"| I_item_xiranite_powder
   R_shaper_gas_copper_jar_1 -->|"×2"| I_item_copper_jar
-  R_thickener_plant_moss_enr_powder_1_1 -->|"×4"| I_item_plant_moss_enr_powder_1
   R_tools_proc_filter_core_2 -->|"×4"| I_item_filter_core
-  R_xiranite_oven_xiranite_powder_1 -->|"×2"| I_item_xiranite_powder
 ```
-⟳ 自持环 荞花种子:planter_plant_moss_1_1 ×4 次 + seedcollector_plant_moss_1_1 ×4 次,循环内 荞花 守恒,每轮净产 荞花种子 ×1;需一次性初始占用 1 个环内物品(如 荞花),此后循环内守恒
-⟳ 自持环 砂叶种子:planter_plant_moss_3_1 ×1 + 1/3 次 + seedcollector_plant_moss_3_1 ×1 + 1/3 次,循环内 砂叶 守恒,每轮净产 砂叶种子 ×1;需一次性初始占用 1 个环内物品(如 砂叶),此后循环内守恒
 ```
 
 ## 示例:锦草 ×10
