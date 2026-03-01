@@ -208,10 +208,11 @@ def test_conservation_invariants(graph):
 def test_rate_filter_core_60_per_min(graph):
     """分离芯 60/min:材料流量 + 设备数(产量每分钟 × 单次耗时 ÷ 60,向上取整)。
     采集类资源(息壤气/清水)保持开采外部投料,息壤走固气转化,无作物种植链。"""
-    req = compute(graph, "item_filter_core", Fraction(60))
+    req = compute(graph, "item_filter_core", Fraction(60), per_min=True)
     assert leaf_map(req) == {
         ("item_liquid_water", KIND_EXTERN): Fraction(60),
         ("item_gas_xiranite", KIND_EXTERN): Fraction(30),
+        ("item_gas_xiranite", KIND_RAW): Fraction(6),   # 设备维持:固气转化机 1 台通息壤气 6/min
         ("item_copper_ore", KIND_RAW): Fraction(60),
         ("item_gas_inert", KIND_RAW): Fraction(30),
     }
@@ -319,10 +320,11 @@ def test_rate_filter_core_60_per_min_double_pin(graph):
     assert leaf_map(req) == {
         ("item_liquid_water", KIND_EXTERN): Fraction(105),
         ("item_copper_ore", KIND_RAW): Fraction(60),
-        ("item_gas_inert", KIND_RAW): Fraction(30),
+        ("item_gas_inert", KIND_RAW): Fraction(36),   # 30 机械用 + 6 稳定环境散布机通入
     }
     assert req.byproducts == {"item_liquid_sewage": Fraction(60)}
     assert req.required_envs() == [("稳定环境", ["xiranite_oven_xiranite_powder_2"])]
+    assert req.env_upkeep() == [("稳定环境", "item_gas_inert", Fraction(6))]
     seed = find_node(req.root, "item_plant_grass_seed_2")
     assert seed.macro is not None and seed.macro.net_per_round == 1
     assert seed.macro_rounds == Fraction(15, 2)
@@ -347,11 +349,114 @@ def test_rate_filter_core_60_per_min_provided_materials(graph):
         ("item_copper_ore", KIND_RAW): Fraction(60),
         ("item_gas_inert", KIND_RAW): Fraction(30),
     }
+    assert req.env_upkeep() == []                             # 分离芯链无环境需求
     xz = find_node(req.root, "item_xiranite_powder")
     water = find_node(req.root, "item_liquid_water")
     assert xz.kind == KIND_PROVIDED and xz.children == []     # 到清单即止,无子递归
     assert water.kind == KIND_PROVIDED and water.children == []
     assert req.byproducts == {"item_liquid_sewage": Fraction(60)}
+
+
+def test_rate_copper_enr2_cmpt_6_per_min_provided_materials(graph):
+    """灼铜零件 ×6/min,给定 息壤/清水/赤铜块(--have 语义,清单即止不递归):
+    无冶炼 → 无污水副产物;气态灼铜反应炉要求酸性环境;惰气为矿点采集最初用料。"""
+    req = compute(graph, "item_copper_enr2_cmpt", Fraction(6),
+                  frozenset({"item_xiranite_powder", "item_liquid_water",
+                             "item_copper_nugget"}), per_min=True)
+    assert req.strict_ok
+    assert req.crafts == {
+        "component_copper_enr2_cmpt_1": 6,
+        "liquid_transmuter_2_solid_copper_enr2_1": 30,
+        "gas_reactor_gas_copper_enr2_1": 30,
+        "liquid_purifier_gas_copper_enr_1": 30,
+        "liquid_transmuter_2_gas_gas_copper_1": 60,
+        "shaper_gas_copper_jar_1": 30,
+        "tools_proc_filter_core_2": 30,
+        "liquid_transmuter_1_gas_gas_xiranite_1": 48,   # 30 产气 + 18 维持供入
+        "pool_liquid_liquid_xiranite_1": 48,            # 30 主线 + 18 维持线
+        "liquid_transmuter_1_liquid_liquid_xiranite_1": 6,   # 维持液化息壤的气化补偿
+        "liquid_transmuter_2_gas_gas_xiranite_1": 6,         # 息壤气化的息壤来源
+        "liquid_transmuter_1_gas_gas_acid_1": 6,             # 环境维持酸气的液气转化
+    }
+    assert "furnance_copper_nugget_1" not in req.crafts       # 赤铜块给定,不冶炼
+    assert leaf_map(req) == {
+        ("item_copper_nugget", KIND_PROVIDED): Fraction(180),  # 气态赤铜 120 + 耐压罐 60
+        ("item_xiranite_powder", KIND_PROVIDED): Fraction(84),  # 分离芯 30 + 维持拆到息壤 54
+        ("item_liquid_water", KIND_PROVIDED): Fraction(48),     # 液化息壤线
+        ("item_gas_inert", KIND_RAW): Fraction(30),
+        ("item_liquid_acid", KIND_EXTERN): Fraction(6),         # 环境维持酸气的前体
+    }
+    assert req.byproducts == {"item_gas_xiranite": Fraction(18),   # 供固气转化机维持
+                              "item_liquid_xiranite": Fraction(6),  # 供液气转化机维持
+                              "item_gas_acid": Fraction(6)}         # 供散布机维持酸性环境
+    assert req.upkeep_supplies == {"item_gas_xiranite": Fraction(18),
+                                   "item_liquid_xiranite": Fraction(6)}
+    assert req.required_envs() == [("酸性环境", ["gas_reactor_gas_copper_enr2_1"])]
+    assert req.env_upkeep() == [("酸性环境", "item_gas_acid", Fraction(6))]
+    machines = {r.id: m for r, _, m in machine_counts(req)}
+    assert machines["component_copper_enr2_cmpt_1"] == 1       # 6×10s/60
+    assert machines["liquid_transmuter_2_gas_gas_copper_1"] == 2   # 60×2s/60
+    assert sum(m for _, _, m in machine_counts(req)) == 15    # 含维持拆分与环境维持补偿
+
+
+def test_rate_copper_enr2_cmpt_6_per_min_solution_route(graph):
+    """灼铜零件 ×6/min,给定 息壤/清水/赤铜块,并钉选气态赤铜走「液化再气化」路线:
+    赤铜溶液×2 → 气态赤铜×1,溶液由反应池(赤铜粉末+沉积酸)供给,粉末由赤铜块粉碎;
+    沉积酸因酸气⇄沉积酸等量回收环记为外部投料(环)。"""
+    req = compute(graph, "item_copper_enr2_cmpt", Fraction(6),
+                  frozenset({"item_xiranite_powder", "item_liquid_water",
+                             "item_copper_nugget"}),
+                  {"item_gas_copper": "liquid_transmuter_1_gas_gas_copper_1"},
+                  per_min=True)
+    assert req.strict_ok
+    assert req.crafts == {
+        "component_copper_enr2_cmpt_1": 6,
+        "liquid_transmuter_2_solid_copper_enr2_1": 30,
+        "gas_reactor_gas_copper_enr2_1": 30,
+        "liquid_purifier_gas_copper_enr_1": 30,
+        "liquid_transmuter_1_gas_gas_copper_1": 60,
+        "pool_liquid_copper_1": 120,
+        "grinder_copper_powder_1": 120,
+        "shaper_gas_copper_jar_1": 30,
+        "tools_proc_filter_core_2": 30,
+        "liquid_transmuter_1_gas_gas_xiranite_1": 36,   # 30 产气 + 6 维持供入
+        "pool_liquid_liquid_xiranite_1": 36,            # 30 主线 + 6 维持线
+        "liquid_transmuter_1_liquid_liquid_xiranite_1": 18,  # 维持液化息壤的气化补偿
+        "liquid_transmuter_2_gas_gas_xiranite_1": 18,        # 息壤气化的息壤来源
+        "liquid_transmuter_1_gas_gas_acid_1": 6,             # 环境维持酸气的液气转化
+    }
+    assert "liquid_transmuter_2_gas_gas_copper_1" not in req.crafts  # 直转路线被钉选替换
+    assert leaf_map(req) == {
+        ("item_copper_nugget", KIND_PROVIDED): Fraction(180),   # 粉碎 120 + 耐压罐 60
+        ("item_liquid_acid", KIND_EXTERN): Fraction(126),        # 酸气⇄沉积酸回收环 120 + 环境维持 6
+        ("item_xiranite_powder", KIND_PROVIDED): Fraction(84),
+        ("item_liquid_water", KIND_PROVIDED): Fraction(36),
+        ("item_gas_inert", KIND_RAW): Fraction(30),
+    }
+    assert req.byproducts == {"item_gas_xiranite": Fraction(6),          # 供固气转化机维持
+                              "item_liquid_xiranite": Fraction(18),      # 供液气转化机维持
+                              "item_gas_acid": Fraction(6)}              # 供散布机维持酸性环境
+    assert req.upkeep_supplies == {"item_gas_xiranite": Fraction(6),
+                                   "item_liquid_xiranite": Fraction(18)}
+    assert req.required_envs() == [("酸性环境", ["gas_reactor_gas_copper_enr2_1"])]
+    grinders = {r.id: m for r, _, m in machine_counts(req)}
+    assert grinders["grinder_copper_powder_1"] == 4             # 120×2s/60
+    assert grinders["pool_liquid_copper_1"] == 4
+    assert grinders["liquid_transmuter_1_gas_gas_copper_1"] == 2
+    assert sum(m for _, _, m in machine_counts(req)) == 23      # 含维持拆分与环境维持补偿
+
+
+def test_solver_abstraction(graph):
+    """求解器抽象:注册表可插拔,RecursiveSolver 与兼容入口 compute 结果一致。"""
+    from analysis.recipe_calc import SOLVERS, RecursiveSolver, RecipeSolver
+    assert "recursive" in SOLVERS and issubclass(SOLVERS["recursive"], RecipeSolver)
+    with pytest.raises(TypeError):
+        RecipeSolver(graph)                      # 抽象基类不可直接实例化
+    solver = RecursiveSolver(graph)
+    direct = compute(graph, "item_filter_core", Fraction(60), per_min=True)
+    via_class = solver.solve("item_filter_core", Fraction(60), per_min=True)
+    assert leaf_map(via_class) == leaf_map(direct)
+    assert via_class.crafts == direct.crafts
 
 
 # ---------------------------------------------------------------- 渲染 / JSON / 报告
@@ -372,7 +477,7 @@ def test_result_json(graph):
     kinds = {(l["id"], l["kind"]) for l in payload["leaves"]}
     assert ("item_liquid_water", "external") in kinds
     assert ("item_gas_inert", "raw") in kinds
-    machines = {m["recipe"]: m["count"] for m in payload["machines"]}
+    machines = {m["recipe"]: m["count"] for m in payload["machines"] if "recipe" in m}
     assert machines["tools_proc_filter_core_2"] == 1
     tree = payload["tree"]
     assert tree["id"] == "item_filter_core" and tree["kind"] == "craft"

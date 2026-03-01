@@ -135,6 +135,11 @@ def build_parser() -> argparse.ArgumentParser:
              "--recipe 息壤=xiranite_oven_xiranite_powder_2;钉选后不再尝试其他配方",
     )
     recipe_p.add_argument(
+        "--solver", default="recursive",
+        help=f"求解器实现(默认 recursive 递归展开;可选:"
+             f"{', '.join(recipe_calc.SOLVERS)})",
+    )
+    recipe_p.add_argument(
         "--json", action="store_true",
         help="以 JSON 输出机器可读结果(展开树 + 用料合计 + 制造步骤)",
     )
@@ -163,7 +168,8 @@ def main(argv=None) -> None:
         elif args.analysis_target == "gacha":
             gacha.main(args.version, args.plot, args.method)
         elif args.analysis_target == "recipe":
-            recipe_calc.main(args.item, args.qty, args.have, args.json, args.recipe)
+            recipe_calc.main(args.item, args.qty, args.have, args.json,
+                             args.recipe, args.solver)
         return
 
     # idmap 域
