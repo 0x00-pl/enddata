@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import argparse
 
-from analysis import gacha, recipe_calc, team_comp
+from analysis import gacha, recipe_calc, solvers as recipe_solvers, team_comp
 from collection import build_all, fetch
 from collection import characters, enemies, equips, items, recipes, settlements, weapons
 from tools import id_links, tables, versions
@@ -137,7 +137,11 @@ def build_parser() -> argparse.ArgumentParser:
     recipe_p.add_argument(
         "--solver", default="recursive",
         help=f"求解器实现(默认 recursive 递归展开;可选:"
-             f"{', '.join(recipe_calc.SOLVERS)})",
+             f"{', '.join(recipe_solvers.SOLVERS)})",
+    )
+    recipe_p.add_argument(
+        "--no-byproducts", action="store_false", dest="byproducts",
+        help="结果不计副产物净产出与环境/设备维持等额外输入",
     )
     recipe_p.add_argument(
         "--json", action="store_true",
@@ -169,7 +173,7 @@ def main(argv=None) -> None:
             gacha.main(args.version, args.plot, args.method)
         elif args.analysis_target == "recipe":
             recipe_calc.main(args.item, args.qty, args.have, args.json,
-                             args.recipe, args.solver)
+                             args.recipe, args.solver, args.byproducts)
         return
 
     # idmap 域
