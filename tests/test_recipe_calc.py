@@ -448,15 +448,61 @@ def test_rate_copper_enr2_cmpt_6_per_min_solution_route(graph):
 
 def test_solver_abstraction(graph):
     """求解器抽象:注册表可插拔,RecursiveSolver 与兼容入口 compute 结果一致。"""
-    from analysis.recipe_calc import SOLVERS, RecursiveSolver, RecipeSolver
-    assert "recursive" in SOLVERS and issubclass(SOLVERS["recursive"], RecipeSolver)
+    from analysis.solvers import SOLVERS, RecipeSolver
+    from analysis.solvers.recursive import RecursiveSolver
+    assert "recursive" in SOLVERS and SOLVERS["recursive"] is RecursiveSolver
+    assert issubclass(RecursiveSolver, RecipeSolver)
     with pytest.raises(TypeError):
         RecipeSolver(graph)                      # 抽象基类不可直接实例化
     solver = RecursiveSolver(graph)
     direct = compute(graph, "item_filter_core", Fraction(60), per_min=True)
-    via_class = solver.solve("item_filter_core", Fraction(60), per_min=True)
+    via_class = solver.solve({"item_filter_core": Fraction(60)}, per_min=True)
     assert leaf_map(via_class) == leaf_map(direct)
     assert via_class.crafts == direct.crafts
+
+
+def test_solver_ctor_recipe_subset(graph):
+    """构造传入配方子集:求解被限定在子集图谱内(息壤只能走 oven_2)。"""
+    from analysis.solvers.recursive import RecursiveSolver
+    subset = [r for r in graph.recipes
+              if r.id in ("xiranite_oven_xiranite_powder_2", "pool_liquid_liquid_xiranite_1",
+                          "liquid_transmuter_1_gas_gas_xiranite_1")]
+    solver = RecursiveSolver(graph, recipes=subset)
+    req = solver.solve({"item_xiranite_powder": Fraction(2)})
+    assert "xiranite_oven_xiranite_powder_2" in req.crafts
+    assert leaf_map(req) == {
+        ("item_carbon_mtl", KIND_RAW): Fraction(2),        # 洪炉耗碳块(子集内无碳块配方)
+        ("item_liquid_water", KIND_RAW): Fraction(2),      # 洪炉耗清水
+        ("item_gas_inert", KIND_RAW): Fraction(6),         # 稳定环境:oven_2 散布机通惰气 6/min
+    }
+
+
+def test_solve_byproducts_flag(graph):
+    """byproducts=False:不计副产物净产出与环境/设备维持等额外输入。"""
+    req = compute(graph, "item_copper_enr2_cmpt", Fraction(6),
+                  frozenset({"item_xiranite_powder", "item_liquid_water",
+                             "item_copper_nugget"}), per_min=True, byproducts=False)
+    assert req.byproducts == {} and req.upkeep_supplies == {}
+    assert ("item_gas_acid", "env") not in req.leaves
+    assert ("item_gas_xiranite", "upkeep") not in req.leaves
+    assert ("item_liquid_xiranite", "upkeep") not in req.leaves
+    assert ("item_liquid_acid", KIND_EXTERN) not in req.leaves
+    full = compute(graph, "item_copper_enr2_cmpt", Fraction(6), per_min=True)
+    assert full.byproducts.get("item_gas_acid") == Fraction(6)      # 散布机维持酸气
+    assert "item_liquid_sewage" in full.byproducts                   # 冶炼副产污水
+
+
+def test_solve_multi_target_merge(graph):
+    """多目标输入:聚合为一份需求(净流量线性可加,共享中间品抵扣)。"""
+    targets = {"item_filter_core": Fraction(60), "item_iron_cmpt": Fraction(10)}
+    from analysis.solvers.recursive import RecursiveSolver
+    merged = RecursiveSolver(graph).solve(targets, per_min=True)
+    assert len(merged.roots) == 2
+    mats = merged.materials()
+    assert mats["item_copper_ore"] == Fraction(60)      # 仅分离芯需要
+    assert mats["item_iron_ore"] == Fraction(10)
+    single = compute(graph, "item_iron_cmpt", Fraction(10), per_min=True)
+    assert single.leaves[("item_iron_ore", KIND_RAW)] == Fraction(10)
 
 
 # ---------------------------------------------------------------- 渲染 / JSON / 报告
