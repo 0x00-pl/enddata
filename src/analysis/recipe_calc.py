@@ -76,7 +76,6 @@ RECIPE_DIR = DATA_DIR / "recipes"
 ITEMS_DIR = DATA_DIR / "items"
 STATIONS = ("manual", "machine", "spaceship")
 REPORT_PATH = REPORTS_DIR / "recipe-analysis.md"
-MAX_EXTERN_ROUNDS = 32   # 外部投料点自动求解的最大迭代轮数(每轮至少新增一个物品)
 
 RECYCLER_PREFIX = "dismantler_"                     # 拆解机:回收/反向配方,默认不作产出途径
 STATION_RANK = {"machine": 0, "manual": 1, "spaceship": 2}

@@ -9,7 +9,6 @@ import math
 from fractions import Fraction
 
 from analysis.recipe_calc import (
-    MAX_EXTERN_ROUNDS,
     KIND_EXTERN,
     KIND_RAW,
     Requirement,
@@ -18,6 +17,8 @@ from analysis.recipe_calc import (
     _expand,
 )
 from analysis.solvers import RecipeSolver, register
+
+MAX_EXTERN_ROUNDS = 32   # 外部投料点自动求解的最大迭代轮数(每轮至少新增一个物品)
 
 
 @register("recursive")
