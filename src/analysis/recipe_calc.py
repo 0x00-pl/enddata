@@ -67,10 +67,14 @@ import json
 import math
 import sys
 from collections.abc import Iterator
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from fractions import Fraction
+from typing import TYPE_CHECKING
 
 from tools.tables import DATA_DIR, REPORTS_DIR
+
+if TYPE_CHECKING:
+    from analysis.solvers.recursive import CycleMacro
 
 RECIPE_DIR = DATA_DIR / "recipes"
 ITEMS_DIR = DATA_DIR / "items"
@@ -153,27 +157,6 @@ class Recipe:
         outs = " + ".join(f"{s.name}×{s.count}" for s in self.outcomes)
         return f"{ins} → {outs}"
 
-
-@dataclass
-class CycleMacro:
-    """自持环宏配方:环上配方按 ratio 循环执行,环内其他物品守恒,每轮净产 demanded。
-
-    ratio 与 recipes 对齐(前环配方在前、收口配方在后);side_nets = 非环物品
-    每轮净流量(<0 净耗,需外部供给并递归展开;>0 净产,仅作注记)。
-    """
-
-    demanded: str                                # 需求原料(环的净产物品)
-    loop: tuple[str, ...]                        # 环内物品(前环物品, 需求原料)
-    recipes: tuple[Recipe, ...]
-    ratio: tuple[int, ...]
-    net_per_round: Fraction
-    side_nets: dict[str, Fraction]
-
-    def side_inputs(self) -> dict[str, Fraction]:
-        return {i: -n for i, n in self.side_nets.items() if n < 0}
-
-    def side_outputs(self) -> dict[str, Fraction]:
-        return {i: n for i, n in self.side_nets.items() if n > 0}
 
 
 @dataclass
@@ -437,243 +420,6 @@ class RecipeGraph:
 
 
 # ---------------------------------------------------------------- 倒推引擎
-@dataclass(frozen=True)
-class _ExpandCtx:
-    """一次递归展开的固定口径:配方图与求解入参,外加运行期收集器。
-
-    closures 为可变收集器:展开中把回收环闭环点 (A, X) 写入,供求解器
-    外部投料阶段消费;宽松模式下的写入无消费者,无副作用。
-    """
-
-    graph: RecipeGraph
-    provided: frozenset[str]           # --have 清单,展开到此为止
-    extern: frozenset[str]             # 求解器判定的外部投料点
-    pinned: dict[str, str]             # 物品 → 钉选配方
-    strict: bool                       # True=配方全堵死返回 None;False=环叶兜底
-    closures: set[tuple[str, str]]
-
-
-def _expand(ctx: _ExpandCtx, item: str, qty: Fraction,
-            path: tuple[tuple[str, str], ...]) -> ReqNode | None:
-    """展开物品需求。path = [(物品, 所用配方), …] 祖先链(用于取环上配方表)。
-
-    原料命中祖先 → 取环上配方表做净产出判定:净产出则以自持环宏配方供给
-    (净耗物料继续递归);不净产出(等量回收环)→ 记录闭环点 (A, X) 供
-    外部投料求解,同时弃此配方试下一产出配方。无产出配方的物品 = 最初用料;
-    命中 --have / 自动外部投料点 = 叶子。所有配方皆堵死时,strict 返回 None,
-    宽松记为 cycle 叶子(需外部投料)。"""
-    if item in ctx.provided:
-        return ReqNode(item, ctx.graph.name_of(item), qty, KIND_PROVIDED)
-    if item in ctx.extern:
-        return ReqNode(item, ctx.graph.name_of(item), qty, KIND_EXTERN)
-    if item in ctx.pinned:
-        recipe = ctx.graph.recipes_by_id.get(ctx.pinned[item])
-        producers = [recipe] if recipe and recipe.yield_of(item) > 0 else []
-    else:
-        producers = ctx.graph.producers.get(item, [])
-    if not producers:
-        return ReqNode(item, ctx.graph.name_of(item), qty, KIND_RAW)
-    for recipe in producers:
-        children, blocked = [], False
-        for ing in recipe.ingredients:
-            hit = next((k for k, (iid, _) in enumerate(path) if iid == ing.id), None)
-            if hit is not None:  # 环:取环上配方表做净产出判定
-                chain = path[hit:] + ((item, recipe.id),)
-                macro = _cycle_macro(ctx.graph, chain)
-                if macro is not None:
-                    rounds = qty / macro.net_per_round
-                    m_children, ok = [], True
-                    for sid, need in macro.side_inputs().items():
-                        child = _expand(ctx, sid, need * rounds, path + ((item, recipe.id),))
-                        if child is None:
-                            ok = False
-                            break
-                        m_children.append(child)
-                    if ok:
-                        return ReqNode(
-                            item, ctx.graph.name_of(item), qty, KIND_CRAFT,
-                            recipe=recipe, crafts=Fraction(macro.ratio[-1]) * rounds,
-                            children=m_children, macro=macro, macro_rounds=rounds,
-                            extra_crafts={r.id: Fraction(k) * rounds
-                                          for r, k in zip(macro.recipes[:-1], macro.ratio[:-1])})
-                else:
-                    ctx.closures.add((ing.id, item))
-                blocked = True
-                break
-            child = _expand(ctx, ing.id, ing.count * qty / recipe.yield_of(item),
-                            path + ((item, recipe.id),))
-            if child is None:
-                blocked = True
-                break
-            children.append(child)
-        if not blocked:
-            return ReqNode(item, ctx.graph.name_of(item), qty, KIND_CRAFT,
-                           recipe=recipe, crafts=qty / recipe.yield_of(item),
-                           children=children)
-    if ctx.strict:
-        return None
-    return ReqNode(item, ctx.graph.name_of(item), qty, KIND_CYCLE,
-                   chain=tuple(i for i, _ in path) + (item,))
-
-
-def _cycle_macro(graph: RecipeGraph, chain: tuple[tuple[str, str], ...]) -> CycleMacro | None:
-    """环上配方表 → 自持环宏配方;不构成可解的二环/自环或需求原料不净产出时返回 None。
-
-    chain = [(环内物品, 各自所用配方), …],首元素为被重复访及的祖先 A,
-    末元素为 (需求原料 X, 收口配方 R_X)。二环守恒解:R_X 每轮耗 A 共 b,
-    R_A 每轮耗 X 共 a、产 A 共 q_A → 取 x_A = b、x_X = q_A,则 A 恰好守恒,
-    X 净产 = q_X·q_A − a·b(>0 才自持);自环同理(x=1,净产 = q_X − a)。
-    """
-    if not 1 <= len(chain) <= 2:
-        return None  # 多环/缠结环:数据集未出现,视同不净产出(见模块 docstring)
-    x_id, rx_id = chain[-1]
-    r_x = graph.recipes_by_id[rx_id]
-    q_x = r_x.yield_of(x_id)
-    if len(chain) == 1:  # 自环:配方消耗自身产出
-        a = r_x.consume_of(x_id)
-        if q_x <= 0 or a <= 0 or q_x <= a:
-            return None
-        recipes, ratio, loop, net = (r_x,), (1,), (x_id,), Fraction(q_x - a)
-        flows = [(r_x, 1)]
-    else:
-        a_id, ra_id = chain[0]
-        r_a = graph.recipes_by_id[ra_id]
-        q_a, a, b = r_a.yield_of(a_id), r_a.consume_of(x_id), r_x.consume_of(a_id)
-        if q_x <= 0 or min(q_a, a, b) <= 0:
-            return None
-        net = Fraction(q_x * q_a - a * b)
-        if net <= 0:
-            return None
-        recipes, ratio, loop = (r_a, r_x), (b, q_a), (a_id, x_id)
-        flows = [(r_a, b), (r_x, q_a)]
-    side: dict[str, Fraction] = {}
-    for r, times in flows:
-        for s in r.ingredients:
-            side[s.id] = side.get(s.id, Fraction(0)) - times * s.count
-        for s in r.outcomes:
-            side[s.id] = side.get(s.id, Fraction(0)) + times * s.count
-    side_nets = {i: n for i, n in side.items() if i not in loop and n != 0}
-    return CycleMacro(demanded=x_id, loop=loop, recipes=recipes, ratio=ratio,
-                      net_per_round=net, side_nets=side_nets)
-
-
-def _macro_note(graph: RecipeGraph, node: ReqNode) -> str:
-    """自持环注记:配方比例、净耗净产与一次性初始占用。"""
-    m = node.macro
-    assert m is not None and node.macro_rounds is not None
-    names = [graph.name_of(i) for i in m.loop]
-    parts = [f"⟳ 自持环 {graph.name_of(m.demanded)}:"
-             + " + ".join(f"{r.id} ×{fmt_qty(Fraction(k) * node.macro_rounds)} 次"
-                          for r, k in zip(m.recipes, m.ratio))
-             + f",循环内 {'、'.join(names[:-1]) or names[0]} 守恒"
-             + f",每轮净产 {graph.name_of(m.demanded)} ×{fmt_qty(m.net_per_round)}"]
-    if ins := m.side_inputs():
-        parts.append("净耗 " + "、".join(f"{graph.name_of(i)} ×{fmt_qty(n * node.macro_rounds)}"
-                                     for i, n in sorted(ins.items())))
-    if outs := m.side_outputs():
-        parts.append("净产 " + "、".join(f"{graph.name_of(i)} ×{fmt_qty(n * node.macro_rounds)}"
-                                      for i, n in sorted(outs.items())))
-    parts.append(f"需一次性初始占用 1 个环内物品(如 {names[0]}),此后循环内守恒")
-    return ";".join(parts)
-
-
-def _collect(roots: list[ReqNode], strict_ok: bool, ctx: _ExpandCtx,
-             per_min: bool = False, byproducts: bool = True) -> Requirement:
-    """展开树(可多目标)→ 摊平合计(叶子、配方执行次数、副产物净流量、自持环注记)。
-
-    设备维持(仅速率口径):转化机每台持续通入息壤系气体 6/min(上限 30),
-    按配方的设备台数折算;维持气体作为正常需求挂入树中继续向下展开
-    (到息壤/清水等给定原料为止),不可自产时按采集资源记最初用料、否则记外部投料。
-    byproducts=False 时:不挂载环境/设备维持子树,结果不含副产物净产出与维持供应。
-    """
-    graph = ctx.graph
-    # 第一遍:配方执行次数与自持环注记(设备维持按台数折算,需先于维持挂载)
-    crafts: dict[str, Fraction] = {}
-    notes: list[str] = []
-    for root in roots:
-        for node in root.walk():
-            if node.kind == KIND_CRAFT:
-                assert node.recipe is not None and node.crafts is not None
-                crafts[node.recipe.id] = crafts.get(node.recipe.id, Fraction(0)) + node.crafts
-                for rid, n in node.extra_crafts.items():
-                    crafts[rid] = crafts.get(rid, Fraction(0)) + n
-                if node.macro is not None:
-                    notes.append(_macro_note(graph, node))
-    # 挂载附加叶子:环境维持(每环境恒 6/min)与设备维持(转化机台数 × 6/min)
-    for env in sorted({graph.recipes_by_id[rid].gas_env for rid in crafts} if byproducts else []):
-        provider = GAS_ENV_PROVIDERS.get(env)
-        if provider is None:
-            continue
-        gas, gas_recipe = provider
-        if gas_recipe is None:
-            # 无生成配方(惰气/水蒸气):按最初用料(矿点/水泵采集)
-            for root in roots:
-                roots[0].children.append(ReqNode(gas, graph.name_of(gas), GAS_ENV_RATE, KIND_RAW))
-            continue
-        # 有生成配方:单级展开 env气体 ← 液气转化 ← 前体(沉积酸等,计外部投料);
-        # 不深入前体的回收环,避免把整条转化链拖进环境维持
-        r = graph.recipes_by_id[gas_recipe]
-        env_crafts = GAS_ENV_RATE / r.yield_of(gas)
-        for root in roots:
-            env_node = ReqNode(gas, graph.name_of(gas), GAS_ENV_RATE, KIND_CRAFT,
-                               recipe=r, crafts=env_crafts)
-            env_node.children = [
-                ReqNode(s.id, s.name or graph.name_of(s.id), s.count * env_crafts, KIND_EXTERN)
-                for s in r.ingredients]
-            roots[0].children.append(env_node)
-    upkeep_qty: dict[str, Fraction] = {}
-    if per_min and byproducts:
-        for rid, n in crafts.items():
-            r = graph.recipes_by_id[rid]
-            gas = MACHINE_UPKEEP.get(r.machine_id or "")
-            if not gas or not r.craft_time:
-                continue
-            machines = math.ceil(Fraction(n) * r.craft_time / 60)
-            if machines > 0:
-                upkeep_qty[gas] = upkeep_qty.get(gas, Fraction(0)) + GAS_ENV_RATE * machines
-        for gas, qty in sorted(upkeep_qty.items()):
-            child = _expand(replace(ctx, extern=frozenset()), gas, qty, ())
-            if child is None:
-                kind = KIND_RAW if graph.is_gatherable(gas) else KIND_EXTERN
-                child = ReqNode(gas, graph.name_of(gas), qty, kind)
-            roots[0].children.append(child)
-    # 第二遍:完整汇总(维持子树已挂载,其下游一并计入)
-    leaves: dict[tuple[str, str], Fraction] = {}
-    crafts = {}
-    target_ids = {root.id for root in roots}
-    for root in roots:
-        for node in root.walk():
-            if node.kind == KIND_CRAFT:
-                assert node.recipe is not None and node.crafts is not None
-                crafts[node.recipe.id] = crafts.get(node.recipe.id, Fraction(0)) + node.crafts
-                for rid, n in node.extra_crafts.items():
-                    crafts[rid] = crafts.get(rid, Fraction(0)) + n
-            else:
-                key = (node.id, node.kind)
-                leaves[key] = leaves.get(key, Fraction(0)) + node.qty
-    # 全链净流量:产出-消耗;正值且非目标 = 副产物(如精炼炉的污水)
-    flows: dict[str, Fraction] = {}
-    for rid, n in crafts.items():
-        r = graph.recipes_by_id[rid]
-        for s in r.outcomes:
-            flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
-        for s in r.ingredients:
-            flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
-    byproducts = {i: f for i, f in flows.items()
-                  if f > 0 and i not in target_ids and byproducts}
-    sources: dict[str, str] = {}
-    for i in byproducts:
-        sources[i] = next(rid for rid, n in crafts.items()
-                          if any(s.id == i for s in graph.recipes_by_id[rid].outcomes))
-    return Requirement(roots=roots, strict_ok=strict_ok, leaves=leaves,
-                       crafts=crafts, recipes_by_id=graph.recipes_by_id,
-                       notes=notes, byproducts=byproducts, byproduct_sources=sources,
-                       upkeep_supplies={i: f for i, f in byproducts.items()
-                                        if f == upkeep_qty.get(i)})
-
-
-
-
 def compute(graph: RecipeGraph, target: str, qty: Fraction,
             provided: frozenset[str] = frozenset(),
             pinned: dict[str, str] | None = None,
