@@ -400,9 +400,10 @@ def test_rate_copper_enr2_cmpt_6_per_min_provided_materials(graph):
 
 
 def test_rate_copper_enr2_cmpt_6_per_min_solution_route(graph):
-    """灼铜零件 ×6/min,给定 息壤/清水/赤铜块,并钉选气态赤铜走「液化再气化」路线:
-    赤铜溶液×2 → 气态赤铜×1,溶液由反应池(赤铜粉末+沉积酸)供给,粉末由赤铜块粉碎;
-    沉积酸因酸气⇄沉积酸等量回收环记为外部投料(环)。"""
+    """灼铜零件 ×6/min,给定 息壤/清水/赤铜块,优先配方让气态赤铜走「液化再气化」:
+    赤铜溶液×2 → 气态赤铜×1。该路线的沉积酸供入在严格口径下无法闭合
+    (酸气⇄沉积酸等量回收环),求解器按设计回退直转路线(赤铜块×2 → 气态赤铜),
+    环境维持酸气经液气转化由沉积酸生成(沉积酸计外部投料)。"""
     req = compute(graph, "item_copper_enr2_cmpt", Fraction(6),
                   frozenset({"item_xiranite_powder", "item_liquid_water",
                              "item_copper_nugget"}),
@@ -414,36 +415,32 @@ def test_rate_copper_enr2_cmpt_6_per_min_solution_route(graph):
         "liquid_transmuter_2_solid_copper_enr2_1": 30,
         "gas_reactor_gas_copper_enr2_1": 30,
         "liquid_purifier_gas_copper_enr_1": 30,
-        "liquid_transmuter_1_gas_gas_copper_1": 60,
-        "pool_liquid_copper_1": 120,
-        "grinder_copper_powder_1": 120,
+        "liquid_transmuter_2_gas_gas_copper_1": 60,
+        "liquid_transmuter_1_gas_gas_acid_1": 6,
+        "liquid_transmuter_1_gas_gas_xiranite_1": 48,   # 30 产气 + 18 维持供入
+        "pool_liquid_liquid_xiranite_1": 48,            # 30 主线 + 18 维持线
+        "liquid_transmuter_1_liquid_liquid_xiranite_1": 6,   # 维持液化息壤的气化补偿
+        "liquid_transmuter_2_gas_gas_xiranite_1": 6,         # 息壤气化的息壤来源
         "shaper_gas_copper_jar_1": 30,
         "tools_proc_filter_core_2": 30,
-        "liquid_transmuter_1_gas_gas_xiranite_1": 36,   # 30 产气 + 6 维持供入
-        "pool_liquid_liquid_xiranite_1": 36,            # 30 主线 + 6 维持线
-        "liquid_transmuter_1_liquid_liquid_xiranite_1": 18,  # 维持液化息壤的气化补偿
-        "liquid_transmuter_2_gas_gas_xiranite_1": 18,        # 息壤气化的息壤来源
-        "liquid_transmuter_1_gas_gas_acid_1": 6,             # 环境维持酸气的液气转化
     }
-    assert "liquid_transmuter_2_gas_gas_copper_1" not in req.crafts  # 直转路线被钉选替换
     assert leaf_map(req) == {
-        ("item_copper_nugget", KIND_PROVIDED): Fraction(180),   # 粉碎 120 + 耐压罐 60
-        ("item_liquid_acid", KIND_EXTERN): Fraction(126),        # 酸气⇄沉积酸回收环 120 + 环境维持 6
+        ("item_copper_nugget", KIND_PROVIDED): Fraction(180),   # 气态赤铜 120 + 耐压罐 60
+        ("item_liquid_acid", KIND_EXTERN): Fraction(6),          # 环境维持酸气的前体
         ("item_xiranite_powder", KIND_PROVIDED): Fraction(84),
-        ("item_liquid_water", KIND_PROVIDED): Fraction(36),
+        ("item_liquid_water", KIND_PROVIDED): Fraction(48),
         ("item_gas_inert", KIND_RAW): Fraction(30),
     }
-    assert req.byproducts == {"item_gas_xiranite": Fraction(6),          # 供固气转化机维持
-                              "item_liquid_xiranite": Fraction(18),      # 供液气转化机维持
-                              "item_gas_acid": Fraction(6)}              # 供散布机维持酸性环境
-    assert req.upkeep_supplies == {"item_gas_xiranite": Fraction(6),
-                                   "item_liquid_xiranite": Fraction(18)}
+    assert req.byproducts == {"item_gas_xiranite": Fraction(18),   # 供固气转化机维持
+                              "item_liquid_xiranite": Fraction(6),  # 供液气转化机维持
+                              "item_gas_acid": Fraction(6)}         # 供散布机维持酸性环境
+    assert req.upkeep_supplies == {"item_gas_xiranite": Fraction(18),
+                                   "item_liquid_xiranite": Fraction(6)}
     assert req.required_envs() == [("酸性环境", ["gas_reactor_gas_copper_enr2_1"])]
-    grinders = {r.id: m for r, _, m in machine_counts(req)}
-    assert grinders["grinder_copper_powder_1"] == 4             # 120×2s/60
-    assert grinders["pool_liquid_copper_1"] == 4
-    assert grinders["liquid_transmuter_1_gas_gas_copper_1"] == 2
-    assert sum(m for _, _, m in machine_counts(req)) == 23      # 含维持拆分与环境维持补偿
+    machines = {r.id: m for r, _, m in machine_counts(req)}
+    assert machines["liquid_transmuter_2_gas_gas_copper_1"] == 2   # 60×2s/60
+    assert machines["liquid_transmuter_1_gas_gas_acid_1"] == 1     # 6×2s/60
+    assert sum(m for _, _, m in machine_counts(req)) == 15         # 散布机不计入
 
 
 def test_solver_abstraction(graph):
