@@ -14,7 +14,9 @@ packages = [
 
 [tool.poetry.dependencies]
 python = "^3.10"
-# 运行时零第三方依赖:采集走标准库(urllib/subprocess),分析走 json/csv
+# 采集走标准库(urllib/subprocess),分析走 json/csv;
+# z3-solver 为配方 z3 求解器(analysis.solvers.z3)的唯一第三方依赖
+z3-solver = "^5.1.0"
 
 [tool.poetry.scripts]
 enddata = "enddata.cli:main"

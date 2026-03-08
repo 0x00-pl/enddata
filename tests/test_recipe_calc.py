@@ -502,6 +502,85 @@ def test_solve_multi_target_merge(graph):
     assert single.leaves[("item_iron_ore", KIND_RAW)] == Fraction(10)
 
 
+def test_z3_solver_basic(graph):
+    """z3 求解器:线性约束一次求解,环与共享中间品天然可解。"""
+    pytest.importorskip("z3")
+    from analysis.solvers.z3 import Z3Solver
+    solver = Z3Solver(graph)
+    req = solver.solve({"item_filter_core": Fraction(60)}, per_min=True)
+    assert req.strict_ok
+    mats = req.materials()
+    assert mats["item_copper_ore"] == Fraction(60)
+    assert mats["item_liquid_water"] == Fraction(60)
+    assert mats["item_gas_inert"] == Fraction(30)
+    assert mats["item_gas_xiranite"] == Fraction(36)   # 30 固气转化 + 6 散布机维持
+    assert req.crafts["tools_proc_filter_core_2"] == Fraction(30)
+    assert req.byproducts["item_liquid_sewage"] == Fraction(60)
+    assert req.env_upkeep() == []       # 分离芯链无气体环境需求
+
+
+def test_z3_byproducts_flag(graph):
+    """byproducts=False 为硬约束:依赖副产物的路线不可行(冶炼必产污水)。"""
+    pytest.importorskip("z3")
+    from analysis.solvers.z3 import Z3Solver
+    solver = Z3Solver(graph)
+    # 赤铜块给定 → 全链无冶炼 → 可行且无副产物
+    req = solver.solve({"item_copper_enr2_cmpt": Fraction(6)},
+                       available={"item_xiranite_powder": 0, "item_liquid_water": 0,
+                                  "item_copper_nugget": 0},
+                       preferred={"item_gas_copper": "liquid_transmuter_1_gas_gas_copper_1"},
+                       per_min=True, byproducts=False)
+    assert req.strict_ok
+    assert "furnance_copper_nugget_1" not in req.crafts
+    assert req.byproducts == {}
+    # 赤铜块不给定 → 赤铜块只能冶炼(必产污水)→ 不可行
+    req2 = solver.solve({"item_copper_enr2_cmpt": Fraction(6)}, byproducts=False)
+    assert not req2.strict_ok
+
+
+def test_z3_solver_multi_target(graph):
+    """z3 多目标:一张约束网同时满足多个目标。"""
+    pytest.importorskip("z3")
+    from analysis.solvers.z3 import Z3Solver
+    solver = Z3Solver(graph)
+    req = solver.solve({"item_filter_core": Fraction(60),
+                        "item_iron_cmpt": Fraction(10)}, per_min=True)
+    assert req.strict_ok and len(req.roots) == 2
+    mats = req.materials()
+    assert mats["item_copper_ore"] == Fraction(60)
+    assert mats["item_iron_ore"] == Fraction(10)
+
+
+def test_z3_recursive_consistency_sample(graph):
+    """双求解器交叉验证(抽样):双方均可解、z3 解满足守恒与目标净产。
+
+    路线允许不同(z3 以最少制造次数为目标函数,可选中递归未选的等价配方),
+    故比较的是有效性不变量而非配方集合。"""
+    pytest.importorskip("z3")
+    from analysis.solvers.recursive import RecursiveSolver
+    from analysis.solvers.z3 import Z3Solver
+    z3_solver = Z3Solver(graph)
+    rec_solver = RecursiveSolver(graph)
+    sample = sorted(i for i in graph.producers if not i.startswith("item_port_"))[::12]
+    for t in sample:
+        qty = Fraction(7)
+        rq = rec_solver.solve({t: qty})
+        zq = z3_solver.solve({t: qty})
+        assert rq.strict_ok and zq.strict_ok, t
+        assert zq.materials() is not None
+        # z3 解的目标净产 == 需求量(净流量守恒)
+        flows: dict[str, Fraction] = {}
+        for rid, n in zq.crafts.items():
+            r = zq.recipes_by_id[rid]
+            for s2 in r.outcomes:
+                flows[s2.id] = flows.get(s2.id, Fraction(0)) + n * s2.count
+            for s2 in r.ingredients:
+                flows[s2.id] = flows.get(s2.id, Fraction(0)) - n * s2.count
+        for node, total in zq.leaf_items():
+            flows[node.id] = flows.get(node.id, Fraction(0)) - total
+        assert flows.get(t, Fraction(0)) == qty, t
+
+
 # ---------------------------------------------------------------- 渲染 / JSON / 报告
 def test_render_rate_and_batch(graph):
     req = compute(graph, "item_filter_core", Fraction(60))
