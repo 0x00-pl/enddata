@@ -218,6 +218,13 @@ activityCoupons, usedInRecipes, producedBy}`;`typeName` 为 `I18nTextTable`
 `filling_bottled_copper_acid` → 灌装机 / 沉积酸(灌装))。机器配方的 `group` 是**同槽
 原料**(游戏内同时消耗,如灌装=空瓶+溶液,非可替代项);手工配方 group 长度恒为 1;
 飞船制造表只登记产物,`ingredients` 为空数组。
+**机器运行消耗** `machineConsume`:来自 `FactoryTransmuterTable`(按 `machineId`
+join,源表字段原样透传 + `consumeItemName` i18n 反查;仅转化机配方命中,24/317,
+其余机器不输出该字段)——转化机运行时持续烧稀晶质:transmuter_1 烧液化息壤
+(`item_liquid_xiranite`)、transmuter_2 烧息壤气(`item_gas_xiranite`),`consumeRate`
+为满负载下每台每分钟消耗数(1 单位 = 60/rate 秒工时,随负载比例计耗,
+endfield-calc 已实测验证);`consumeRateUpperLimit`(30,超供钳制)与
+`consumeBindings`(2)为源表数值,原样保留不计入原料 `ingredients`。
 **源表字段全量保留**:采集侧只替换加工形态(i18n 反查后的名称、解析后的原料/产物、
 合并进 `outcomes` 的 `outcomeItemId`/`perCapacity`),其余字段原样透传,上游新增字段
 不需要改采集代码即自动进入数据集。各站透传字段:

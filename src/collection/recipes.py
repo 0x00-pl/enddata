@@ -4,16 +4,17 @@
         × ItemTable(原料/产物命名) × I18nTextTable_CN
         × FactoryCraftShowingTypeTable(展示分类中文名:精制食药/应急食药/…)
         × FactoryBuildingTable(生产设施中文名:灌装机/拆解机/…)
+        × FactoryTransmuterTable(转化机运行消耗:液/气稀晶质,按 machineId join)
         × JamboChen/endfield-calc(本地 git:制造耗时 craftingTime 与生产设施 facilityId;
           其 recipes.ts 里的 RecipeId/ItemId/FacilityId 常量展开后与 rmxlinux TableCfg
           是同一套小写游戏 ID,可直接按配方 ID join)
 分类:手工/飞船配方带 showingType(→ showingName 中文名),手工另有 craftFilterType
       (0=普通手工,素材转化按 1/2/3 细分)与配方名 name;机器配方无 showingType,
       以生产设施为分类(machineName),并带 formulaDesc/formulaGroupId 配方组。
-全字段保留:条目先落加工/派生字段(名称反查、原料产物解析、设施中文名),再把源表
-      其余字段原样透传(机器 gasEnv/buffers/progressRound/totalProgress/signal、
-      手工 defaultUnlock/itemId、飞船 level/roomAttrType/totalProgress 等)——上游
-      新增字段不需要改本模块即自动进入数据集,不会因白名单遗漏而丢字段。
+全字段保留:条目先落加工/派生字段(名称反查、原料产物解析、设施中文名、转化机运行
+      消耗 machineConsume),再把源表其余字段原样透传(机器 gasEnv/buffers/progressRound/
+      totalProgress/signal、手工 defaultUnlock/itemId、飞船 level/roomAttrType/totalProgress
+      等)——上游新增字段不需要改本模块即自动进入数据集,不会因白名单遗漏而丢字段。
 目录:data/recipes/<station>/<recipeId>.json(manual/machine/spaceship),
       展示分类与设施等字段保留在条目与索引中,不做目录层级。
 """
@@ -29,7 +30,8 @@ PRODUCT = "recipes"
 
 REQUIRED_TABLES = ["FactoryManualCraftTable", "FactoryMachineCraftTable",
                                  "SpaceshipManufactureFormulaTable", "ItemTable", "I18nTextTable_CN",
-                                 "FactoryCraftShowingTypeTable", "FactoryBuildingTable"]
+                                 "FactoryCraftShowingTypeTable", "FactoryBuildingTable",
+                                 "FactoryTransmuterTable"]
 
 CALC_REPO = "JamboChen/endfield-calc"
 CALC_CONSTANTS_TS = "src/types/constants.ts"  # RecipeId/ItemId/FacilityId 常量 → 字符串值
@@ -108,6 +110,17 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
     # 展示分类中文名(手工/飞船按 showingType)与设施名(机器按 machineId)
     showing = {int(k): t(v.get("name")) for k, v in raw["FactoryCraftShowingTypeTable"].items()}
     building_name = {bid: t(b.get("name")) for bid, b in raw["FactoryBuildingTable"].items()}
+    # 机器运行消耗(转化机烧稀晶质):源表字段原样 + 消耗物中文名,按 machineId join;
+    # 仅命中的机器配方带 machineConsume,不输出恒 null 的幽灵字段。
+    machine_consume = {}
+    for mid, tr in raw.get("FactoryTransmuterTable", {}).items():
+        machine_consume[mid] = {
+            "consumeItem": tr.get("consumeItem"),
+            "consumeItemName": item_name.get(tr.get("consumeItem")) or tr.get("consumeItem"),
+            "consumeRate": tr.get("consumeRate"),
+            "consumeRateUpperLimit": tr.get("consumeRateUpperLimit"),
+            "consumeBindings": tr.get("consumeBindings"),
+        }
 
     def resolve_side(entries: list[dict]) -> list[dict]:
         """原料/产物条目 → [{group:[{id,name}]}],与源表同名同构;机器配方的同组
@@ -158,6 +171,9 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
             "ingredients": resolve_side(r.get("ingredients")),
             "outcomes": resolve_side(r.get("outcomes")),
         }
+        consume = machine_consume.get(r.get("machineId"))
+        if consume:
+            rec["machineConsume"] = consume
         recipes.append(merge_raw(r, rec, {"formulaDesc", "ingredients", "outcomes"}))
     for rid, r in raw["SpaceshipManufactureFormulaTable"].items():
         sh_name = showing.get(int(r["showingType"])) if r.get("showingType") is not None else None

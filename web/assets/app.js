@@ -516,6 +516,7 @@ function detailRecipes(d) {
       ["分类", esc(recipeCategory(d) ?? "—")],
       ...(d.formulaGroupId ? [["配方组", `${esc(d.formulaDesc ?? "")} <span class="dim">${esc(d.formulaGroupId)}</span>${recipePhase(d) ? ` <span class="badge">${esc(recipePhase(d))}</span>` : ""}`]] : []),
       ...(d.station === "machine" ? [["气体环境", GAS_ENV_CN[d.gasEnv] ?? d.gasEnv ?? "—"]] : []),
+      ...(d.machineConsume ? [["机器消耗", `${itemRef(d.machineConsume.consumeItem, d.machineConsume.consumeItemName)} ×${num(d.machineConsume.consumeRate)}/分钟(满负载)`]] : []),
       ["制造耗时", d.craftTimeSec ? `${d.craftTimeSec} 秒` : "—"],
       ["生产设施", d.facility ? esc(d.facility) : "—"],
       ["稀有度", d.rarity ?? "—"],

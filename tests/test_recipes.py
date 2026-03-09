@@ -1,8 +1,8 @@
 """配方采集(recipes.build)全字段保留单元测试。
 
-覆盖:加工字段形态替换(i18n 反查、原料产物解析、设施中文名、产物合并)、
-源表其余字段原样透传(gasEnv/buffers/itemId/level 等)、上游新增字段自动进入
-数据集、机器配方不再输出源表中不存在的 rarity。
+覆盖:加工字段形态替换(i18n 反查、原料产物解析、设施中文名、产物合并、机器运行
+消耗 machineConsume)、源表其余字段原样透传(gasEnv/buffers/itemId/level 等)、
+上游新增字段自动进入数据集、机器配方不再输出源表中不存在的 rarity。
 
 运行:poetry run pytest tests/ -q
 """
@@ -19,7 +19,12 @@ RAW = {
         "item_b": {"name": {"text": "乙"}},
     },
     "FactoryCraftShowingTypeTable": {"1": {"name": {"text": "素材转化"}}},
-    "FactoryBuildingTable": {"m_1": {"name": {"text": "灌装机"}}},
+    "FactoryBuildingTable": {"m_1": {"name": {"text": "灌装机"}},
+                             "m_tr": {"name": {"text": "液气转化机"}}},
+    "FactoryTransmuterTable": {
+        "m_tr": {"consumeBindings": 2, "consumeItem": "item_b",
+                 "consumeRate": 6, "consumeRateUpperLimit": 30, "id": "m_tr"},
+    },
     "FactoryManualCraftTable": {
         "hand_1": {
             "craftFilterType": 0, "defaultUnlock": False, "domainId": "domain_1",
@@ -45,6 +50,11 @@ RAW = {
             "formulaDesc": None, "formulaGroupId": "g1", "id": "mach_2",
             "ingredients": [], "machineId": "m_1", "outcomes": [],
             "progressRound": 1, "signal": 0, "sortId": 2, "totalProgress": 100,
+        },
+        "mach_3": {                              # 机器在 TransmuterTable → 带 machineConsume
+            "formulaDesc": None, "formulaGroupId": "g2", "id": "mach_3",
+            "ingredients": [], "machineId": "m_tr", "outcomes": [],
+            "progressRound": 2, "signal": 0, "sortId": 3, "totalProgress": 12000,
         },
     },
     "SpaceshipManufactureFormulaTable": {
@@ -93,6 +103,16 @@ def test_machine_fields():
 
 def test_machine_gas_env_default():
     assert build_all()["mach_2"]["gasEnv"] == 0
+
+
+def test_machine_consume_hit_and_miss():
+    # machineId 命中 FactoryTransmuterTable:源表字段原样 + 消耗物中文名反查
+    assert build_all()["mach_3"]["machineConsume"] == {
+        "consumeItem": "item_b", "consumeItemName": "乙",
+        "consumeRate": 6, "consumeRateUpperLimit": 30, "consumeBindings": 2,
+    }
+    # 未命中的机器配方不输出恒 null 的 machineConsume
+    assert "machineConsume" not in build_all()["mach_1"]
 
 
 def test_spaceship_fields():
