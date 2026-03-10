@@ -171,7 +171,9 @@ class GachaPool:
     freeTenGrantAt: int = 30
     nextTenTicketAt: int = 60
     intervalRewardAt: int = 240
+    extraTenGrantAt: int = 0       # 每累计 N 次再赠 10 连(正常寻访口径;0 = 无)
     quota_base: int = 0            # 每寻访基础配额(特殊寻访 +1,普通限定 0)
+    banner_tickets: int = BANNER_TICKETS  # 开局可购当期券张数(复刻池 0)
     pool_name: str = "寻访池"
     progress_in_global: bool = False  # 进度入全局状态跨轮继承(重构寻访 = True)
     next_pool_id: str = ""            # 下期券绑定的池 id(POOLS 档期推导)
@@ -184,7 +186,8 @@ class GachaPool:
                  guarantee_id: str = "",
                  rateup_ids: tuple[str, ...] = (),
                  standard_ids: tuple[str, ...] = (),
-                 sign_in_tickets: int = 5):
+                 sign_in_tickets: int = 5,
+                 banner_tickets: int | None = None):
         self.g = global_state or GachaGlobalState()
         self.rng = rng or random.Random()
         self.pool_id = pool_id
@@ -195,12 +198,17 @@ class GachaPool:
         self.rateup_ids = rateup_ids                   # 往期限定段:25% 平分
         self.standard_ids = standard_ids or _STD6      # 名单内常驻6★:25% 平分
         self.sign_in_tickets = sign_in_tickets         # 登录签到送当期凭证张数
+        self.banner_tickets = BANNER_TICKETS if banner_tickets is None \
+            else banner_tickets
+        self.banner_tickets = (BANNER_TICKETS if banner_tickets is None
+                               else banner_tickets)  # 开局可购当期券张数
         self.pulls = 0                 # 本池累计寻访 = 大保底计数
         self.up_got = 0                # 已获得当期干员次数(硬保底上限1)
         self.free_ten_left = 0         # 待抽的赠送十连余量
         self.free_ten_granted = False  # 累计30次赠十连是否已发
         self.next_ticket_granted = False  # 累计60次赠下期十连券是否已发
         self.interval_got = 0           # 已领取的 240 抽循环潜能信物数
+        self.extra_ten_granted = False  # 额外 10 连档位(如复刻池 90 抽)是否已发
         self.exchange_left = 0          # 免费券余量(下期券/配额券,正常寻访)
         self.banner_ticket_left = BANNER_TICKETS + self.sign_in_tickets
 
@@ -221,6 +229,7 @@ class GachaPool:
             self.free_ten_granted = saved["free_ten_granted"]
             self.next_ticket_granted = saved["next_ticket_granted"]
             self.interval_got = saved["interval_got"]
+            self.extra_ten_granted = saved["extra_ten_granted"]
         else:
             self.pulls = 0
             self.up_got = 0
@@ -228,8 +237,9 @@ class GachaPool:
             self.free_ten_granted = False
             self.next_ticket_granted = False
             self.interval_got = 0
+            self.extra_ten_granted = False
         self.exchange_left = 0
-        self.banner_ticket_left = BANNER_TICKETS + self.sign_in_tickets
+        self.banner_ticket_left = self.banner_tickets + self.sign_in_tickets
 
     def _persist_progress(self) -> None:
         """重构寻访:当前进度写回全局状态,供下次卡池(下一轮)继承。"""
@@ -240,6 +250,7 @@ class GachaPool:
                 "free_ten_granted": self.free_ten_granted,
                 "next_ticket_granted": self.next_ticket_granted,
                 "interval_got": self.interval_got,
+                "extra_ten_granted": self.extra_ten_granted,
             }
 
     # -- 概率 --
@@ -374,6 +385,12 @@ class GachaPool:
             if self.next_pool_id:      # 券绑定下期限定池,仅该池可用
                 self.g.next_ten_tickets[self.next_pool_id] = \
                     self.g.next_ten_tickets.get(self.next_pool_id, 0) + 1
+            else:
+                self.exchange_left += FREE_TEN_SIZE  # 无下期绑定:当期 10 连
+        if (self.extraTenGrantAt and not self.extra_ten_granted
+                and self.pulls >= self.extraTenGrantAt):
+            self.extra_ten_granted = True
+            self.exchange_left += FREE_TEN_SIZE   # 额外 10 连:正常寻访口径
         while (self.intervalRewardAt
                and self.pulls >= (self.interval_got + 1) * self.intervalRewardAt):
             self.interval_got += 1     # 循环潜能信物:额外当期份,不影响保底
@@ -396,6 +413,9 @@ class RerunGacha(LimitedGacha):     # type 4 复刻寻访(官方「重构寻访�
     # 随抽存档(progress_in_global = True)。
     progress_in_global = True
     quota_base = 1                  # 特殊寻访:每寻访额外 +1 基础配额(重构寻访同规)
+    extraTenGrantAt = 90            # 复刻池 90 抽再赠 10 连(30/60/90 三档)
+    sign_in_tickets = 0             # 复刻池无签到当期凭证
+    banner_tickets = 0              # 复刻池无可购当期券
 
 
 class JointGacha(GachaPool):        # type 3 特殊寻访(1.2 首个复刻池「辉光庆典」):
