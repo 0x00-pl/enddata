@@ -26,9 +26,4 @@ def register(name: str):
     return deco
 
 
-import analysis.solvers.recursive as _recursive  # noqa: E402,F401  (导入即注册 recursive)
-
-try:  # z3 求解器需要 z3-solver 包(可选安装)
-    import analysis.solvers.z3 as _z3  # noqa: E402,F401
-except ImportError:  # pragma: no cover
-    pass
+import analysis.solvers.z3 as _z3  # noqa: E402,F401  (导入即注册 z3,需 z3-solver 包)

@@ -9,7 +9,7 @@
     enddata collection items --online          # 缺原始表时允许联网补抓
     enddata collection characters --force      # 核对远端 HEAD、有更新才增量拉取,随后本地重读
     enddata analysis team                       # 配队分析:技能/天赋/潜能的需求与产出资源解析
-    enddata analysis recipe 铁制零件 10         # 配方用料倒推:最终产物 → 最初用料/--have 清单(自动处理环)
+    enddata analysis recipe 铁制零件 10         # 配方用料倒推(z3 求解):产物 → 原料清单
     enddata idmap build                         # 扫描 rmxlinux 源,重建 data/id_map/ 关联规则产物
     enddata idmap relate <file#path>            # 按定位符返回同组定位符列表(path 列表)
     enddata version --record
@@ -135,8 +135,8 @@ def build_parser() -> argparse.ArgumentParser:
              "--recipe 息壤=xiranite_oven_xiranite_powder_2;钉选后不再尝试其他配方",
     )
     recipe_p.add_argument(
-        "--solver", default="recursive",
-        help=f"求解器实现(默认 recursive 递归展开;可选:"
+        "--solver", default="z3",
+        help=f"求解器实现(默认 z3 整图线性约束;可选:"
              f"{', '.join(recipe_solvers.SOLVERS)})",
     )
     recipe_p.add_argument(

@@ -1,6 +1,6 @@
 """Z3 求解器:整张配方图建线性约束一次性求解(SMT/LP,精确有理数运算)。
 
-与递归展开求解器的口径差异(见本类 docstring):
+求解口径:
     - 环路与共享中间品天然可解,无外部投料启发式;
     - 采集类资源(无产出配方,如矿石/清水/气体)视为用量不限的外部输入;
     - 目标函数 = 制造次数计价(Σ 次数),preferred 配方成本按 1/4 计
@@ -16,6 +16,8 @@ from fractions import Fraction
 from analysis.recipe_calc import (
     GAS_ENV_PROVIDERS,
     GAS_ENV_RATE,
+    MACHINE_UPKEEP,
+    facility_upkeep,
     KIND_CRAFT,
     KIND_EXTERN,
     KIND_RAW,
@@ -24,13 +26,7 @@ from analysis.recipe_calc import (
     Requirement,
 )
 
-# 设施维持消耗(FactoryTransmuterTable):转化机运行期间需持续通入息壤系气体
-# 6/min/台(上限 30)——液气转化机通液化息壤、固气转化机通息壤气;
-# z3 口径按运行时长线性计入流量(维持速率 × 设备占用率,速率语义下精确)
-FACILITY_UPKEEP_GAS = {
-    "transmuter_1": "item_liquid_xiranite",   # 液气转化机:液化息壤
-    "transmuter_2": "item_gas_xiranite",      # 固气转化机:息壤气
-}
+
 from analysis.solvers import RecipeSolver, register
 
 
@@ -49,7 +45,6 @@ class Z3Solver(RecipeSolver):
     目标函数:
         minimize Σ 制造次数(最少制造次数口径;替代口径如最少设备台数、
         最少外部购买可按同样框架扩展)。
-    与递归求解器的口径差异:
         - preferred 暂未生效;
         - 环境维持按用到的环境计入 6/min 采集气体;设备维持(转化机气体)按
       运行时长线性计入流量(维持速率 × 设备占用率,速率语义下精确);
@@ -81,9 +76,9 @@ class Z3Solver(RecipeSolver):
             for s in r.ingredients:
                 flow[s.id] = flow.get(s.id, 0) - crafts[rid] * s.count
             # 设施维持:机器运行期间持续通入息壤系气体,按运行时长线性计入
-            upkeep_gas = FACILITY_UPKEEP_GAS.get(r.machine_id or "")
-            if upkeep_gas is not None and r.craft_time:
-                per_craft = GAS_ENV_RATE * Fraction(str(r.craft_time)) / 60
+            upkeep_gas = MACHINE_UPKEEP.get(r.machine_id or "")
+            if upkeep_gas is not None:
+                per_craft = facility_upkeep(Fraction(1), r.craft_time)
                 flow[upkeep_gas] = flow.get(upkeep_gas, 0) - crafts[rid] * per_craft
 
         preferred_recipes = set(preferred.values()) if preferred else set()
@@ -132,10 +127,10 @@ class Z3Solver(RecipeSolver):
                 flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
             for s in r.ingredients:
                 flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
-            upkeep_gas = FACILITY_UPKEEP_GAS.get(r.machine_id or "")
-            if upkeep_gas is not None and r.craft_time:
+            upkeep_gas = MACHINE_UPKEEP.get(r.machine_id or "")
+            if upkeep_gas is not None:
                 flows[upkeep_gas] = (flows.get(upkeep_gas, Fraction(0))
-                                     - n * GAS_ENV_RATE * Fraction(str(r.craft_time)) / 60)
+                                     - facility_upkeep(n, r.craft_time))
         for i, net in sorted(flows.items()):
             if i in target_ids:
                 continue
