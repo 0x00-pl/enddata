@@ -23,6 +23,7 @@ from analysis.recipe_calc import (
     render_result,
     result_json,
 )
+from analysis.solvers import SolveRequest
 from analysis.solvers.z3 import Z3Solver
 
 
@@ -63,6 +64,23 @@ def test_dismantler_excluded(graph):
     assert "item_gas_inert" not in graph.producers
 
 
+def test_vaporizer_produce_env(graph):
+    """散布机合成条目(produce_env 来源):通入气体 ×6/min 产出对应环境;
+    无物品产出、不进产出图谱,求解不会被选中。"""
+    spreaders = [r for r in graph.recipes if r.produce_env]
+    assert {r.produce_env: r.require_items[0].id for r in spreaders} == {
+        1: "item_gas_inert", 2: "item_gas_water",
+        3: "item_gas_acid", 4: "item_gas_xiranite"}
+    for r in spreaders:
+        assert r.produce_items == () and r.require_machine == "vaporizer_1"
+        assert r.machine_name == "气体散布机"
+        assert r.require_items[0].count == 6 and r.require_time is None
+    assert not any(r.id.startswith("vaporizer_")
+                   for rs in graph.producers.values() for r in rs)
+    req = compute(graph, "item_copper_enr2_cmpt", Fraction(6))
+    assert not any(rid.startswith("vaporizer_") for rid in req.crafts)
+
+
 # ---------------------------------------------------------------- 基础求解
 def test_basic_chain(graph):
     req = compute(graph, "item_iron_cmpt", Fraction(10))
@@ -95,9 +113,9 @@ def test_seed_loop_native(graph):
 
 def test_available_stops_production(graph):
     """持有清单(available):清单物品只耗不产,不再为其安排产出配方。"""
-    solver = Z3Solver(graph)
-    req = solver.solve({"item_plant_grass_1": Fraction(10)},
-                       available={"item_plant_grass_seed_1": 0})
+    solver = Z3Solver(graph.recipes)
+    req = solver.solve(SolveRequest({"item_plant_grass_1": Fraction(10)},
+                                    available={"item_plant_grass_seed_1": 0}))
     assert req.crafts == {"planter_plant_grass_1_1": Fraction(5)}   # 单次产 2
     assert leaf_map(req) == {
         ("item_plant_grass_seed_1", KIND_EXTERN): Fraction(5),
@@ -129,9 +147,9 @@ def test_preferred_discount(graph):
     default = compute(graph, "item_xiranite_powder", Fraction(1))
     assert "liquid_transmuter_2_solid_xiranite_powder_1" in default.crafts
     assert default.required_envs() == []
-    req = Z3Solver(graph).solve(
-        {"item_xiranite_powder": Fraction(1)},
-        preferred={"item_xiranite_powder": "xiranite_oven_xiranite_powder_2"})
+    req = Z3Solver(graph.recipes).solve(
+        SolveRequest({"item_xiranite_powder": Fraction(1)},
+                     preferred={"item_xiranite_powder": "xiranite_oven_xiranite_powder_2"}))
     assert "xiranite_oven_xiranite_powder_2" in req.crafts
     assert req.required_envs() == [("稳定环境", ["xiranite_oven_xiranite_powder_2"])]
     assert leaf_map(req)[("item_gas_inert", KIND_RAW)] == Fraction(6)   # 散布机维持
@@ -139,10 +157,10 @@ def test_preferred_discount(graph):
 
 def test_preferred_twin_recipes(graph):
     """完全等价的双胞胎配方(反应池 _1/_2,给定息壤/清水):折扣确定性选中首选。"""
-    req = Z3Solver(graph).solve(
-        {"item_liquid_xiranite": Fraction(2)},
-        available={"item_xiranite_powder": 0, "item_liquid_water": 0},
-        preferred={"item_liquid_xiranite": "pool_liquid_liquid_xiranite_2"})
+    req = Z3Solver(graph.recipes).solve(
+        SolveRequest({"item_liquid_xiranite": Fraction(2)},
+                     available={"item_xiranite_powder": 0, "item_liquid_water": 0},
+                     preferred={"item_liquid_xiranite": "pool_liquid_liquid_xiranite_2"}))
     assert set(req.crafts) == {"pool_liquid_liquid_xiranite_2"}
 
 
@@ -151,8 +169,8 @@ def test_solver_ctor_recipe_subset(graph):
     subset = [r for r in graph.recipes
               if r.id in ("xiranite_oven_xiranite_powder_2",
                           "furnance_carbon_material_6")]
-    solver = Z3Solver(graph, recipes=subset)
-    req = solver.solve({"item_xiranite_powder": Fraction(2)})
+    solver = Z3Solver(subset)
+    req = solver.solve(SolveRequest({"item_xiranite_powder": Fraction(2)}))
     assert set(req.crafts) == {"xiranite_oven_xiranite_powder_2",
                                "furnance_carbon_material_6"}
 
@@ -182,10 +200,10 @@ def test_rate_filter_core_60_per_min(graph):
 
 def test_rate_filter_core_provided(graph):
     """给定 息壤/清水:目标链只剩 冶炼+塑形+封装,给定物按外部投料计。"""
-    solver = Z3Solver(graph)
-    req = solver.solve({"item_filter_core": Fraction(60)},
-                       available={"item_xiranite_powder": 0, "item_liquid_water": 0},
-                       per_min=True)
+    solver = Z3Solver(graph.recipes)
+    req = solver.solve(SolveRequest({"item_filter_core": Fraction(60)},
+                                    available={"item_xiranite_powder": 0, "item_liquid_water": 0},
+                                    per_min=True))
     assert req.crafts == {
         "furnance_copper_nugget_1": Fraction(60),
         "shaper_gas_copper_jar_1": Fraction(30),
@@ -202,11 +220,11 @@ def test_rate_filter_core_provided(graph):
 def test_rate_copper_enr2_6_per_min_provided(graph):
     """灼铜零件 ×6/min,给定 息壤/清水/赤铜块:含设施维持(息壤系气体)
     与双环境需求(提纯机 _2 稳定 + 反应炉酸性)。"""
-    solver = Z3Solver(graph)
-    req = solver.solve({"item_copper_enr2_cmpt": Fraction(6)},
-                       available={"item_xiranite_powder": 0, "item_liquid_water": 0,
-                                  "item_copper_nugget": 0},
-                       per_min=True)
+    solver = Z3Solver(graph.recipes)
+    req = solver.solve(SolveRequest({"item_copper_enr2_cmpt": Fraction(6)},
+                                    available={"item_xiranite_powder": 0, "item_liquid_water": 0,
+                                               "item_copper_nugget": 0},
+                                    per_min=True))
     assert req.strict_ok
     assert req.crafts == {
         "component_copper_enr2_cmpt_1": Fraction(6),
@@ -233,23 +251,23 @@ def test_rate_copper_enr2_6_per_min_provided(graph):
 def test_byproducts_flag(graph):
     """byproducts=False 为硬约束:给定赤铜块(无冶炼)可行且零副产物;
     不给定时赤铜块只能冶炼(必产污水)→ 不可行。"""
-    solver = Z3Solver(graph)
-    ok = solver.solve({"item_copper_enr2_cmpt": Fraction(6)},
-                      available={"item_xiranite_powder": 0, "item_liquid_water": 0,
-                                 "item_copper_nugget": 0},
-                      per_min=True, byproducts=False)
+    solver = Z3Solver(graph.recipes)
+    ok = solver.solve(SolveRequest({"item_copper_enr2_cmpt": Fraction(6)},
+                                   available={"item_xiranite_powder": 0, "item_liquid_water": 0,
+                                              "item_copper_nugget": 0},
+                                   per_min=True, byproducts=False))
     assert ok.strict_ok and ok.byproducts == {}
     assert "furnance_copper_nugget_1" not in ok.crafts
-    bad = solver.solve({"item_copper_enr2_cmpt": Fraction(6)}, byproducts=False)
+    bad = solver.solve(SolveRequest({"item_copper_enr2_cmpt": Fraction(6)}, byproducts=False))
     assert not bad.strict_ok
 
 
 # ---------------------------------------------------------------- 多目标与守恒
 def test_multi_target(graph):
     """多目标:一张约束网同时满足,原料聚合不重不漏。"""
-    solver = Z3Solver(graph)
-    req = solver.solve({"item_filter_core": Fraction(60),
-                        "item_iron_cmpt": Fraction(10)}, per_min=True)
+    solver = Z3Solver(graph.recipes)
+    req = solver.solve(SolveRequest({"item_filter_core": Fraction(60),
+                                     "item_iron_cmpt": Fraction(10)}, per_min=True))
     assert req.strict_ok and len(req.roots) == 2
     mats = req.materials()
     assert mats["item_copper_ore"] == Fraction(60)
@@ -260,14 +278,14 @@ def test_conservation_sample(graph):
     """抽样守恒:目标净产 == 需求量;叶子 = 净缺口;副产物 = 净剩余。"""
     sample = sorted(i for i in graph.producers if not i.startswith("item_port_"))[::12]
     for t in sample:
-        req = Z3Solver(graph).solve({t: Fraction(7)})
+        req = Z3Solver(graph.recipes).solve(SolveRequest({t: Fraction(7)}))
         assert req.strict_ok, t
         flows: dict[str, Fraction] = {}
         for rid, n in req.crafts.items():
             r = req.recipes_by_id[rid]
-            for s in r.outcomes:
+            for s in r.produce_items:
                 flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
-            for s in r.ingredients:
+            for s in r.require_items:
                 flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
         for node, total in req.leaf_items():
             flows[node.id] = flows.get(node.id, Fraction(0)) - total
@@ -281,9 +299,9 @@ def test_solver_abstraction(graph):
     assert set(SOLVERS) == {"z3"}
     assert issubclass(Z3Solver, RecipeSolver)
     with pytest.raises(TypeError):
-        RecipeSolver(graph)
+        RecipeSolver()
     via_compute = compute(graph, "item_filter_core", Fraction(60))
-    via_class = Z3Solver(graph).solve({"item_filter_core": Fraction(60)})
+    via_class = Z3Solver(graph.recipes).solve(SolveRequest({"item_filter_core": Fraction(60)}))
     assert via_compute.crafts == via_class.crafts
     assert leaf_map(via_compute) == leaf_map(via_class)
 
@@ -316,15 +334,16 @@ def test_render_rate_and_batch(graph):
     assert "×60/min" in text and "设备需求" in text
     batch = render_result(graph, "分离芯",
                           compute(graph, "item_filter_core", Fraction(4)))
-    assert "设备需求" not in batch and "/min" not in batch
+    # 批量模式不含速率数量;describe 的维持*6/min 是设备规格,允许出现
+    assert "设备需求" not in batch and "×60/min" not in batch
 
 
 def test_render_sections(graph):
     """最终输出分节:目标/需求原料/产出(副产物)/制造步骤/设备/环境/链路图。"""
-    solver = Z3Solver(graph)
-    req = solver.solve({"item_copper_enr2_cmpt": Fraction(6)},
-                       available={"item_xiranite_powder": 0, "item_liquid_water": 0,
-                                  "item_copper_nugget": 0}, per_min=True)
+    solver = Z3Solver(graph.recipes)
+    req = solver.solve(SolveRequest({"item_copper_enr2_cmpt": Fraction(6)},
+                                    available={"item_xiranite_powder": 0, "item_liquid_water": 0,
+                                               "item_copper_nugget": 0}, per_min=True))
     text = render_result(graph, "灼铜零件", req, per_min=True)
     for section in ("目标 灼铜零件", "需求原料", "产出:", "制造步骤",
                     "设备需求", "环境需求", "稳定环境", "酸性环境",
@@ -334,8 +353,8 @@ def test_render_sections(graph):
 
 def test_result_json(graph):
     import json
-    solver = Z3Solver(graph)
-    req = solver.solve({"item_filter_core": Fraction(60)}, per_min=True)
+    solver = Z3Solver(graph.recipes)
+    req = solver.solve(SolveRequest({"item_filter_core": Fraction(60)}, per_min=True))
     payload = json.loads(json.dumps(result_json(req, graph, per_min=True)))
     assert payload["target"]["per_min"] is True
     assert payload["strict_ok"] is True

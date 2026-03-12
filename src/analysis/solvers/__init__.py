@@ -1,6 +1,7 @@
 """配方求解器包:每个求解器实现一个模块,经 SOLVERS 注册后由 CLI --solver 选择。
 
-接口约定(RecipeSolver.solve,所有集合以物品 id 为键、数量为值):
+接口约定(RecipeSolver.solve(request: SolveRequest),SolveRequest 字段
+    以物品 id 为键、数量为值):
     targets     目标产物 → 需求量(支持多个目标,聚合为一份需求);
     available   持有原料 → 数量:命中即停止向下展开(数量当前版本仅透传对账,
                 清单内物品视为充足;CLI --have 等价于 数量不限的持有清单);
@@ -11,7 +12,7 @@
 materials() 提供按物品聚合的净需求)。
 """
 
-from analysis.solvers.base import RecipeSolver
+from analysis.solvers.base import RecipeSolver, SolveRequest
 
 SOLVERS: dict[str, type[RecipeSolver]] = {}
 

@@ -59,6 +59,7 @@ import sys
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from fractions import Fraction
+from functools import lru_cache
 
 from tools.tables import DATA_DIR, REPORTS_DIR
 
@@ -122,33 +123,65 @@ class Stack:
 class Recipe:
     id: str
     station: str
-    label: str                                   # 手工配方名 / 机器 formulaDesc / 飞船 showingName
-    ingredients: tuple[Stack, ...]
-    outcomes: tuple[Stack, ...]
-    craft_time: float | None
-    machine_name: str | None = None              # 生产设施中文名(机器配方,设备数折算展示用)
-    machine_id: str | None = None                # 生产设施 ID(设备维持消耗查表用)
-    gas_env: int = 0                             # 所需气体环境:0=无,1=稳定,2=湿润,3=酸性,4=息壤
+    name: str                                     # 手工配方名 / 机器 formulaDesc / 飞船 showingName
+    require_items: tuple[Stack, ...]              # 每次制造的物品消耗
+    produce_items: tuple[Stack, ...]              # 每次制造的产出(含副产物)
+    require_time: float | None                    # 单次制造耗时(秒)
+    require_machine: str | None = None            # 所需设施 ID(中文名/维持消耗据此派生)
+    require_env: int = 0                          # 所需气体环境:0=无,1=稳定,2=湿润,3=酸性,4=息壤
+    produce_env: int = 0                          # 产出的气体环境(散布机合成条目;普通配方恒 0)
+
+    @property
+    def machine_name(self) -> str | None:
+        """所需设施中文名(machine_names 目录;设备数折算展示用)。"""
+        return machine_names().get(self.require_machine or "")
 
     @property
     def env_name(self) -> str | None:
-        return GAS_ENV_NAMES.get(self.gas_env)
+        """require_env 对应的气体环境中文名。"""
+        return GAS_ENV_NAMES.get(self.require_env)
 
-    def yield_of(self, item: str) -> int:
+    @property
+    def require_upkeep(self) -> tuple[str, Fraction] | None:
+        """设施维持:(维持气体 id, 单次制造通入量);无维持设施为 None。
+
+        转化机类设施运行需通入息壤系气体(见 MACHINE_UPKEEP),按运行时长
+        线性折算到每次制造;求解器与链路图共用此口径。
+        """
+        gas = MACHINE_UPKEEP.get(self.require_machine or "")
+        if gas is None:
+            return None
+        return gas, facility_upkeep(Fraction(1), self.require_time)
+
+    def produce_of(self, item: str) -> int:
         """单次制造产出 item 的数量(仅统计目标物品本身,副产物另计不计抵扣)。"""
-        for s in self.outcomes:
+        for s in self.produce_items:
             if s.id == item:
                 return s.count
         return 0
 
-    def consume_of(self, item: str) -> int:
+    def require_of(self, item: str) -> int:
         """单次制造消耗 item 的数量(各原料槽求和,正常数据至多一槽)。"""
-        return sum(s.count for s in self.ingredients if s.id == item)
+        return sum(s.count for s in self.require_items if s.id == item)
 
     def describe(self) -> str:
-        ins = " + ".join(f"{s.name}×{s.count}" for s in self.ingredients) or "(无原料)"
-        outs = " + ".join(f"{s.name}×{s.count}" for s in self.outcomes)
-        return f"{ins} → {outs}"
+        """单行配方卡:A*n+B*m --设备(环境,维持*k/min)--> C*p+D*q。
+
+        设备为设施中文名(手工/飞船配方无设施,以站点名兜底);括号内按需
+        附气体环境与设施维持(维持气体恒 6/min/台,见 GAS_ENV_RATE)。
+        """
+        ins = "+".join(f"{s.name}*{s.count}" for s in self.require_items) or "(无原料)"
+        outs = "+".join(f"{s.name}*{s.count}" for s in self.produce_items)
+        device = (self.machine_name
+                  or {"manual": "手工", "spaceship": "飞船"}.get(self.station))
+        notes = []
+        if self.env_name:
+            notes.append(self.env_name)
+        if (upkeep := self.require_upkeep) is not None:
+            notes.append(f"维持{item_name(upkeep[0]) or upkeep[0]}*{GAS_ENV_RATE}/min")
+        deco = (f"--{device}({','.join(notes)})-->" if notes
+                else f"--{device}-->" if device else "-->")
+        return f"{ins} {deco} {outs}"
 
 
 
@@ -226,7 +259,7 @@ class Requirement:
         气体散布机持续通入对应气体形成环境(FactoryVaporizerTable:各类气体
         恒 6/min,上限 30),一台散布机可同时影响范围内多台设备,按环境各计一台。
         """
-        used = {self.recipes_by_id[rid].gas_env for rid in self.crafts}
+        used = {self.recipes_by_id[rid].require_env for rid in self.crafts}
         return [(GAS_ENV_NAMES[e], GAS_ENV_PROVIDERS[e][0], GAS_ENV_RATE)
                 for e in sorted(used) if e in GAS_ENV_PROVIDERS]
 
@@ -258,20 +291,43 @@ def load_recipes() -> list[Recipe]:
             r = json.loads(f.read_text(encoding="utf-8"))
             recipes.append(Recipe(
                 id=r["id"], station=station,
-                label=r.get("name") or r.get("formulaDesc") or r.get("showingName") or r["id"],
-                ingredients=_flatten(r.get("ingredients", [])),
-                outcomes=_flatten(r.get("outcomes", [])),
-                craft_time=r.get("craftTimeSec"),
-                machine_name=r.get("machineName"),
-                machine_id=r.get("machineId"),
-                gas_env=int(r.get("gasEnv") or 0),
+                name=r.get("name") or r.get("formulaDesc") or r.get("showingName") or r["id"],
+                require_items=_flatten(r.get("ingredients", [])),
+                produce_items=_flatten(r.get("outcomes", [])),
+                require_time=r.get("craftTimeSec"),
+                require_machine=r.get("machineId"),
+                require_env=int(r.get("gasEnv") or 0),
             ))
+    recipes.extend(_vaporizer_recipes())
     return recipes
 
 
-def _load_item_names() -> tuple[dict[str, str], dict[str, str]]:
+def _vaporizer_recipes() -> list[Recipe]:
+    """气体散布机合成条目:持续通入气体 → 产出对应气体环境(produce_env 的来源)。
+
+    散布机是设施行为而非加工配方,不在三张配方源表内(源表
+    FactoryVaporizerTable 未纳入采集,口径见 GAS_ENV_PROVIDERS/GAS_ENV_RATE
+    常量注释);此处建为合成条目,使「耗什么气、产什么环境」可经配方数据
+    查询。require_items 数量为每分钟通入速率(连续运行,require_time=None,
+    不参与求解——无物品产出,求解器不会选中)。
+    """
+    machine = item_name("item_port_vaporizer_1") or "气体散布机"
+    return [Recipe(
+        id=f"vaporizer_1_env_{gas_id.removeprefix('item_gas_')}",
+        station="machine",
+        name=f"{machine}·{GAS_ENV_NAMES[env]}",
+        require_items=(Stack(gas_id, item_name(gas_id) or gas_id, int(GAS_ENV_RATE)),),
+        produce_items=(),
+        require_time=None,
+        require_machine="vaporizer_1",
+        produce_env=env,
+    ) for env, (gas_id, _gas_recipe) in GAS_ENV_PROVIDERS.items()]
+
+
+@lru_cache(maxsize=1)
+def item_catalog() -> tuple[dict[str, str], dict[str, str]]:
     """data/items/ 全量 id→中文名 与 id→获取途径首条(最初用料的来源注记,
-    如 惰气 = 惰气矿点采集)。"""
+    如 惰气 = 惰气矿点采集)。进程内共享缓存,只解析一次。"""
     names: dict[str, str] = {}
     obtain: dict[str, str] = {}
     for f in ITEMS_DIR.glob("*/*.json"):
@@ -287,6 +343,33 @@ def _load_item_names() -> tuple[dict[str, str], dict[str, str]]:
     return names, obtain
 
 
+def item_name(item: str) -> str | None:
+    """物品中文名(items 数据集);未收录返回 None。"""
+    return item_catalog()[0].get(item)
+
+
+def is_gatherable(item: str) -> bool:
+    """采集类资源(obtainWays 非空,如 清水=水泵采集):视作外部可获取,
+    即便存在产出配方也不强制自产。"""
+    return item_catalog()[1].get(item) is not None
+
+
+@lru_cache(maxsize=1)
+def machine_names() -> dict[str, str]:
+    """机器配方 JSON 的 machineId → machineName 目录(设施中文名)。
+
+    散布机无机器配方 JSON,由 items 数据集补种(produce_env 合成条目用)。
+    """
+    out: dict[str, str] = {}
+    for f in (RECIPE_DIR / "machine").glob("*.json"):
+        r = json.loads(f.read_text(encoding="utf-8"))
+        if r.get("machineId") and r.get("machineName"):
+            out.setdefault(r["machineId"], r["machineName"])
+    if "vaporizer_1" not in out:
+        out["vaporizer_1"] = item_name("item_port_vaporizer_1") or "气体散布机"
+    return out
+
+
 class RecipeGraph:
     """配方只读索引:物品 → 产出配方(确定性排序)、id↔名称解析、采集属性。"""
 
@@ -298,12 +381,12 @@ class RecipeGraph:
         for r in self.recipes:
             if r.id.startswith(RECYCLER_PREFIX):
                 continue
-            for s in r.outcomes:
+            for s in r.produce_items:
                 self.producers.setdefault(s.id, []).append(r)
         for item, rs in self.producers.items():
             rs.sort(key=lambda r: self._order_key(r, item))
-        self._names: dict[str, str] = {s.id: s.name for r in self.recipes for s in r.outcomes + r.ingredients}
-        self._used_items: set[str] = {s.id for r in self.recipes for s in r.ingredients}
+        self._names: dict[str, str] = {s.id: s.name for r in self.recipes for s in r.produce_items + r.require_items}
+        self._used_items: set[str] = {s.id for r in self.recipes for s in r.require_items}
         self._item_names: dict[str, str] | None = None
         self._obtain: dict[str, str] | None = None
 
@@ -311,9 +394,9 @@ class RecipeGraph:
     def _order_key(r: Recipe, item: str) -> tuple:
         """产出配方择路序:主产物 → 站点 → 耗时 → id(见模块 docstring)。"""
         return (
-            0 if (r.outcomes and r.outcomes[0].id == item) else 1,
+            0 if (r.produce_items and r.produce_items[0].id == item) else 1,
             STATION_RANK.get(r.station, 9),
-            (0, r.craft_time) if r.craft_time is not None else (1, 0.0),
+            (0, r.require_time) if r.require_time is not None else (1, 0.0),
             r.id,
         )
 
@@ -356,7 +439,7 @@ class RecipeGraph:
         graph = {i: set() for i in self.producers}
         for item, rs in self.producers.items():
             for r in rs:
-                for s in r.ingredients:
+                for s in r.require_items:
                     if s.id in self.producers:
                         graph[item].add(s.id)
         index, low, on_stack, stack, counter, sccs = {}, {}, set(), [], [0], []
@@ -390,9 +473,9 @@ class RecipeGraph:
 
     # -- 内部助手 -------------------------------------------------------------
     def _name_pool(self) -> dict[str, str]:
-        """items 数据集的全量 id→中文名(首次访问时加载)。"""
+        """items 数据集的全量 id→中文名(委托进程级共享缓存 item_catalog)。"""
         if self._item_names is None:
-            self._item_names, self._obtain = _load_item_names()
+            self._item_names, self._obtain = item_catalog()
         return self._item_names
 
     def _ensure_items_loaded(self) -> None:
@@ -417,13 +500,15 @@ def compute(graph: RecipeGraph, target: str, qty: Fraction,
     """兼容入口(单目标):等价 Z3Solver 求解。
 
     provided 为持有物品 id 集合(等价 available={id: 0} 的数量不限清单);
-    pinned/byproducts 语义见 analysis.solvers.RecipeSolver.solve。
+    pinned/byproducts 语义见 analysis.solvers.SolveRequest。
     """
+    from analysis.solvers import SolveRequest
     from analysis.solvers.z3 import Z3Solver
-    return Z3Solver(graph).solve({target: qty},
-                                 available={a: 0 for a in provided},
-                                 preferred=dict(pinned or {}),
-                                 per_min=per_min, byproducts=byproducts)
+    return Z3Solver(graph.recipes).solve(SolveRequest(
+        targets={target: qty},
+        available={a: 0 for a in provided},
+        preferred=dict(pinned or {}),
+        per_min=per_min, byproducts=byproducts))
 
 
 # ---------------------------------------------------------------- 展示
@@ -458,8 +543,8 @@ def machine_counts(req: Requirement) -> list[tuple[Recipe, Fraction, int]]:
     out = []
     for rid, n in sorted(req.crafts.items()):
         r = req.recipes_by_id[rid]
-        if r.craft_time:
-            out.append((r, n, math.ceil(n * r.craft_time / 60)))
+        if r.require_time:
+            out.append((r, n, math.ceil(n * r.require_time / 60)))
     return out
 
 
@@ -489,7 +574,7 @@ def render_tree(graph: RecipeGraph, node: ReqNode, _prefix: str = "", _is_last: 
     if node.kind == KIND_CRAFT and node.recipe is not None:
         assert node.crafts is not None
         note = f"配方 {node.recipe.id} ×{fmt_qty(node.crafts)} 次({node.recipe.describe()})"
-        if not node.recipe.ingredients:
+        if not node.recipe.require_items:
             note += " [飞船制造,无原料]"
     if note:
         lines.append(f"{_prefix}{ext}⮡ {note}")
@@ -511,12 +596,13 @@ def render_mermaid(graph: RecipeGraph, req: Requirement) -> str:
     upkeep_in: dict[tuple[str, str], Fraction] = {}   # (气体, 配方) → 维持通入量/min
     for rid, n in req.crafts.items():
         r = graph.recipes_by_id[rid]
-        for s in r.outcomes:
+        for s in r.produce_items:
             flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
-        for s in r.ingredients:
+        for s in r.require_items:
             flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
-        gas = MACHINE_UPKEEP.get(r.machine_id or "")
-        if gas is not None and (q := facility_upkeep(n, r.craft_time)) > 0:
+        upkeep = r.require_upkeep
+        if upkeep is not None and (q := n * upkeep[1]) > 0:
+            gas = upkeep[0]
             upkeep_in[(gas, rid)] = upkeep_in.get((gas, rid), Fraction(0)) + q
             flows[gas] = flows.get(gas, Fraction(0)) - q
     target_ids = {r.id for r in req.roots}
@@ -529,11 +615,11 @@ def render_mermaid(graph: RecipeGraph, req: Requirement) -> str:
     for rid, n in sorted(req.crafts.items()):
         r = graph.recipes_by_id[rid]
         recipes.add(rid)
-        for s in r.ingredients:
+        for s in r.require_items:
             items.add(s.id)
             edges[("I_" + s.id, "R_" + rid)] = (edges.get(("I_" + s.id, "R_" + rid), Fraction(0))
                                                 + n * s.count)
-        for s in r.outcomes:
+        for s in r.produce_items:
             items.add(s.id)
             edges[("R_" + rid, "I_" + s.id)] = (edges.get(("R_" + rid, "I_" + s.id), Fraction(0))
                                                 + n * s.count)
@@ -574,7 +660,7 @@ def render_mermaid(graph: RecipeGraph, req: Requirement) -> str:
             lines.append(f"  I_{i}[\"{graph.name_of(i)}\"]")
     for rid in sorted(recipes):
         r = graph.recipes_by_id[rid]
-        label = r.machine_name or r.label
+        label = r.machine_name or r.name
         lines.append(f"  R_{rid}[\"{label}<br/>{rid}\"]")
     for (src, dst), qty in sorted(edges.items()):
         lines.append(f"  {src} -->|\"×{fmt_qty(qty)}\"| {dst}")
@@ -627,11 +713,11 @@ def render_result(graph: RecipeGraph, target_label: str, req: Requirement,
         if machines:
             lines.append("设备需求(设施数 = 产量每分钟 × 单次耗时 ÷ 60,向上取整):")
             lines += [f"  {r.machine_name or r.station:<4} {r.id} ×{m} 台"
-                      f"({fmt_qty(n)}/min × {r.craft_time:g}s)" for r, n, m in machines]
+                      f"({fmt_qty(n)}/min × {r.require_time:g}s)" for r, n, m in machines]
         if upkeep := req.env_upkeep():
             lines.append(f"  气体散布机 vaporizer ×{len(upkeep)} 台"
                          f"(环境维持,每种气体 {fmt_qty(GAS_ENV_RATE)}/min)")
-        no_time = [rid for rid in req.crafts if not req.recipes_by_id[rid].craft_time]
+        no_time = [rid for rid in req.crafts if not req.recipes_by_id[rid].require_time]
         if no_time:
             lines.append("  无耗时数据不计设备:" + "、".join(no_time))
     elif facilities:
@@ -699,7 +785,7 @@ def result_json(req: Requirement, graph: RecipeGraph, per_min: bool = False) -> 
         "facilities": req.used_facilities(),
         "mermaid": render_mermaid(graph, req),
         **({"machines": [{"recipe": r.id, "machine": r.machine_name,
-                          "craft_time_sec": r.craft_time, "count": m}
+                          "craft_time_sec": r.require_time, "count": m}
                          for r, _, m in machine_counts(req)]
             + [{"machine": "气体散布机", "count": len(req.env_upkeep())}]
             } if per_min else {}),
@@ -714,7 +800,7 @@ def build_report(graph: RecipeGraph, demos: list[tuple[str, Fraction, frozenset[
                  "、".join(f"{s} {sum(1 for r in graph.recipes if r.station == s)}" for s in STATIONS) +
                  f");其中拆解/回收配方(dismantler_)"
                  f"{sum(1 for r in graph.recipes if r.id.startswith(RECYCLER_PREFIX))} 条")
-    items_used = {s.id for r in graph.recipes for s in r.ingredients}
+    items_used = {s.id for r in graph.recipes for s in r.require_items}
     items_made = set(graph.producers)
     lines.append(f"- 涉及物品:产出 {len(items_made)} 种,原料 {len(items_used)} 种;"
                  f"无配方最初用料 {len(items_used - items_made)} 种,可制造 "
@@ -769,8 +855,8 @@ def _resolve_pins(graph: RecipeGraph,
         recipe = graph.recipes_by_id.get(rid)
         if recipe is None:
             sys.exit(f"--recipe 未找到配方:{rid!r}")
-        if recipe.yield_of(iid) <= 0:
-            outs = "、".join(s.name for s in recipe.outcomes)
+        if recipe.produce_of(iid) <= 0:
+            outs = "、".join(s.name for s in recipe.produce_items)
             sys.exit(f"配方 {rid} 不产出 {graph.name_of(iid)}(产出:{outs})")
         pinned[iid] = rid
     return pinned
@@ -790,7 +876,7 @@ def _resolve_provided(graph: RecipeGraph, have: str) -> frozenset[str]:
 def main(item: str | None = None, qty: str = "1", have: str = "",
          as_json: bool = False, recipe_pins: list[str] | None = None,
          solver: str = "z3", byproducts: bool = True) -> None:
-    from analysis.solvers import SOLVERS   # 惰性导入,避免与求解器实现的循环依赖
+    from analysis.solvers import SOLVERS, SolveRequest   # 惰性导入,避免与求解器实现的循环依赖
     graph = RecipeGraph()
     solver_cls = SOLVERS.get(solver)
     if solver_cls is None:
@@ -822,10 +908,11 @@ def main(item: str | None = None, qty: str = "1", have: str = "",
     except ValueError as e:
         sys.exit(str(e))
 
-    req = solver_cls(graph).solve({target: amount},
-                                  available={a: 0 for a in provided},
-                                  preferred=pinned, per_min=per_min,
-                                  byproducts=byproducts)
+    req = solver_cls(graph.recipes).solve(SolveRequest(
+        targets={target: amount},
+        available={a: 0 for a in provided},
+        preferred=pinned, per_min=per_min,
+        byproducts=byproducts))
     if as_json:
         print(json.dumps(result_json(req, graph, per_min), ensure_ascii=False, indent=2))
     else:
