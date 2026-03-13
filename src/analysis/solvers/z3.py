@@ -15,11 +15,9 @@ from fractions import Fraction
 from analysis.recipe_calc import (
     GAS_ENV_PROVIDERS,
     GAS_ENV_RATE,
-    KIND_CRAFT,
     KIND_EXTERN,
     KIND_RAW,
     RECYCLER_PREFIX,
-    ReqNode,
     Requirement,
     is_gatherable,
 )
@@ -99,10 +97,8 @@ class Z3Solver(RecipeSolver):
 
         opt.minimize(sum(cost(rid) for rid in recipes))
         if opt.check() != sat:
-            roots = [ReqNode(t, self.name_of(t), q, KIND_CRAFT)
-                     for t, q in targets.items()]
             note = "z3:约束不可满足(byproducts=False 时含副产物的路线会不可行)"
-            return Requirement(roots=roots, strict_ok=False, leaves={}, crafts={},
+            return Requirement(targets=targets, strict_ok=False, leaves={}, crafts={},
                                recipes_by_id=self.recipes_by_id,
                                notes=[note], byproducts={}, byproduct_sources={})
 
@@ -148,12 +144,7 @@ class Z3Solver(RecipeSolver):
                 leaves[(gas_id, KIND_RAW)] = (leaves.get((gas_id, KIND_RAW), Fraction(0))
                                               + GAS_ENV_RATE)
 
-        roots = [ReqNode(t, self.name_of(t), q, KIND_CRAFT)
-                 for t, q in targets.items()]
-        # 渲染层走树遍历(leaf_items):把流量解出的叶子挂到首个目标树下展示
-        for (i, kind), qty in sorted(leaves.items()):
-            roots[0].children.append(ReqNode(i, self.name_of(i), qty, kind))
-        return Requirement(roots=roots, strict_ok=True, leaves=leaves,
+        return Requirement(targets=targets, strict_ok=True, leaves=leaves,
                            crafts=solved, recipes_by_id=self.recipes_by_id,
                            notes=["z3 求解:最少制造次数口径(优先配方成本 1/4);"
                                   "设施维持按运行时长线性计入流量"],

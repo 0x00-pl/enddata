@@ -8,8 +8,8 @@
     preferred   优先使用配方:物品 → 配方 id(优先尝试,失败仍回退其他配方);
     byproducts  结果是否计入副产物输出与额外输入(环境维持/设备维持气体);
                 False 时只保留目标主链需求。
-返回 Requirement(leaves/byproducts/upkeep_supplies 等均为 物品 → 数量 映射;
-materials() 提供按物品聚合的净需求)。
+返回 Requirement(targets=目标→需求量;crafts/leaves/byproducts 等为
+平面解合计,leaves 按物品 → 数量;materials() 提供按物品聚合的净需求)。
 """
 
 from analysis.solvers.base import RecipeSolver, SolveRequest

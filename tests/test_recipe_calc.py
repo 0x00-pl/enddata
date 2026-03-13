@@ -28,7 +28,7 @@ from analysis.solvers.z3 import Z3Solver
 
 
 def leaf_map(req):
-    return {(n.id, n.kind): total for n, total in req.leaf_items()}
+    return dict(req.leaf_items())
 
 
 @pytest.fixture(scope="module")
@@ -268,7 +268,7 @@ def test_multi_target(graph):
     solver = Z3Solver(graph.recipes)
     req = solver.solve(SolveRequest({"item_filter_core": Fraction(60),
                                      "item_iron_cmpt": Fraction(10)}, per_min=True))
-    assert req.strict_ok and len(req.roots) == 2
+    assert req.strict_ok and len(req.targets) == 2
     mats = req.materials()
     assert mats["item_copper_ore"] == Fraction(60)
     assert mats["item_iron_ore"] == Fraction(10)
@@ -287,8 +287,8 @@ def test_conservation_sample(graph):
                 flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
             for s in r.require_items:
                 flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
-        for node, total in req.leaf_items():
-            flows[node.id] = flows.get(node.id, Fraction(0)) - total
+        for (iid, _kind), total in req.leaf_items():
+            flows[iid] = flows.get(iid, Fraction(0)) - total
         assert flows.get(t, Fraction(0)) == Fraction(7), t
 
 

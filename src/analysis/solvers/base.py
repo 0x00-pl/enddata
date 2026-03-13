@@ -15,7 +15,6 @@ from analysis.recipe_calc import (
     RECYCLER_PREFIX,
     Recipe,
     Requirement,
-    item_name,
     load_recipes,
 )
 
@@ -39,8 +38,7 @@ class RecipeSolver(ABC):
         子集场景(「仅这些配方可用」)直接传入清单。
     派生索引(构造时一次建好):
         recipes_by_id  配方 id → Recipe;
-        produced       有产出配方(不含拆解)的物品 id 集合;
-        name_of        物品 id → 中文名(配方栈自带,items 数据集兜底)。
+        produced       有产出配方(不含拆解)的物品 id 集合。
     """
 
     def __init__(self, recipes: Iterable[Recipe] | None = None) -> None:
@@ -49,14 +47,8 @@ class RecipeSolver(ABC):
         self.produced: set[str] = {s.id for r in self.recipes
                                    if not r.id.startswith(RECYCLER_PREFIX)
                                    for s in r.produce_items}
-        self._names: dict[str, str] = {s.id: s.name for r in self.recipes
-                                       for s in r.produce_items + r.require_items}
-
-    def name_of(self, item: str) -> str:
-        """物品中文名:配方栈自带 → items 数据集 → 回退 id。"""
-        return self._names.get(item) or item_name(item) or item
 
     @abstractmethod
     def solve(self, request: SolveRequest) -> Requirement:
-        """求解并返回 Requirement(展开树/树木 + 各类 物品 → 数量 合计)。"""
+        """求解并返回 Requirement(平面解:目标、制造次数、原料/副产物合计)。"""
         raise NotImplementedError

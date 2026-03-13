@@ -56,7 +56,6 @@ from __future__ import annotations
 import json
 import math
 import sys
-from collections.abc import Iterator
 from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import lru_cache
@@ -103,10 +102,9 @@ def facility_upkeep(runs: Fraction, craft_time: float | None) -> Fraction:
     return GAS_ENV_RATE * Fraction(runs) * Fraction(str(craft_time)) / 60
 
 # 叶子类型(需求来源)
-KIND_CRAFT = "craft"        # 经配方制造(内部节点)
 KIND_RAW = "raw"            # 采集资源(无产出配方或 obtainWays 非空)→ 最初用料
 KIND_EXTERN = "external"    # 有产出配方可不求自产的外部投料(持有清单/回收环物品)
-KIND_LABEL = {KIND_RAW: "最初用料", KIND_EXTERN: "外部投料", KIND_CRAFT: "制造"}
+KIND_LABEL = {KIND_RAW: "最初用料", KIND_EXTERN: "外部投料"}
 
 
 # ---------------------------------------------------------------- 数据模型
@@ -186,41 +184,26 @@ class Recipe:
 
 
 @dataclass
-class ReqNode:
-    """展开树节点:kind=craft 为内部节点(带配方与子需求),其余为叶子。"""
-
-    id: str
-    name: str
-    qty: Fraction
-    kind: str
-    recipe: Recipe | None = None
-    crafts: Fraction | None = None               # kind=craft:需制造次数
-    children: list["ReqNode"] = field(default_factory=list)
-
-    def walk(self) -> Iterator["ReqNode"]:
-        yield self
-        for c in self.children:
-            yield from c.walk()
-
-
-@dataclass
 class Requirement:
-    """一次(或多目标)倒推的完整结果:各目标展开树 + 摊平合计。"""
+    """一次(或多目标)求解的完整结果:平面解 + 摊平合计。
 
-    roots: list[ReqNode]
-    strict_ok: bool                              # 严格模式是否走通(False = 结果含环叶兜底)
-    leaves: dict[tuple[str, str], Fraction]      # (物品, 叶子类型) → 精确总量
-    crafts: dict[str, Fraction]                  # 配方 id → 制造次数(含环上配方)
+    z3 为整图线性求解,无逐层展开树——目标即 targets,原料按
+    (物品, 来源类型) 摊平在 leaves,数量均为精确有理数。
+    """
+
+    targets: dict[str, Fraction]                  # 目标物品 → 需求量(多目标合并为一份需求)
+    strict_ok: bool                               # 约束是否可满足(False = 不可行)
+    leaves: dict[tuple[str, str], Fraction]       # (物品, 叶子类型) → 外部需求精确总量
+    crafts: dict[str, Fraction]                   # 配方 id → 制造次数
     recipes_by_id: dict[str, Recipe]
     notes: list[str] = field(default_factory=list)   # 附注(求解口径等)
     byproducts: dict[str, Fraction] = field(default_factory=dict)    # 副产物净产出(非目标)
     byproduct_sources: dict[str, str] = field(default_factory=dict)  # 副产物 → 首个产出配方
-    upkeep_supplies: dict[str, Fraction] = field(default_factory=dict)  # 其中供设备维持的净产出
 
     @property
-    def root(self) -> ReqNode:
-        """单目标口径的主展开树(多目标时为首个目标)。"""
-        return self.roots[0]
+    def root(self) -> tuple[str, Fraction]:
+        """单目标口径的主目标(多目标时为首个):(物品 id, 需求量)。"""
+        return next(iter(self.targets.items()))
 
     def materials(self) -> dict[str, Fraction]:
         """需求原料聚合(物品 → 净外部需求量,含全部叶子类型),按数量降序。"""
@@ -229,20 +212,11 @@ class Requirement:
             out[i] = out.get(i, Fraction(0)) + v
         return dict(sorted(out.items(), key=lambda kv: -kv[1]))
 
-    def leaf_items(self, *kinds: str) -> list[tuple[ReqNode, Fraction]]:
-        """按叶子类型取合计(保留树中节点的中文名/依赖链),按数量降序。"""
-        out: list[tuple[ReqNode, Fraction]] = []
-        seen: set[tuple[str, str]] = set()
-        for root in self.roots:
-            for node in root.walk():
-                if node.kind == KIND_CRAFT:
-                    continue
-                key = (node.id, node.kind)
-                if key in seen or (kinds and node.kind not in kinds):
-                    continue
-                seen.add(key)
-                out.append((node, self.leaves[key]))
-        return sorted(out, key=lambda t: (-t[1], t[0].id))
+    def leaf_items(self, *kinds: str) -> list[tuple[tuple[str, str], Fraction]]:
+        """需求原料清单:((物品, 来源类型), 数量),按数量降序;kinds 过滤来源类型。"""
+        return sorted(((key, v) for key, v in self.leaves.items()
+                       if not kinds or key[1] in kinds),
+                      key=lambda kv: (-kv[1], kv[0][0]))
 
     def required_envs(self) -> list[tuple[str, list[str]]]:
         """链上配方要求的气体环境(非零 gasEnv)→ [环境名, [配方…]],稳定>湿润>酸性>息壤。"""
@@ -561,23 +535,11 @@ def fmt_ceil(q: Fraction) -> str:
     return str(-(-q.numerator // q.denominator))
 
 
-def render_tree(graph: RecipeGraph, node: ReqNode, _prefix: str = "", _is_last: bool = True) -> list[str]:
-    """标准树形渲染:分支符(├─/└─)画在子行,延续符(│ /空格)传给孙辈;
-    配方/循环注脚(⮡)缩进与子节点平齐,画在该节点全部子节点之后。"""
-    root_line = _prefix == ""
-    branch = "" if root_line else ("└─ " if _is_last else "├─ ")
-    lines = [f"{_prefix}{branch}{node.name} ×{fmt_qty(node.qty)}"]
-    ext = "   " if _is_last else "│  "
-    for i, c in enumerate(node.children):
-        lines.extend(render_tree(graph, c, _prefix + ext, i == len(node.children) - 1))
-    note = None
-    if node.kind == KIND_CRAFT and node.recipe is not None:
-        assert node.crafts is not None
-        note = f"配方 {node.recipe.id} ×{fmt_qty(node.crafts)} 次({node.recipe.describe()})"
-        if not node.recipe.require_items:
-            note += " [飞船制造,无原料]"
-    if note:
-        lines.append(f"{_prefix}{ext}⮡ {note}")
+def render_tree(graph: RecipeGraph, req: Requirement) -> list[str]:
+    """目标与需求原料的平铺渲染(z3 平面解,无逐层展开树;多目标共用一份原料)。"""
+    lines = [f"{graph.name_of(tid)} ×{fmt_qty(qty)}" for tid, qty in req.targets.items()]
+    lines += [f"   └─ {graph.name_of(iid)} ×{fmt_qty(total)}"
+              for (iid, _kind), total in req.leaf_items()]
     return lines
 
 
@@ -605,8 +567,8 @@ def render_mermaid(graph: RecipeGraph, req: Requirement) -> str:
             gas = upkeep[0]
             upkeep_in[(gas, rid)] = upkeep_in.get((gas, rid), Fraction(0)) + q
             flows[gas] = flows.get(gas, Fraction(0)) - q
-    target_ids = {r.id for r in req.roots}
-    target_qty = {r.id: r.qty for r in req.roots}
+    target_ids = set(req.targets)
+    target_qty = dict(req.targets)
 
     # ② 节点与配方↔物品边
     edges: dict[tuple[str, str], Fraction] = {}
@@ -673,9 +635,9 @@ def render_result(graph: RecipeGraph, target_label: str, req: Requirement,
                   per_min: bool = False) -> str:
     """控制台查询结果:展开树 + 需求原料 + 产出(含副产物) + 制造步骤 + 设备 + 环境 + 链路图。"""
     unit = "/min" if per_min else ""
-    qty_word = f"×{fmt_qty(req.root.qty)}{unit}"
+    qty_word = f"×{fmt_qty(req.root[1])}{unit}"
     lines = [f"目标 {target_label} {qty_word}"]
-    lines += render_tree(graph, req.root)
+    lines += render_tree(graph, req)
     lines.append("")
     leaves = req.leaf_items()
     if not leaves:
@@ -683,24 +645,19 @@ def render_result(graph: RecipeGraph, target_label: str, req: Requirement,
     else:
         head = "需求原料(每分钟流量;精确流量 → 实备数量)" if per_min else "需求原料(精确用量 → 实备数量)"
         lines.append(f"{head},{len(leaves)} 项:")
-        for node, total in leaves:
-            kind = KIND_LABEL[node.kind]
-            line = (f"  [{kind}] {node.name:<12} ×{fmt_qty(total):<10} → 备料 "
+        for (iid, kind), total in leaves:
+            label = KIND_LABEL[kind]
+            line = (f"  [{label}] {graph.name_of(iid):<12} ×{fmt_qty(total):<10} → 备料 "
                     f"{fmt_ceil(total)}{unit}")
-            if node.kind == KIND_RAW and (src := graph.obtain_of(node.id)):
+            if kind == KIND_RAW and (src := graph.obtain_of(iid)):
                 line += f"({src})"
             lines.append(line)
-    parts = [f"目标 {graph.name_of(req.root.id)} {qty_word}"]
-    if true_bp := {i: n for i, n in req.byproducts.items() if i not in req.upkeep_supplies}:
+    parts = [f"目标 {graph.name_of(req.root[0])} {qty_word}"]
+    if req.byproducts:
         bp = "、".join(f"{graph.name_of(i)} ×{fmt_qty(n)}{unit}"
                        f"(← {req.byproduct_sources[i]})"
-                       for i, n in sorted(true_bp.items(), key=lambda kv: -kv[1]))
+                       for i, n in sorted(req.byproducts.items(), key=lambda kv: -kv[1]))
         parts.append(f"副产物 {bp}")
-    if req.upkeep_supplies:
-        sup = "、".join(f"{graph.name_of(i)} ×{fmt_qty(n)}{unit}"
-                        f"(← {req.byproduct_sources[i]},供转化机通入)"
-                        for i, n in sorted(req.upkeep_supplies.items(), key=lambda kv: -kv[1]))
-        parts.append(f"维持供应 {sup}")
     lines.append("产出:" + ";".join(parts))
     craft_lines = [f"  {rid} ×{fmt_qty(n)} 次{unit}  {graph.recipes_by_id[rid].describe()}"
                    for rid, n in sorted(req.crafts.items())]
@@ -750,15 +707,6 @@ def render_result(graph: RecipeGraph, target_label: str, req: Requirement,
 def result_json(req: Requirement, graph: RecipeGraph, per_min: bool = False) -> dict:
     """机器可读输出(Fraction → "num/den" 字符串 + ceil 整数)。"""
 
-    def node_json(n: ReqNode) -> dict:
-        d: dict = {"id": n.id, "name": n.name, "qty": str(n.qty),
-                   "qty_ceil": int(-(-n.qty.numerator // n.qty.denominator)), "kind": n.kind}
-        if n.recipe is not None:
-            d["recipe_id"] = n.recipe.id
-            assert n.crafts is not None
-            d["crafts"] = str(n.crafts)
-        return {**d, "children": [node_json(c) for c in n.children]}
-
     def fr(v: Fraction) -> dict:
         return {"exact": str(v), "ceil": int(-(-v.numerator // v.denominator))}
 
@@ -767,15 +715,17 @@ def result_json(req: Requirement, graph: RecipeGraph, per_min: bool = False) -> 
                      **({"provider_gas": gas, "provider_rate_per_min": str(rate)}
                         if (pair := upkeep_by_name.get(env)) else {})}
                     for env, rids in req.required_envs()]
+    tid, qty = req.root
     return {
-        "target": {"id": req.root.id, "name": req.root.name, "qty": str(req.root.qty),
+        "target": {"id": tid, "name": graph.name_of(tid), "qty": str(qty),
                    "per_min": per_min},
+        "targets": [{"id": t, "name": graph.name_of(t), "qty": str(q)}
+                    for t, q in req.targets.items()],
         "strict_ok": req.strict_ok,
         "notes": req.notes,
-        "tree": node_json(req.root),
-        "leaves": [{"id": n.id, "name": n.name, "kind": n.kind, **fr(total),
-                    **({"obtain": src} if n.kind == KIND_RAW and (src := graph.obtain_of(n.id)) else {})}
-                   for n, total in req.leaf_items()],
+        "leaves": [{"id": iid, "name": graph.name_of(iid), "kind": kind, **fr(total),
+                    **({"obtain": src} if kind == KIND_RAW and (src := graph.obtain_of(iid)) else {})}
+                   for (iid, kind), total in req.leaf_items()],
         "crafts": [{"recipe": rid, "station": req.recipes_by_id[rid].station, **fr(n)}
                    for rid, n in sorted(req.crafts.items())],
         "byproducts": [{"id": i, "name": graph.name_of(i),
