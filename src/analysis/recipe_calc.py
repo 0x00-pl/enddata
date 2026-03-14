@@ -56,6 +56,7 @@ from __future__ import annotations
 import json
 import math
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from fractions import Fraction
 from functools import lru_cache
@@ -246,6 +247,109 @@ class Requirement:
                 seen.add(name)
                 out.append(name)
         return out
+
+
+# ---------------------------------------------------------------- 求解结果推导
+# 求解器只给平面解(配方 id → 制造次数,见 solvers.SolveResult);以下纯函数
+# 按制造次数推导展示口径的各类合计,渲染层与 CLI 共用(与求解器守恒一致)。
+
+def net_flows(recipes_by_id: dict[str, Recipe],
+              crafts: Mapping[str, Fraction]) -> dict[str, Fraction]:
+    """各物品净流量 = Σ 制造次数 ×(产出 − 消耗 − 设施维持)。"""
+    flows: dict[str, Fraction] = {}
+    for rid, n in crafts.items():
+        r = recipes_by_id[rid]
+        for s in r.produce_items:
+            flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
+        for s in r.require_items:
+            flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
+        upkeep = r.require_upkeep
+        if upkeep is not None:
+            gas_id, per_craft = upkeep
+            flows[gas_id] = flows.get(gas_id, Fraction(0)) - n * per_craft
+    return flows
+
+
+def demand_leaves(graph: RecipeGraph, targets: Mapping[str, Fraction],
+                  crafts: Mapping[str, Fraction]) -> dict[tuple[str, str], Fraction]:
+    """外部需求清单:(物品, 来源类型) → 数量。
+
+    净流量为负 = 外部缺口(有产出配方 = 外部投料,否则最初用料);另按
+    用到的气体环境计入散布机维持供气(每种环境 6/min)。
+    """
+    tids = set(targets)
+    leaves: dict[tuple[str, str], Fraction] = {}
+    for i, net in net_flows(graph.recipes_by_id, crafts).items():
+        if i not in tids and net < 0:
+            leaves[(i, KIND_EXTERN if i in graph.producers else KIND_RAW)] = -net
+    for env in {graph.recipes_by_id[rid].require_env for rid in crafts}:
+        if env in GAS_ENV_PROVIDERS:
+            key = (GAS_ENV_PROVIDERS[env][0], KIND_RAW)
+            leaves[key] = leaves.get(key, Fraction(0)) + GAS_ENV_RATE
+    return leaves
+
+
+def demand_byproducts(graph: RecipeGraph, targets: Mapping[str, Fraction],
+                      crafts: Mapping[str, Fraction]) -> tuple[dict[str, Fraction],
+                                                               dict[str, str]]:
+    """副产物:(净产出 物品 → 数量, 副产物 → 首个产出配方 id)。
+
+    byproducts=False 求解时硬约束已保证非目标物品净流量 ≤ 0,推导结果为空。
+    """
+    tids = set(targets)
+    out = {i: f for i, f in net_flows(graph.recipes_by_id, crafts).items()
+           if f > 0 and i not in tids}
+    sources = {i: next(rid for rid in crafts
+                       if any(s.id == i for s in graph.recipes_by_id[rid].produce_items))
+               for i in out}
+    return out, sources
+
+
+def leaf_items(leaves: Mapping[tuple[str, str], Fraction]) -> list[tuple[tuple[str, str], Fraction]]:
+    """需求原料清单:((物品, 来源类型), 数量),按数量降序。"""
+    return sorted(leaves.items(), key=lambda kv: (-kv[1], kv[0][0]))
+
+
+def materials(leaves: Mapping[tuple[str, str], Fraction]) -> dict[str, Fraction]:
+    """需求原料聚合(物品 → 净外部需求量,含全部来源类型),按数量降序。"""
+    out: dict[str, Fraction] = {}
+    for (i, _k), v in leaves.items():
+        out[i] = out.get(i, Fraction(0)) + v
+    return dict(sorted(out.items(), key=lambda kv: -kv[1]))
+
+
+def required_envs(recipes_by_id: dict[str, Recipe],
+                  crafts: Mapping[str, Fraction]) -> list[tuple[str, list[str]]]:
+    """链上配方要求的气体环境(非零)→ [环境名, [配方…]],稳定>湿润>酸性>息壤。"""
+    envs: dict[str, list[str]] = {}
+    for rid in crafts:
+        if env := recipes_by_id[rid].env_name:
+            envs.setdefault(env, []).append(rid)
+    return sorted(envs.items(), key=lambda kv: list(GAS_ENV_NAMES.values()).index(kv[0]))
+
+
+def env_upkeep(recipes_by_id: dict[str, Recipe],
+               crafts: Mapping[str, Fraction]) -> list[tuple[str, str, Fraction]]:
+    """环境维持清单:(环境名, 供气气体 id, 每分钟通入量)。
+
+    气体散布机持续通入对应气体形成环境(FactoryVaporizerTable:各类气体
+    恒 6/min,上限 30),一台散布机可同时影响范围内多台设备,按环境各计一台。
+    """
+    used = {recipes_by_id[rid].require_env for rid in crafts}
+    return [(GAS_ENV_NAMES[e], GAS_ENV_PROVIDERS[e][0], GAS_ENV_RATE)
+            for e in sorted(used) if e in GAS_ENV_PROVIDERS]
+
+
+def used_facilities(recipes_by_id: dict[str, Recipe],
+                    crafts: Mapping[str, Fraction]) -> list[str]:
+    """链上用到的生产设施中文名(按首次出现序去重)。"""
+    seen, out = set(), []
+    for rid in crafts:
+        name = recipes_by_id[rid].machine_name or recipes_by_id[rid].station
+        if name not in seen:
+            seen.add(name)
+            out.append(name)
+    return out
 
 
 # ---------------------------------------------------------------- 数据加载
