@@ -8,11 +8,12 @@
     preferred   优先使用配方:物品 → 配方 id(优先尝试,失败仍回退其他配方);
     byproducts  结果是否计入副产物输出与额外输入(环境维持/设备维持气体);
                 False 时只保留目标主链需求。
-返回 Requirement(targets=目标→需求量;crafts/leaves/byproducts 等为
-平面解合计,leaves 按物品 → 数量;materials() 提供按物品聚合的净需求)。
+返回 SolveResult(平面解:crafts=配方 id → 制造次数、strict_ok 可行性);
+叶子/副产物/环境等展示合计不由求解器给出,由 recipe_calc 的推导函数
+(net_flows/demand_leaves/demand_byproducts 等)按制造次数重算。
 """
 
-from analysis.solvers.base import RecipeSolver, SolveRequest
+from analysis.solvers.base import RecipeSolver, SolveRequest, SolveResult
 
 SOLVERS: dict[str, type[RecipeSolver]] = {}
 

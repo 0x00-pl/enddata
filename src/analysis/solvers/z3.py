@@ -12,18 +12,10 @@
 
 from fractions import Fraction
 
-from analysis.recipe_calc import (
-    GAS_ENV_PROVIDERS,
-    GAS_ENV_RATE,
-    KIND_EXTERN,
-    KIND_RAW,
-    RECYCLER_PREFIX,
-    Requirement,
-    is_gatherable,
-)
+from analysis.recipe_calc import RECYCLER_PREFIX, is_gatherable
 
 
-from analysis.solvers import RecipeSolver, SolveRequest, register
+from analysis.solvers import RecipeSolver, SolveRequest, SolveResult, register
 
 
 @register("z3")
@@ -47,7 +39,7 @@ class Z3Solver(RecipeSolver):
         - byproducts=False 是硬约束:依赖副产物的路线(如需冶炼产污水)会不可行。
     """
 
-    def solve(self, request: SolveRequest) -> Requirement:
+    def solve(self, request: SolveRequest) -> SolveResult:
         from z3 import Optimize, Real, sat
 
         targets = {t: Fraction(q) for t, q in request.targets.items()}
@@ -97,10 +89,7 @@ class Z3Solver(RecipeSolver):
 
         opt.minimize(sum(cost(rid) for rid in recipes))
         if opt.check() != sat:
-            note = "z3:约束不可满足(byproducts=False 时含副产物的路线会不可行)"
-            return Requirement(targets=targets, strict_ok=False, leaves={}, crafts={},
-                               recipes_by_id=self.recipes_by_id,
-                               notes=[note], byproducts={}, byproduct_sources={})
+            return SolveResult(crafts={}, strict_ok=False)
 
         model = opt.model()
         solved: dict[str, Fraction] = {}
@@ -109,43 +98,4 @@ class Z3Solver(RecipeSolver):
             frac = Fraction(val.numerator_as_long(), val.denominator_as_long())
             if frac > 0:
                 solved[rid] = frac
-
-        # 按解出的制造次数重算净流量(含设施维持消耗)→ 叶子/副产物
-        leaves: dict[tuple[str, str], Fraction] = {}
-        flows: dict[str, Fraction] = {}
-        for rid, n in solved.items():
-            r = recipes[rid]
-            for s in r.produce_items:
-                flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
-            for s in r.require_items:
-                flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
-            upkeep = r.require_upkeep
-            if upkeep is not None:
-                gas_id, per_craft = upkeep
-                flows[gas_id] = flows.get(gas_id, Fraction(0)) - n * per_craft
-        for i, net in sorted(flows.items()):
-            if i in target_ids:
-                continue
-            if net < 0:  # 外部消耗 → 需求原料(有产出配方=外部投料,否则最初用料)
-                kind = KIND_EXTERN if i in self.produced else KIND_RAW
-                leaves[(i, kind)] = -net
-        byproducts_out = ({i: f for i, f in flows.items()
-                           if f > 0 and i not in target_ids and byproducts}
-                          if byproducts else {})
-        sources = {i: next(rid for rid, n in solved.items()
-                           if any(s.id == i for s in recipes[rid].produce_items))
-                   for i in byproducts_out}
-
-        # 环境维持:用到的每种气体环境,散布机恒定通入采集气体 6/min
-        for env in sorted({r.require_env for rid, n in solved.items()
-                           for r in [recipes[rid]] if r.require_env}):
-            if (gas := GAS_ENV_PROVIDERS.get(env)) is not None:
-                gas_id = gas[0]
-                leaves[(gas_id, KIND_RAW)] = (leaves.get((gas_id, KIND_RAW), Fraction(0))
-                                              + GAS_ENV_RATE)
-
-        return Requirement(targets=targets, strict_ok=True, leaves=leaves,
-                           crafts=solved, recipes_by_id=self.recipes_by_id,
-                           notes=["z3 求解:最少制造次数口径(优先配方成本 1/4);"
-                                  "设施维持按运行时长线性计入流量"],
-                           byproducts=byproducts_out, byproduct_sources=sources)
+        return SolveResult(crafts=solved, strict_ok=True)

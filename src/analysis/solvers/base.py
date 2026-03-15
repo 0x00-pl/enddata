@@ -2,8 +2,8 @@
 
 求解器只依赖配方清单(Iterable[Recipe])与 recipe_calc 的数据层服务
 (item_catalog/is_gatherable 等),不依赖 RecipeGraph 索引(那是 CLI
-渲染层的结构)。求解所需的派生索引(产出集合、id 直查、名称解析)由
-基类从配方清单自行构建,全进程共享 items 数据集缓存。
+渲染层的结构)。求解所需的派生索引(产出集合、id 直查)由基类从配方
+清单自行构建,全进程共享 items 数据集缓存。
 """
 
 from abc import ABC, abstractmethod
@@ -14,7 +14,6 @@ from fractions import Fraction
 from analysis.recipe_calc import (
     RECYCLER_PREFIX,
     Recipe,
-    Requirement,
     load_recipes,
 )
 
@@ -30,8 +29,22 @@ class SolveRequest:
     byproducts: bool = True                         # 结果是否计入副产物与维持流量
 
 
+@dataclass(frozen=True)
+class SolveResult:
+    """solve 的原始输出:整图平面解(精确有理数)。
+
+    crafts    配方 id → 制造次数(仅计入 > 0 的配方);
+    strict_ok False = 约束不可满足(crafts 为空,目标无法满足);
+    叶子/副产物/环境等展示合计不由求解器给出——由 recipe_calc 的
+    推导函数(net_flows/demand_leaves 等)按制造次数重算。
+    """
+
+    crafts: Mapping[str, Fraction]
+    strict_ok: bool
+
+
 class RecipeSolver(ABC):
-    """配方求解器抽象基类:在配方清单上对目标物品需求求解,返回 Requirement。
+    """配方求解器抽象基类:在配方清单上对目标物品需求求解,返回平面解。
 
     构造:
         recipes 参与求解的配方清单(缺省加载全量 data/recipes);
@@ -49,6 +62,6 @@ class RecipeSolver(ABC):
                                    for s in r.produce_items}
 
     @abstractmethod
-    def solve(self, request: SolveRequest) -> Requirement:
-        """求解并返回 Requirement(平面解:目标、制造次数、原料/副产物合计)。"""
+    def solve(self, request: SolveRequest) -> SolveResult:
+        """求解目标需求,返回平面解(配方 id → 制造次数 + 可行性)。"""
         raise NotImplementedError
