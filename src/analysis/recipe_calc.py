@@ -7,33 +7,28 @@
                [{group:[{id,name,count}]}],同组与同槽原料**同时消耗**(AND,
                见 collection/recipes.py resolve_side 注:如灌装=空瓶+溶液),
                数据集中不存在"可替代"语义 → 计算前直接摊平为 [(物品, 数量)]
-    用量数学   fractions.Fraction 精确计算:所需制造次数 = 需求量 ÷ 产物单次
-               产出,子需求 = 原料单耗 × 制造次数;展示时附向上取整值
+    用量数学   fractions.Fraction 精确计算(z3 有理数求解,结果无浮点误差);
+               展示时附向上取整的实备数量
     环的处理   求解为 z3 整图线性约束(见 analysis/solvers/z3.py):每种物品
                一条净流量守恒等式(产出 − 消耗 − 设施维持 = 净流量),环与
                共享中间品天然可解(如 种子⇄作物 自持、清水⇄水蒸气 回收环),
                无需展开/回退启发;目标函数 = 最少制造次数(preferred 配方
-               成本按 1/4 计的软偏好)
+               成本按 1/4 计的软偏好),多产出配方由目标函数统一计价
     回收配方   拆解机配方(dismantler_,满瓶→空瓶+溶液一类)是回收环而非
                生产途径,整体不列入产出图谱;某物品若仅能由拆解产出(如惰气),
                视同最初用料(外部获取)
-    配方择路   同一物品多条产出配方时按序取最优:该物品是首条产物(主产物,
-               非副产物)优先 → 站点 machine>manual>spaceship → 制造耗时短
-               优先 → id 字典序
-    终止条件   ① 无任何产出配方的物品 = 最初用料(raw,附 items 数据集的
-                 获取途径注记,如 惰气 = 惰气矿点采集);
-               ② 命中 --have 提供清单 = 外部提供(provided),展开到此为止;
-               ③ 求解器判定的外部投料点(external)与宽松兜底环叶(cycle,
-                 附依赖链);
-               ④ 飞船配方无原料 = 制造步骤但零投入(free);
-               ⑤ 环境维持(env):链上配方要求气体环境时,气体散布机持续
+    需求来源   ① 最初用料(raw):无产出配方的外部物品,附 items 数据集的
+                 获取途径注记(如 惰气 = 惰气矿点采集);
+               ② 外部投料(external):有产出配方但按口径不求自产(持有清单
+                 --have、清水等采集资源、回收环物品);
+               ③ 环境维持(env):链上配方要求气体环境时,气体散布机持续
                  通入对应气体 6/min(惰气→稳定、水蒸气→湿润、酸气→酸性、
                  息壤气→息壤),作为附加叶子计入需求原料;
-               ⑥ 设备维持(upkeep,仅速率口径):转化机运行需持续通入息壤系
+               ④ 设备维持(upkeep,仅速率口径):转化机运行需持续通入息壤系
                  气体(FactoryTransmuterTable:液气转化机通液化息壤、固气
-                 转化机通息壤气,6/min/台、上限 30),按设备台数计入需求原料
-                 ——「溶液方案省息壤气」即源于液气路线把维持消耗从息壤气
-                 换成液化息壤
+                 转化机通息壤气,6/min/台、上限 30),按运行时长线性计入
+                 需求原料——「溶液方案省息壤气」即源于液气路线把维持消耗
+                 从息壤气换成液化息壤
     副产物     仅统计目标产物所需,污水等副产物不做回收抵扣(那属于产线
                规划/LP 范畴,见 README 对旧 planner 的说明)
 
@@ -73,7 +68,6 @@ STATIONS = ("manual", "machine", "spaceship")
 REPORT_PATH = REPORTS_DIR / "recipe-analysis.md"
 
 RECYCLER_PREFIX = "dismantler_"                     # 拆解机:回收/反向配方,默认不作产出途径
-STATION_RANK = {"machine": 0, "manual": 1, "spaceship": 2}
 
 # 所需气体环境(机器表 gasEnv / FactoryEnvDisplayTable):0=无要求
 GAS_ENV_NAMES = {1: "稳定环境", 2: "湿润环境", 3: "酸性环境", 4: "息壤环境"}
@@ -96,15 +90,15 @@ MACHINE_UPKEEP = {
 }
 
 
-def facility_upkeep(runs: Fraction, craft_time: float | None) -> Fraction:
-    """配方执行 runs 次的设施维持气体通入量/min:6/min × 单次耗时 ÷ 60(线性占用)。
+def facility_upkeep(craft_time: float | None) -> Fraction:
+    """单次制造的设施维持气体通入量:6/min × 单次耗时 ÷ 60(线性占用)。
 
     与设备台数(向上取整,见 machine_counts)分开:气体按实际运行时长线性
-    消耗,不随取整虚增;各求解器与链路图共用此口径。
+    消耗,不随取整虚增;多次制造的总量 = 次数 × 本值,由调用方线性放大。
     """
     if not craft_time:
         return Fraction(0)
-    return GAS_ENV_RATE * Fraction(runs) * Fraction(str(craft_time)) / 60
+    return GAS_ENV_RATE * Fraction(str(craft_time)) / 60
 
 # 叶子类型(需求来源)
 KIND_RAW = "raw"            # 采集资源(无产出配方或 obtainWays 非空)→ 最初用料
@@ -154,7 +148,7 @@ class Recipe:
         gas = MACHINE_UPKEEP.get(self.require_machine or "")
         if gas is None:
             return None
-        return gas, facility_upkeep(Fraction(1), self.require_time)
+        return gas, facility_upkeep(self.require_time)
 
     def produce_of(self, item: str) -> int:
         """单次制造产出 item 的数量(仅统计目标物品本身,副产物另计不计抵扣)。"""
@@ -162,10 +156,6 @@ class Recipe:
             if s.id == item:
                 return s.count
         return 0
-
-    def require_of(self, item: str) -> int:
-        """单次制造消耗 item 的数量(各原料槽求和,正常数据至多一槽)。"""
-        return sum(s.count for s in self.require_items if s.id == item)
 
     def describe(self) -> str:
         """单行配方卡:A*n+B*m --设备(环境,维持*k/min)--> C*p+D*q。
@@ -388,34 +378,23 @@ def machine_names() -> dict[str, str]:
 
 
 class RecipeGraph:
-    """配方只读索引:物品 → 产出配方(确定性排序)、id↔名称解析、采集属性。"""
+    """配方只读索引:物品 → 产出配方、id↔名称解析、采集属性。"""
 
     def __init__(self, recipes: list[Recipe] | None = None) -> None:
         self.recipes = load_recipes() if recipes is None else list(recipes)
         self.recipes_by_id = {r.id: r for r in self.recipes}
-        # 产出图谱只收非拆解配方(拆解 = 回收环,见模块 docstring)
+        # 产出图谱只收非拆解配方(拆解 = 回收环,见模块 docstring);
+        # 仅作成员判断/遍历,无择路序(z3 由目标函数统一计价)
         self.producers: dict[str, list[Recipe]] = {}
         for r in self.recipes:
             if r.id.startswith(RECYCLER_PREFIX):
                 continue
             for s in r.produce_items:
                 self.producers.setdefault(s.id, []).append(r)
-        for item, rs in self.producers.items():
-            rs.sort(key=lambda r: self._order_key(r, item))
         self._names: dict[str, str] = {s.id: s.name for r in self.recipes for s in r.produce_items + r.require_items}
         self._used_items: set[str] = {s.id for r in self.recipes for s in r.require_items}
         self._item_names: dict[str, str] | None = None
         self._obtain: dict[str, str] | None = None
-
-    @staticmethod
-    def _order_key(r: Recipe, item: str) -> tuple:
-        """产出配方择路序:主产物 → 站点 → 耗时 → id(见模块 docstring)。"""
-        return (
-            0 if (r.produce_items and r.produce_items[0].id == item) else 1,
-            STATION_RANK.get(r.station, 9),
-            (0, r.require_time) if r.require_time is not None else (1, 0.0),
-            r.id,
-        )
 
     # -- 名称与解析 -----------------------------------------------------------
     def name_of(self, item: str) -> str:
@@ -428,10 +407,6 @@ class RecipeGraph:
         """物品获取途径首条(items 数据集 obtainWays,最初用料来源注记)。"""
         self._ensure_items_loaded()
         return self._obtain.get(item)
-
-    def is_gatherable(self, item: str) -> bool:
-        """采集类资源(obtainWays 非空,如 清水=水泵采集):收缩阶段不翻成内部合成。"""
-        return self.obtain_of(item) is not None
 
     def resolve(self, query: str) -> tuple[str | None, list[str]]:
         """查询串 → 物品 id。依次:精确 id → 精确名称 → 唯一子串(大小写不敏感)。
@@ -801,7 +776,7 @@ def build_report(graph: RecipeGraph, demos: list[tuple[str, Fraction, frozenset[
                  f"无配方最初用料 {len(items_used - items_made)} 种,可制造 "
                  f"{len(items_made & items_used)} 种")
     lines.append("- 口径:同组/同槽原料同时消耗(AND);副产物不做回收抵扣;"
-                 "配方择路 = 主产物 → machine>manual>spaceship → 耗时短 → id;"
+                 "多产出配方由 z3 目标函数统一计价(最少制造次数);"
                  "拆解(dismantler_)配方不列为产出途径")
     lines.append("- 环处理:z3 整图线性约束,每种物品一条净流量守恒等式,环与共享"
                  "中间品天然可解;采集类资源(obtainWays 非空)允许外部供给")
