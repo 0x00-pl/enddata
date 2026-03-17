@@ -1,9 +1,8 @@
 """RecipeSolver 抽象基类:solve 的输入/输出契约(所有集合以物品 id 为键)。
 
 求解器只依赖配方清单(Iterable[Recipe])与 recipe_calc 的数据层服务
-(item_catalog/is_gatherable 等),不依赖 RecipeGraph 索引(那是 CLI
-渲染层的结构)。求解所需的派生索引(产出集合、id 直查)由基类从配方
-清单自行构建,全进程共享 items 数据集缓存。
+(item_catalog/is_gatherable 等),不经过任何索引对象;求解所需的派生
+索引(产出集合、id 直查)由基类从配方清单自行构建。
 """
 
 from abc import ABC, abstractmethod

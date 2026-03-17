@@ -6,7 +6,8 @@
 建点+单入单出收缩)、渲染分节、JSON 输出、总览报告、守恒抽样不变量。
 
 求解器只返回平面解(SolveResult:crafts + strict_ok);叶子/副产物等展示
-合计由 demand_leaves/demand_byproducts 等推导函数按制造次数重算。
+合计由 demand_leaves/demand_byproducts 等推导函数按制造次数重算;全量配方
+与索引(名称/消歧/产出集合/环检测)均为 recipe_calc 模块级共享服务。
 
 运行:poetry run pytest tests/ -q
 """
@@ -16,34 +17,37 @@ from fractions import Fraction
 import pytest
 
 from analysis.recipe_calc import (
+    render_mermaid,
+    render_result,
     KIND_EXTERN,
     KIND_RAW,
-    RecipeGraph,
     compute,
     demand_byproducts,
     demand_leaves,
+    load_recipes,
     machine_counts,
     materials,
     net_flows,
     parse_qty,
-    render_mermaid,
-    render_result,
+    produced_ids,
+    recipes_by_id,
     required_envs,
+    resolve_item,
     result_json,
 )
 from analysis.solvers import SolveRequest
 from analysis.solvers.z3 import Z3Solver
 
 
-def solve_leaves(graph, target, qty, **kw):
+def solve_leaves(target, qty, **kw):
     """单目标求解便利:返回 (平面解, 需求叶子清单)。"""
-    res = compute(graph, target, Fraction(qty), **kw)
-    return res, demand_leaves(graph, {target: Fraction(qty)}, res.crafts)
+    res = compute(target, Fraction(qty), **kw)
+    return res, demand_leaves(recipes_by_id(), {target: Fraction(qty)}, res.crafts)
 
 
 @pytest.fixture(scope="module")
-def graph():
-    return RecipeGraph()
+def rbi():
+    return recipes_by_id()
 
 
 # ---------------------------------------------------------------- 数量与解析
@@ -58,26 +62,28 @@ def test_parse_qty():
             parse_qty(bad)
 
 
-def test_resolve(graph):
-    assert graph.resolve("item_iron_cmpt")[0] == "item_iron_cmpt"
+def test_resolve():
+    assert resolve_item("item_iron_cmpt") == ("item_iron_cmpt", [])
     # 重名消歧:铁制零件 = 材料 item_iron_cmpt 与系统蓝图 sysbp_*,参与配方图者优先
-    assert graph.resolve("铁制零件")[0] == "item_iron_cmpt"
-    assert graph.resolve("灼铜零件")[0] == "item_copper_enr2_cmpt"
-    assert graph.resolve("蓝铁瓶")[0] == "item_iron_bottle"
-    assert graph.resolve("不存在的东西") == (None, [])
+    assert resolve_item("铁制零件")[0] == "item_iron_cmpt"
+    assert resolve_item("灼铜零件")[0] == "item_copper_enr2_cmpt"
+    assert resolve_item("蓝铁瓶")[0] == "item_iron_bottle"
+    assert resolve_item("不存在的东西") == (None, [])
 
 
-def test_dismantler_excluded(graph):
-    """拆解配方不列入产出图谱;仅能拆解产出的物品(惰气)视同最初用料。"""
-    for item, recipes in graph.producers.items():
-        assert all(not r.id.startswith("dismantler_") for r in recipes)
-    assert "item_gas_inert" not in graph.producers
+def test_dismantler_excluded():
+    """拆解配方不计入产出集合;仅能由拆解产出的物品(如惰气)视同最初用料。"""
+    produced = produced_ids()
+    assert "item_gas_inert" not in produced
+    non_dismantler_out = {s.id for r in load_recipes()
+                          if not r.id.startswith("dismantler_") for s in r.produce_items}
+    assert produced == non_dismantler_out
 
 
-def test_vaporizer_produce_env(graph):
+def test_vaporizer_produce_env():
     """散布机合成条目(produce_env 来源):通入气体 ×6/min 产出对应环境;
-    无物品产出、不进产出图谱,求解不会被选中。"""
-    spreaders = [r for r in graph.recipes if r.produce_env]
+    无物品产出、不进产出集合,求解不会被选中。"""
+    spreaders = [r for r in load_recipes() if r.produce_env]
     assert {r.produce_env: r.require_items[0].id for r in spreaders} == {
         1: "item_gas_inert", 2: "item_gas_water",
         3: "item_gas_acid", 4: "item_gas_xiranite"}
@@ -85,15 +91,13 @@ def test_vaporizer_produce_env(graph):
         assert r.produce_items == () and r.require_machine == "vaporizer_1"
         assert r.machine_name == "气体散布机"
         assert r.require_items[0].count == 6 and r.require_time is None
-    assert not any(r.id.startswith("vaporizer_")
-                   for rs in graph.producers.values() for r in rs)
-    res = compute(graph, "item_copper_enr2_cmpt", Fraction(6))
+    res = compute("item_copper_enr2_cmpt", Fraction(6))
     assert not any(rid.startswith("vaporizer_") for rid in res.crafts)
 
 
 # ---------------------------------------------------------------- 基础求解
-def test_basic_chain(graph):
-    res, leaves = solve_leaves(graph, "item_iron_cmpt", 10)
+def test_basic_chain(rbi):
+    res, leaves = solve_leaves("item_iron_cmpt", 10)
     assert res.strict_ok
     assert leaves == {("item_iron_ore", KIND_RAW): Fraction(10)}
     assert res.crafts == {
@@ -102,87 +106,87 @@ def test_basic_chain(graph):
     }
 
 
-def test_fractional_qty(graph):
-    res, leaves = solve_leaves(graph, "item_iron_nugget", Fraction(1, 2))
+def test_fractional_qty():
+    res, leaves = solve_leaves("item_iron_nugget", Fraction(1, 2))
     assert res.crafts == {"furnance_iron_nugget_1": Fraction(1, 2)}
     assert leaves == {("item_iron_ore", KIND_RAW): Fraction(1, 2)}
 
 
-def test_seed_loop_native(graph):
+def test_seed_loop_native(rbi):
     """环原生求解:锦草 ×10 由 种植+采种 自持供给,种子不求外部,
     清水(水泵采集)为唯一外部投入。"""
-    res, leaves = solve_leaves(graph, "item_plant_grass_1", 10)
+    res, leaves = solve_leaves("item_plant_grass_1", 10)
     assert res.strict_ok
     assert res.crafts == {
         "planter_plant_grass_1_1": Fraction(10),
         "seedcollector_plant_grass_1_1": Fraction(10),
     }
     assert leaves == {("item_liquid_water", KIND_EXTERN): Fraction(10)}
-    assert demand_byproducts(graph, {"item_plant_grass_1": Fraction(10)},
+    assert demand_byproducts(rbi, {"item_plant_grass_1": Fraction(10)},
                              res.crafts) == ({}, {})
 
 
-def test_available_stops_production(graph):
+def test_available_stops_production(rbi):
     """持有清单(available):清单物品只耗不产,不再为其安排产出配方。"""
-    solver = Z3Solver(graph.recipes)
+    solver = Z3Solver(load_recipes())
     targets = {"item_plant_grass_1": Fraction(10)}
     res = solver.solve(SolveRequest(targets,
                                     available={"item_plant_grass_seed_1": 0}))
     assert res.crafts == {"planter_plant_grass_1_1": Fraction(5)}   # 单次产 2
-    assert demand_leaves(graph, targets, res.crafts) == {
+    assert demand_leaves(rbi, targets, res.crafts) == {
         ("item_plant_grass_seed_1", KIND_EXTERN): Fraction(5),
         ("item_liquid_water", KIND_EXTERN): Fraction(5),
     }
 
 
-def test_gatherable_water_external(graph):
+def test_gatherable_water_external(rbi):
     """清水为采集资源:即便存在回收环配方,也按外部投料计,不建回收机。"""
-    res, leaves = solve_leaves(graph, "item_copper_nugget", 1)
+    res, leaves = solve_leaves("item_copper_nugget", 1)
     assert res.crafts == {"furnance_copper_nugget_1": Fraction(1)}
     assert leaves == {
         ("item_copper_ore", KIND_RAW): Fraction(1),
         ("item_liquid_water", KIND_EXTERN): Fraction(1),
     }
-    assert demand_byproducts(graph, {"item_copper_nugget": Fraction(1)}, res.crafts) == (
+    assert demand_byproducts(rbi, {"item_copper_nugget": Fraction(1)}, res.crafts) == (
         {"item_liquid_sewage": Fraction(1)},
         {"item_liquid_sewage": "furnance_copper_nugget_1"})
 
 
-def test_spaceship_free_recipe(graph):
+def test_spaceship_free_recipe():
     """飞船配方无原料:制造步骤成立但零投入。"""
-    res, leaves = solve_leaves(graph, "item_expcard_stage1_low", 5)
+    res, leaves = solve_leaves("item_expcard_stage1_low", 5)
     assert leaves == {}
     assert res.crafts == {"mfg_exp_1_1": Fraction(5)}
 
 
 # ---------------------------------------------------------------- 优先配方与子集
-def test_preferred_discount(graph):
+def test_preferred_discount(rbi):
     """优先配方成本 1/4(软偏好):首选在折扣下胜出并浮现环境需求。"""
-    default = compute(graph, "item_xiranite_powder", Fraction(1))
+    default = compute("item_xiranite_powder", Fraction(1))
     assert "liquid_transmuter_2_solid_xiranite_powder_1" in default.crafts
-    assert required_envs(graph.recipes_by_id, default.crafts) == []
-    res = Z3Solver(graph.recipes).solve(
+    assert required_envs(rbi, default.crafts) == []
+    res = Z3Solver(load_recipes()).solve(
         SolveRequest({"item_xiranite_powder": Fraction(1)},
                      preferred={"item_xiranite_powder": "xiranite_oven_xiranite_powder_2"}))
     assert "xiranite_oven_xiranite_powder_2" in res.crafts
-    assert required_envs(graph.recipes_by_id, res.crafts) == [
+    assert required_envs(rbi, res.crafts) == [
         ("稳定环境", ["xiranite_oven_xiranite_powder_2"])]
-    leaves = demand_leaves(graph, {"item_xiranite_powder": Fraction(1)}, res.crafts)
+    leaves = demand_leaves(rbi, {"item_xiranite_powder": Fraction(1)}, res.crafts)
     assert leaves[("item_gas_inert", KIND_RAW)] == Fraction(6)   # 散布机维持
 
 
-def test_preferred_twin_recipes(graph):
+def test_preferred_twin_recipes():
     """完全等价的双胞胎配方(反应池 _1/_2,给定息壤/清水):折扣确定性选中首选。"""
-    res = Z3Solver(graph.recipes).solve(
+    res = Z3Solver(load_recipes()).solve(
         SolveRequest({"item_liquid_xiranite": Fraction(2)},
                      available={"item_xiranite_powder": 0, "item_liquid_water": 0},
                      preferred={"item_liquid_xiranite": "pool_liquid_liquid_xiranite_2"}))
     assert set(res.crafts) == {"pool_liquid_liquid_xiranite_2"}
 
 
-def test_solver_ctor_recipe_subset(graph):
+def test_solver_ctor_recipe_subset():
     """构造传入配方子集:求解被限定在子集内(息壤只能走 oven_2 + 碳块)。"""
-    subset = [r for r in graph.recipes
+    subset = [r for r in load_recipes()
               if r.id in ("xiranite_oven_xiranite_powder_2",
                           "furnance_carbon_material_6")]
     res = Z3Solver(subset).solve(SolveRequest({"item_xiranite_powder": Fraction(2)}))
@@ -191,9 +195,9 @@ def test_solver_ctor_recipe_subset(graph):
 
 
 # ---------------------------------------------------------------- 速率口径(60/min)
-def test_rate_filter_core_60_per_min(graph):
+def test_rate_filter_core_60_per_min(rbi):
     """分离芯 60/min:材料流量 + 设施维持(息壤气 36 = 30 原料 + 6 维持)。"""
-    res, leaves = solve_leaves(graph, "item_filter_core", 60, per_min=True)
+    res, leaves = solve_leaves("item_filter_core", 60, per_min=True)
     assert leaves == {
         ("item_liquid_water", KIND_EXTERN): Fraction(60),
         ("item_gas_xiranite", KIND_EXTERN): Fraction(36),
@@ -206,17 +210,17 @@ def test_rate_filter_core_60_per_min(graph):
         "shaper_gas_copper_jar_1": Fraction(30),
         "tools_proc_filter_core_2": Fraction(30),
     }
-    assert demand_byproducts(graph, {"item_filter_core": Fraction(60)},
+    assert demand_byproducts(rbi, {"item_filter_core": Fraction(60)},
                              res.crafts)[0] == {"item_liquid_sewage": Fraction(60)}
-    machines = {r.id: m for r, _, m in machine_counts(graph.recipes_by_id, res.crafts)}
+    machines = {r.id: m for r, _, m in machine_counts(rbi, res.crafts)}
     assert machines["furnance_copper_nugget_1"] == 2        # 60×2s/60
     assert machines["tools_proc_filter_core_2"] == 1        # 30×2s/60
     assert sum(machines.values()) == 5
 
 
-def test_rate_filter_core_provided(graph):
+def test_rate_filter_core_provided(rbi):
     """给定 息壤/清水:目标链只剩 冶炼+塑形+封装,给定物按外部投料计。"""
-    solver = Z3Solver(graph.recipes)
+    solver = Z3Solver(load_recipes())
     targets = {"item_filter_core": Fraction(60)}
     res = solver.solve(SolveRequest(targets,
                                     available={"item_xiranite_powder": 0, "item_liquid_water": 0},
@@ -226,7 +230,7 @@ def test_rate_filter_core_provided(graph):
         "shaper_gas_copper_jar_1": Fraction(30),
         "tools_proc_filter_core_2": Fraction(30),
     }
-    assert demand_leaves(graph, targets, res.crafts) == {
+    assert demand_leaves(rbi, targets, res.crafts) == {
         ("item_copper_ore", KIND_RAW): Fraction(60),
         ("item_gas_inert", KIND_RAW): Fraction(30),
         ("item_liquid_water", KIND_EXTERN): Fraction(60),
@@ -234,10 +238,10 @@ def test_rate_filter_core_provided(graph):
     }
 
 
-def test_rate_copper_enr2_6_per_min_provided(graph):
+def test_rate_copper_enr2_6_per_min_provided(rbi):
     """灼铜零件 ×6/min,给定 息壤/清水/赤铜块:含设施维持(息壤系气体)
     与双环境需求(提纯机 _2 稳定 + 反应炉酸性)。"""
-    solver = Z3Solver(graph.recipes)
+    solver = Z3Solver(load_recipes())
     targets = {"item_copper_enr2_cmpt": Fraction(6)}
     res = solver.solve(SolveRequest(targets,
                                     available={"item_xiranite_powder": 0, "item_liquid_water": 0,
@@ -253,83 +257,84 @@ def test_rate_copper_enr2_6_per_min_provided(graph):
         "shaper_gas_copper_jar_1": Fraction(15),
         "tools_proc_filter_core_2": Fraction(15),
     }
-    mats = materials(demand_leaves(graph, targets, res.crafts))
+    mats = materials(demand_leaves(rbi, targets, res.crafts))
     assert mats["item_copper_nugget"] == Fraction(150)     # 气态 120 + 罐 30
     assert mats["item_gas_inert"] == Fraction(21)          # 罐 15 + 稳定环境 6
     assert mats["item_gas_acid"] == Fraction(6)            # 酸性环境维持
     assert mats["item_gas_xiranite"] == Fraction(48)   # 反应炉 30 + 两台固气转化机维持 18
     assert mats["item_xiranite_powder"] == Fraction(15)
-    envs = dict(required_envs(graph.recipes_by_id, res.crafts))
+    envs = dict(required_envs(rbi, res.crafts))
     assert set(envs) == {"稳定环境", "酸性环境"}
     assert envs["稳定环境"] == ["liquid_purifier_gas_copper_enr_2"]
     assert envs["酸性环境"] == ["gas_reactor_gas_copper_enr2_1"]
 
 
 # ---------------------------------------------------------------- byproducts 硬约束
-def test_byproducts_flag(graph):
+def test_byproducts_flag(rbi):
     """byproducts=False 为硬约束:给定赤铜块(无冶炼)可行且零副产物;
     不给定时赤铜块只能冶炼(必产污水)→ 不可行。"""
-    solver = Z3Solver(graph.recipes)
+    solver = Z3Solver(load_recipes())
     targets = {"item_copper_enr2_cmpt": Fraction(6)}
     ok = solver.solve(SolveRequest(targets,
                                    available={"item_xiranite_powder": 0, "item_liquid_water": 0,
                                               "item_copper_nugget": 0},
                                    per_min=True, byproducts=False))
     assert ok.strict_ok
-    assert demand_byproducts(graph, targets, ok.crafts) == ({}, {})
+    assert demand_byproducts(rbi, targets, ok.crafts) == ({}, {})
     assert "furnance_copper_nugget_1" not in ok.crafts
     bad = solver.solve(SolveRequest(dict(targets), byproducts=False))
     assert not bad.strict_ok
 
 
 # ---------------------------------------------------------------- 多目标与守恒
-def test_multi_target(graph):
+def test_multi_target(rbi):
     """多目标:一张约束网同时满足,原料聚合不重不漏。"""
-    solver = Z3Solver(graph.recipes)
+    solver = Z3Solver(load_recipes())
     targets = {"item_filter_core": Fraction(60), "item_iron_cmpt": Fraction(10)}
     res = solver.solve(SolveRequest(targets, per_min=True))
     assert res.strict_ok
-    mats = materials(demand_leaves(graph, targets, res.crafts))
+    mats = materials(demand_leaves(rbi, targets, res.crafts))
     assert mats["item_copper_ore"] == Fraction(60)
     assert mats["item_iron_ore"] == Fraction(10)
 
 
-def test_conservation_sample(graph):
+def test_conservation_sample(rbi):
     """抽样守恒:目标净产 == 需求量;叶子 = 净缺口(含环境维持供气)。"""
-    sample = sorted(i for i in graph.producers if not i.startswith("item_port_"))[::12]
+    sample = sorted(i for i in produced_ids() if not i.startswith("item_port_"))[::12]
+    solver = Z3Solver(load_recipes())
     for t in sample:
-        res = Z3Solver(graph.recipes).solve(SolveRequest({t: Fraction(7)}))
+        res = solver.solve(SolveRequest({t: Fraction(7)}))
         assert res.strict_ok, t
-        flows = net_flows(graph.recipes_by_id, res.crafts)
-        for (iid, _kind), total in demand_leaves(graph, {t: Fraction(7)}, res.crafts).items():
+        flows = net_flows(rbi, res.crafts)
+        for (iid, _kind), total in demand_leaves(rbi, {t: Fraction(7)}, res.crafts).items():
             flows[iid] = flows.get(iid, Fraction(0)) - total
         assert flows.get(t, Fraction(0)) == Fraction(7), t
 
 
 # ---------------------------------------------------------------- 求解器抽象
-def test_solver_abstraction(graph):
+def test_solver_abstraction(rbi):
     """注册表:z3 为默认且唯一实现;抽象基类不可实例化;compute 等价。"""
     from analysis.solvers import SOLVERS, RecipeSolver, SolveResult
     assert set(SOLVERS) == {"z3"}
     assert issubclass(Z3Solver, RecipeSolver)
     with pytest.raises(TypeError):
         RecipeSolver()
-    via_compute = compute(graph, "item_filter_core", Fraction(60))
-    via_class = Z3Solver(graph.recipes).solve(
+    via_compute = compute("item_filter_core", Fraction(60))
+    via_class = Z3Solver(load_recipes()).solve(
         SolveRequest({"item_filter_core": Fraction(60)}))
     assert isinstance(via_class, SolveResult)
     assert via_compute.crafts == via_class.crafts
     targets = {"item_filter_core": Fraction(60)}
-    assert (demand_leaves(graph, targets, via_compute.crafts)
-            == demand_leaves(graph, targets, via_class.crafts))
+    assert (demand_leaves(rbi, targets, via_compute.crafts)
+            == demand_leaves(rbi, targets, via_class.crafts))
 
 
 # ---------------------------------------------------------------- 渲染 / 链路图 / JSON / 报告
-def test_mermaid_flow(graph):
+def test_mermaid_flow(rbi):
     """链路图:流量建点 + 二部边(副产物同权实线)+ 单入单出收缩。"""
     targets = {"item_copper_nugget": Fraction(2)}
-    res = compute(graph, *next(iter(targets.items())))
-    text = render_mermaid(graph, targets, res.crafts)
+    res = compute("item_copper_nugget", Fraction(2))
+    text = render_mermaid(rbi, targets, res.crafts)
     assert text.startswith("flowchart LR")
     assert "I_item_copper_nugget((" in text                  # 目标节点
     assert "I_item_copper_ore([" in text                     # 最初用料(圆角)
@@ -338,48 +343,48 @@ def test_mermaid_flow(graph):
     assert "I_item_copper_ore -->|" in text and "-->" in text
 
 
-def test_mermaid_upkeep_edge(graph):
+def test_mermaid_upkeep_edge(rbi):
     """设施维持边:固气转化机的息壤气 = 原料边 ×30 + 维持边 ×6,源节点标 36。"""
     targets = {"item_filter_core": Fraction(60)}
-    res = compute(graph, "item_filter_core", Fraction(60), per_min=True)
-    text = render_mermaid(graph, targets, res.crafts)
+    res = compute("item_filter_core", Fraction(60), per_min=True)
+    text = render_mermaid(rbi, targets, res.crafts)
     assert 'I_item_gas_xiranite[["息壤气 ×36"]]' in text
     assert '-->|"×30"| R_liquid_transmuter_2_solid_xiranite_powder_1' in text
     assert '-->|"维持 ×6"| R_liquid_transmuter_2_solid_xiranite_powder_1' in text
 
 
-def test_render_rate_and_batch(graph):
+def test_render_rate_and_batch(rbi):
     targets = {"item_filter_core": Fraction(60)}
-    res = compute(graph, "item_filter_core", Fraction(60), per_min=True)
-    text = render_result(graph, "分离芯", targets, res, per_min=True)
+    res = compute("item_filter_core", Fraction(60), per_min=True)
+    text = render_result(rbi, "分离芯", targets, res, per_min=True)
     assert "×60/min" in text and "设备需求" in text
     batch_targets = {"item_filter_core": Fraction(4)}
-    batch = render_result(graph, "分离芯", batch_targets,
-                          compute(graph, "item_filter_core", Fraction(4)))
+    batch = render_result(rbi, "分离芯", batch_targets,
+                          compute("item_filter_core", Fraction(4)))
     # 批量模式不含速率数量;describe 的维持*6/min 是设备规格,允许出现
     assert "设备需求" not in batch and "×60/min" not in batch
 
 
-def test_render_sections(graph):
+def test_render_sections(rbi):
     """最终输出分节:目标/需求原料/产出(副产物)/制造步骤/设备/环境/链路图。"""
-    solver = Z3Solver(graph.recipes)
+    solver = Z3Solver(load_recipes())
     targets = {"item_copper_enr2_cmpt": Fraction(6)}
     res = solver.solve(SolveRequest(targets,
                                     available={"item_xiranite_powder": 0, "item_liquid_water": 0,
                                                "item_copper_nugget": 0}, per_min=True))
-    text = render_result(graph, "灼铜零件", targets, res, per_min=True)
+    text = render_result(rbi, "灼铜零件", targets, res, per_min=True)
     for section in ("目标 灼铜零件", "需求原料", "产出:", "制造步骤",
                     "设备需求", "环境需求", "稳定环境", "酸性环境",
                     "产出链路图", "```mermaid", "flowchart LR"):
         assert section in text, section
 
 
-def test_result_json(graph):
+def test_result_json(rbi):
     import json
-    solver = Z3Solver(graph.recipes)
+    solver = Z3Solver(load_recipes())
     targets = {"item_filter_core": Fraction(60)}
     res = solver.solve(SolveRequest(dict(targets), per_min=True))
-    payload = json.loads(json.dumps(result_json(graph, targets, res, per_min=True)))
+    payload = json.loads(json.dumps(result_json(rbi, targets, res, per_min=True)))
     assert payload["target"]["per_min"] is True
     assert payload["strict_ok"] is True
     kinds = {(l["id"], l["kind"]) for l in payload["leaves"]}
@@ -390,9 +395,9 @@ def test_result_json(graph):
     assert payload["mermaid"].startswith("flowchart LR")
 
 
-def test_build_report_sections(graph):
+def test_build_report_sections():
     from analysis.recipe_calc import build_report
-    report = build_report(graph, demos=[("铁制零件", Fraction(10), frozenset())])
+    report = build_report(demos=[("铁制零件", Fraction(10), frozenset())])
     assert "# 配方用料倒推 · 数据概览" in report
     assert "## 潜在循环依赖" in report
     assert "## 示例:铁制零件 ×10" in report
