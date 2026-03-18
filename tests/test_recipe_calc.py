@@ -17,8 +17,7 @@ from fractions import Fraction
 import pytest
 
 from analysis.recipe_calc import (
-    render_mermaid,
-    render_result,
+    FlowGraph,
     KIND_EXTERN,
     KIND_RAW,
     compute,
@@ -334,7 +333,8 @@ def test_mermaid_flow(rbi):
     """链路图:流量建点 + 二部边(副产物同权实线)+ 单入单出收缩。"""
     targets = {"item_copper_nugget": Fraction(2)}
     res = compute("item_copper_nugget", Fraction(2))
-    text = render_mermaid(rbi, targets, res.crafts)
+    chart = FlowGraph(rbi, targets, res)
+    text = chart.mermaid()
     assert text.startswith("flowchart LR")
     assert "I_item_copper_nugget((" in text                  # 目标节点
     assert "I_item_copper_ore([" in text                     # 最初用料(圆角)
@@ -347,7 +347,8 @@ def test_mermaid_upkeep_edge(rbi):
     """设施维持边:固气转化机的息壤气 = 原料边 ×30 + 维持边 ×6,源节点标 36。"""
     targets = {"item_filter_core": Fraction(60)}
     res = compute("item_filter_core", Fraction(60), per_min=True)
-    text = render_mermaid(rbi, targets, res.crafts)
+    chart = FlowGraph(rbi, targets, res)
+    text = chart.mermaid()
     assert 'I_item_gas_xiranite[["息壤气 ×36"]]' in text
     assert '-->|"×30"| R_liquid_transmuter_2_solid_xiranite_powder_1' in text
     assert '-->|"维持 ×6"| R_liquid_transmuter_2_solid_xiranite_powder_1' in text
@@ -356,11 +357,11 @@ def test_mermaid_upkeep_edge(rbi):
 def test_render_rate_and_batch(rbi):
     targets = {"item_filter_core": Fraction(60)}
     res = compute("item_filter_core", Fraction(60), per_min=True)
-    text = render_result(rbi, "分离芯", targets, res, per_min=True)
+    text = FlowGraph(rbi, targets, res).summary("分离芯", per_min=True)
     assert "×60/min" in text and "设备需求" in text
     batch_targets = {"item_filter_core": Fraction(4)}
-    batch = render_result(rbi, "分离芯", batch_targets,
-                          compute("item_filter_core", Fraction(4)))
+    batch = FlowGraph(rbi, batch_targets,
+                       compute("item_filter_core", Fraction(4))).summary("分离芯")
     # 批量模式不含速率数量;describe 的维持*6/min 是设备规格,允许出现
     assert "设备需求" not in batch and "×60/min" not in batch
 
@@ -372,7 +373,7 @@ def test_render_sections(rbi):
     res = solver.solve(SolveRequest(targets,
                                     available={"item_xiranite_powder": 0, "item_liquid_water": 0,
                                                "item_copper_nugget": 0}, per_min=True))
-    text = render_result(rbi, "灼铜零件", targets, res, per_min=True)
+    text = FlowGraph(rbi, targets, res).summary("灼铜零件", per_min=True)
     for section in ("目标 灼铜零件", "需求原料", "产出:", "制造步骤",
                     "设备需求", "环境需求", "稳定环境", "酸性环境",
                     "产出链路图", "```mermaid", "flowchart LR"):

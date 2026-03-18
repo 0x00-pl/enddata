@@ -551,155 +551,182 @@ def fmt_ceil(q: Fraction) -> str:
     return str(-(-q.numerator // q.denominator))
 
 
-def render_tree(recipes_by_id: dict[str, Recipe], targets: Mapping[str, Fraction],
-                crafts: Mapping[str, Fraction]) -> list[str]:
-    """目标与需求原料的平铺渲染(z3 平面解,无逐层展开树;多目标共用一份原料)。"""
-    lines = [f"{name_of(tid)} ×{fmt_qty(qty)}" for tid, qty in targets.items()]
-    lines += [f"   └─ {name_of(iid)} ×{fmt_qty(total)}"
-              for (iid, _kind), total in leaf_items(demand_leaves(recipes_by_id, targets, crafts))]
-    return lines
+class FlowGraph:
+    """平面解 → 产出链路图:构造时一次建好图结构,mermaid 与摘要共用。
+
+    构造(recipes_by_id, targets, SolveResult)三步:
+        ① 流量   各物品净流量(net_flows)+ 设施维持边((气体, 配方) → 通入量),
+                  同时预推导外部需求(leaves)与副产物(byproducts/sources);
+        ② 建图   激活配方 ↔ 物品的二部边(原料→配方×耗量、配方→产物×产量);
+        ③ 收缩   恰好一进一出的中间物品并入上下游配方直连边(量并入合并边),
+                  目标/源/汇/分支节点保留——图只剩分支点与端点,更紧凑。
+    渲染:
+        outline()   目标 + 需求原料的平铺清单;
+        mermaid()   flowchart LR 文本(物品节点按来源取形,维持边单独标注);
+        summary()   控制台摘要(目标/原料/产出/制造步骤/设备/环境/链路图)。
+    """
+
+    def __init__(self, recipes_by_id: dict[str, Recipe],
+                 targets: Mapping[str, Fraction], result: "SolveResult") -> None:
+        self.recipes_by_id = recipes_by_id
+        self.targets = dict(targets)
+        self.crafts: Mapping[str, Fraction] = result.crafts
+        self.strict_ok = result.strict_ok
+        self.leaves = demand_leaves(recipes_by_id, self.targets, self.crafts)
+        self.byproducts, self.byproduct_sources = demand_byproducts(
+            recipes_by_id, self.targets, self.crafts)
+        self.flows = net_flows(recipes_by_id, self.crafts)
+        # 维持输入边:转化机持续通入的息壤系气体,独立于配方原料边(标"维持"),
+        # 即使维持气体同时是配方原料(如固气转化机的息壤气)也分别画出
+        self.upkeep_in: dict[tuple[str, str], Fraction] = {}   # (气体, 配方) → 通入量
+        for rid, n in self.crafts.items():
+            r = recipes_by_id[rid]
+            if (upkeep := r.require_upkeep) is not None and (q := n * upkeep[1]) > 0:
+                key = (upkeep[0], rid)
+                self.upkeep_in[key] = self.upkeep_in.get(key, Fraction(0)) + q
+        # 二部边与物品/配方节点
+        self.edges: dict[tuple[str, str], Fraction] = {}
+        self.items: set[str] = set()
+        self.recipes: set[str] = set()
+        for rid, n in sorted(self.crafts.items()):
+            r = recipes_by_id[rid]
+            self.recipes.add(rid)
+            for s in r.require_items:
+                self.items.add(s.id)
+                self.edges[("I_" + s.id, "R_" + rid)] = (self.edges.get(("I_" + s.id, "R_" + rid), Fraction(0))
+                                                         + n * s.count)
+            for s in r.produce_items:
+                self.items.add(s.id)
+                self.edges[("R_" + rid, "I_" + s.id)] = (self.edges.get(("R_" + rid, "I_" + s.id), Fraction(0))
+                                                          + n * s.count)
+        self.items.update(gas for gas, _rid in self.upkeep_in)
+        self._contract_pass_through()
+
+    def _contract_pass_through(self) -> None:
+        """收缩:恰好一进一出的物品节点并入上下游配方直连边。"""
+        target_ids = set(self.targets)
+        changed, passes = True, 0
+        while changed and passes < 50:
+            changed, passes = False, passes + 1
+            for i in sorted(self.items):
+                if i in target_ids:
+                    continue
+                ins = [(s, d) for (s, d) in self.edges if d == "I_" + i and s.startswith("R_")]
+                outs = [(s, d) for (s, d) in self.edges if s == "I_" + i and d.startswith("R_")]
+                if len(ins) != 1 or len(outs) != 1:
+                    continue
+                rin, rout = ins[0][0], outs[0][1]
+                through = self.edges[outs[0]]
+                del self.edges[ins[0]], self.edges[outs[0]]
+                self.items.discard(i)
+                self.edges[(rin, rout)] = self.edges.get((rin, rout), Fraction(0)) + through
+                changed = True
+                break
+
+    def outline(self) -> list[str]:
+        """目标与需求原料的平铺渲染(z3 平面解,无逐层展开树;多目标共用一份原料)。"""
+        lines = [f"{name_of(tid)} ×{fmt_qty(qty)}" for tid, qty in self.targets.items()]
+        lines += [f"   └─ {name_of(iid)} ×{fmt_qty(total)}"
+                  for (iid, _kind), total in leaf_items(self.leaves)]
+        return lines
 
 
-def render_mermaid(recipes_by_id: dict[str, Recipe], targets: Mapping[str, Fraction],
-                   crafts: Mapping[str, Fraction]) -> str:
-    """产出链路图(mermaid flowchart):流量建点 + 二部边 + 单入单出收缩。"""
-    flows = net_flows(recipes_by_id, crafts)
-    upkeep_in: dict[tuple[str, str], Fraction] = {}   # (气体, 配方) → 维持通入量/min
-    for rid, n in crafts.items():
-        r = recipes_by_id[rid]
-        if (upkeep := r.require_upkeep) is not None and (q := n * upkeep[1]) > 0:
-            upkeep_in[(upkeep[0], rid)] = upkeep_in.get((upkeep[0], rid), Fraction(0)) + q
-    target_ids = set(targets)
-    target_qty = dict(targets)
-    produced = {s.id for r in recipes_by_id.values()
-                if not r.id.startswith(RECYCLER_PREFIX) for s in r.produce_items}
-    edges: dict[tuple[str, str], Fraction] = {}
-    items: set[str] = set()
-    recipes: set[str] = set()
-    for rid, n in sorted(crafts.items()):
-        r = recipes_by_id[rid]
-        recipes.add(rid)
-        for s in r.require_items:
-            items.add(s.id)
-            edges[("I_" + s.id, "R_" + rid)] = (edges.get(("I_" + s.id, "R_" + rid), Fraction(0))
-                                                + n * s.count)
-        for s in r.produce_items:
-            items.add(s.id)
-            edges[("R_" + rid, "I_" + s.id)] = (edges.get(("R_" + rid, "I_" + s.id), Fraction(0))
-                                                + n * s.count)
-    for (gas, rid) in sorted(upkeep_in):
-        items.add(gas)
-    changed, passes = True, 0
-    while changed and passes < 50:
-        changed, passes = False, passes + 1
-        for i in sorted(items):
+    def mermaid(self) -> str:
+        """产出链路图(mermaid flowchart LR):物品节点按来源取形,维持边单列。"""
+        target_ids = set(self.targets)
+        produced = {s.id for r in self.recipes_by_id.values()
+                    if not r.id.startswith(RECYCLER_PREFIX) for s in r.produce_items}
+        lines = ["flowchart LR"]
+        for i in sorted(self.items):
+            net = self.flows.get(i, Fraction(0))
             if i in target_ids:
-                continue
-            ins = [(s, d) for (s, d) in edges if d == "I_" + i and s.startswith("R_")]
-            outs = [(s, d) for (s, d) in edges if s == "I_" + i and d.startswith("R_")]
-            if len(ins) != 1 or len(outs) != 1:
-                continue
-            rin, rout = ins[0][0], outs[0][1]
-            through = edges[outs[0]]
-            del edges[ins[0]], edges[outs[0]]
-            items.discard(i)
-            edges[(rin, rout)] = edges.get((rin, rout), Fraction(0)) + through
-            changed = True
-            break
-    lines = ["flowchart LR"]
-    for i in sorted(items):
-        net = flows.get(i, Fraction(0))
-        if i in target_ids:
-            lines.append(f"  I_{i}((\"{name_of(i)}<br/>目标 ×{fmt_qty(target_qty[i])}\"))")
-        elif net < 0 and i not in produced:
-            lines.append(f"  I_{i}([\"{name_of(i)} ×{fmt_qty(-net)}\"])")
-        elif net < 0:
-            lines.append(f"  I_{i}[[\"{name_of(i)} ×{fmt_qty(-net)}\"]]")
+                lines.append(f"  I_{i}((\"{name_of(i)}<br/>目标 ×{fmt_qty(self.targets[i])}\"))")
+            elif net < 0 and i not in produced:
+                lines.append(f"  I_{i}([\"{name_of(i)} ×{fmt_qty(-net)}\"])")
+            elif net < 0:
+                lines.append(f"  I_{i}[[\"{name_of(i)} ×{fmt_qty(-net)}\"]]")
+            else:
+                lines.append(f"  I_{i}[\"{name_of(i)}\"]")
+        for rid in sorted(self.recipes):
+            r = self.recipes_by_id[rid]
+            label = r.machine_name or r.name
+            lines.append(f"  R_{rid}[\"{label}<br/>{rid}\"]")
+        for (src, dst), qty in sorted(self.edges.items()):
+            lines.append(f"  {src} -->|\"×{fmt_qty(qty)}\"| {dst}")
+        for (gas, rid), q in sorted(self.upkeep_in.items()):
+            lines.append(f"  I_{gas} -->|\"维持 ×{fmt_qty(q)}\"| R_{rid}")
+        return "\n".join(lines)
+
+
+    def summary(self, target_label: str, per_min: bool = False) -> str:
+        """控制台摘要:目标/原料清单 + 产出(含副产物) + 制造步骤 + 设备 + 环境 + 链路图。"""
+        unit = "/min" if per_min else ""
+        qty_word = f"×{fmt_qty(next(iter(self.targets.values())))}{unit}"
+        lines = [f"目标 {target_label} {qty_word}"]
+        lines += self.outline()
+        lines.append("")
+        leaves = leaf_items(self.leaves)
+        if not leaves:
+            lines.append("需求原料:无需任何原料(目标本身来自 --have 清单或飞船制造)")
         else:
-            lines.append(f"  I_{i}[\"{name_of(i)}\"]")
-    for rid in sorted(recipes):
-        r = recipes_by_id[rid]
-        label = r.machine_name or r.name
-        lines.append(f"  R_{rid}[\"{label}<br/>{rid}\"]")
-    for (src, dst), qty in sorted(edges.items()):
-        lines.append(f"  {src} -->|\"×{fmt_qty(qty)}\"| {dst}")
-    for (gas, rid), q in sorted(upkeep_in.items()):
-        lines.append(f"  I_{gas} -->|\"维持 ×{fmt_qty(q)}\"| R_{rid}")
-    return "\n".join(lines)
-
-
-def render_result(recipes_by_id: dict[str, Recipe], target_label: str, targets: Mapping[str, Fraction],
-                  result: "SolveResult", per_min: bool = False) -> str:
-    """控制台查询结果:目标/原料清单 + 产出(含副产物) + 制造步骤 + 设备 + 环境 + 链路图。"""
-    unit = "/min" if per_min else ""
-    crafts = result.crafts
-    qty_word = f"×{fmt_qty(next(iter(targets.values())))}{unit}"
-    lines = [f"目标 {target_label} {qty_word}"]
-    lines += render_tree(recipes_by_id, targets, crafts)
-    lines.append("")
-    leaves = leaf_items(demand_leaves(recipes_by_id, targets, crafts))
-    if not leaves:
-        lines.append("需求原料:无需任何原料(目标本身来自 --have 清单或飞船制造)")
-    else:
-        head = "需求原料(每分钟流量;精确流量 → 实备数量)" if per_min else "需求原料(精确用量 → 实备数量)"
-        lines.append(f"{head},{len(leaves)} 项:")
-        for (iid, kind), total in leaves:
-            label = KIND_LABEL[kind]
-            line = (f"  [{label}] {name_of(iid):<12} ×{fmt_qty(total):<10} → 备料 "
-                    f"{fmt_ceil(total)}{unit}")
-            if kind == KIND_RAW and (src := obtain_of(iid)):
-                line += f"({src})"
-            lines.append(line)
-    byproducts, sources = demand_byproducts(recipes_by_id, targets, crafts)
-    parts = [f"目标 {name_of(next(iter(targets)))} {qty_word}"]
-    if byproducts:
-        bp = "、".join(f"{name_of(i)} ×{fmt_qty(n)}{unit}"
-                       f"(← {sources[i]})"
-                       for i, n in sorted(byproducts.items(), key=lambda kv: -kv[1]))
-        parts.append(f"副产物 {bp}")
-    lines.append("产出:" + ";".join(parts))
-    craft_lines = [f"  {rid} ×{fmt_qty(n)} 次{unit}  {recipes_by_id[rid].describe()}"
-                   for rid, n in sorted(crafts.items())]
-    if craft_lines:
-        lines.append("制造步骤" + ("(每分钟执行次数):" if per_min else ":"))
-        lines += craft_lines
-    facilities = used_facilities(recipes_by_id, crafts)
-    if per_min:
-        machines = machine_counts(recipes_by_id, crafts)
-        if machines:
-            lines.append("设备需求(设施数 = 产量每分钟 × 单次耗时 ÷ 60,向上取整):")
-            lines += [f"  {r.machine_name or r.station:<4} {r.id} ×{m} 台"
-                      f"({fmt_qty(n)}/min × {r.require_time:g}s)" for r, n, m in machines]
-        if upkeep := env_upkeep(recipes_by_id, crafts):
-            lines.append(f"  气体散布机 vaporizer ×{len(upkeep)} 台"
-                         f"(环境维持,每种气体 {fmt_qty(GAS_ENV_RATE)}/min)")
-        no_time = [rid for rid in crafts if not recipes_by_id[rid].require_time]
-        if no_time:
-            lines.append("  无耗时数据不计设备:" + "、".join(no_time))
-    elif facilities:
-        names = facilities + (["气体散布机"] if env_upkeep(recipes_by_id, crafts) else [])
-        lines.append("使用设备:" + "、".join(names))
-    envs = required_envs(recipes_by_id, crafts)
-    if envs:
-        upkeep = {name: (gas, rate) for name, gas, rate in env_upkeep(recipes_by_id, crafts)}
-        parts = []
-        for env, rids in envs:
-            base = f"{env}({', '.join(rids)})"
-            if env in upkeep:
-                gas, rate = upkeep[env]
-                base += f" ← 气体散布机 通入{name_of(gas)} ×{fmt_qty(rate)}/min"
-            parts.append(base)
-        lines.append("环境需求:" + ";".join(parts))
-    else:
-        lines.append("环境需求:无特殊气体环境(全部常规)")
-    lines.append("产出链路图(mermaid):")
-    lines.append("```mermaid")
-    lines.append(render_mermaid(recipes_by_id, targets, crafts))
-    lines.append("```")
-    if not result.strict_ok:
-        lines.append("⚠ 约束不可满足:目标在当前配方图/持有清单下无法产出"
-                     "(byproducts=False 时依赖副产物的路线会不可行)")
-    return "\n".join(lines)
+            head = "需求原料(每分钟流量;精确流量 → 实备数量)" if per_min else "需求原料(精确用量 → 实备数量)"
+            lines.append(f"{head},{len(leaves)} 项:")
+            for (iid, kind), total in leaves:
+                label = KIND_LABEL[kind]
+                line = (f"  [{label}] {name_of(iid):<12} ×{fmt_qty(total):<10} → 备料 "
+                        f"{fmt_ceil(total)}{unit}")
+                if kind == KIND_RAW and (src := obtain_of(iid)):
+                    line += f"({src})"
+                lines.append(line)
+        parts = [f"目标 {name_of(next(iter(self.targets)))} {qty_word}"]
+        if self.byproducts:
+            bp = "、".join(f"{name_of(i)} ×{fmt_qty(n)}{unit}"
+                           f"(← {self.byproduct_sources[i]})"
+                           for i, n in sorted(self.byproducts.items(), key=lambda kv: -kv[1]))
+            parts.append(f"副产物 {bp}")
+        lines.append("产出:" + ";".join(parts))
+        craft_lines = [f"  {rid} ×{fmt_qty(n)} 次{unit}  {self.recipes_by_id[rid].describe()}"
+                       for rid, n in sorted(self.crafts.items())]
+        if craft_lines:
+            lines.append("制造步骤" + ("(每分钟执行次数):" if per_min else ":"))
+            lines += craft_lines
+        facilities = used_facilities(self.recipes_by_id, self.crafts)
+        if per_min:
+            machines = machine_counts(self.recipes_by_id, self.crafts)
+            if machines:
+                lines.append("设备需求(设施数 = 产量每分钟 × 单次耗时 ÷ 60,向上取整):")
+                lines += [f"  {r.machine_name or r.station:<4} {r.id} ×{m} 台"
+                          f"({fmt_qty(n)}/min × {r.require_time:g}s)" for r, n, m in machines]
+            if upkeep := env_upkeep(self.recipes_by_id, self.crafts):
+                lines.append(f"  气体散布机 vaporizer ×{len(upkeep)} 台"
+                             f"(环境维持,每种气体 {fmt_qty(GAS_ENV_RATE)}/min)")
+            no_time = [rid for rid in self.crafts if not self.recipes_by_id[rid].require_time]
+            if no_time:
+                lines.append("  无耗时数据不计设备:" + "、".join(no_time))
+        elif facilities:
+            names = facilities + (["气体散布机"] if env_upkeep(self.recipes_by_id, self.crafts) else [])
+            lines.append("使用设备:" + "、".join(names))
+        envs = required_envs(self.recipes_by_id, self.crafts)
+        if envs:
+            upkeep = {name: (gas, rate) for name, gas, rate in env_upkeep(self.recipes_by_id, self.crafts)}
+            parts = []
+            for env, rids in envs:
+                base = f"{env}({', '.join(rids)})"
+                if env in upkeep:
+                    gas, rate = upkeep[env]
+                    base += f" ← 气体散布机 通入{name_of(gas)} ×{fmt_qty(rate)}/min"
+                parts.append(base)
+            lines.append("环境需求:" + ";".join(parts))
+        else:
+            lines.append("环境需求:无特殊气体环境(全部常规)")
+        lines.append("产出链路图(mermaid):")
+        lines.append("```mermaid")
+        lines.append(self.mermaid())
+        lines.append("```")
+        if not self.strict_ok:
+            lines.append("⚠ 约束不可满足:目标在当前配方图/持有清单下无法产出"
+                         "(byproducts=False 时依赖副产物的路线会不可行)")
+        return "\n".join(lines)
 
 
 def result_json(recipes_by_id: dict[str, Recipe], targets: Mapping[str, Fraction],
@@ -733,7 +760,7 @@ def result_json(recipes_by_id: dict[str, Recipe], targets: Mapping[str, Fraction
                        for i, n in sorted(byproducts.items(), key=lambda kv: -kv[1])],
         "environments": environments,
         "facilities": used_facilities(recipes_by_id, crafts),
-        "mermaid": render_mermaid(recipes_by_id, targets, crafts),
+        "mermaid": FlowGraph(recipes_by_id, targets, result).mermaid(),
         **({"machines": [{"recipe": r.id, "machine": r.machine_name,
                           "craft_time_sec": r.require_time, "count": m}
                          for r, _, m in machine_counts(recipes_by_id, crafts)]
@@ -782,7 +809,7 @@ def build_report(demos: list[tuple[str, Fraction, frozenset[str]]]) -> str:
                      + (f"(--have {','.join(sorted(provided))})" if provided else ""))
         lines.append("")
         lines.append("```")
-        lines.append(render_result(recipes_by_id(), name_of(target), {target: qty}, res))
+        lines.append(FlowGraph(recipes_by_id(), {target: qty}, res).summary(name_of(target)))
         lines.append("```")
         lines.append("")
     return "\n".join(lines)
@@ -867,4 +894,4 @@ def main(item: str | None = None, qty: str = "1", have: str = "",
                          ensure_ascii=False, indent=2))
     else:
         label = name_of(target) + (f"({target})" if target != name_of(target) else "")
-        print(render_result(rbi, label, {target: amount}, result, per_min))
+        print(FlowGraph(rbi, {target: amount}, result).summary(label, per_min))
