@@ -383,7 +383,7 @@ def machine_names() -> dict[str, str]:
 
 # ---------------------------------------------------------------- 配方索引(模块级)
 # 原 RecipeGraph 索引类已拆平:全量数据经 lru_cache 进程单例,名称解析/
-# 输入消歧/环检测均为模块函数;渲染与 CLI 直接吃 Recipe 数据与这些服务。
+# 输入消歧均为模块函数;渲染与 CLI 直接吃 Recipe 数据与这些服务。
 
 @lru_cache(maxsize=1)
 def recipes_by_id() -> dict[str, Recipe]:
@@ -435,47 +435,6 @@ def resolve_item(query: str) -> tuple[str | None, list[str]]:
     used = {s.id for r in load_recipes() for s in r.require_items}
     ranked = sorted(cands, key=lambda i: (i not in produced and i not in used, len(i), i))
     return ranked[0], []
-
-
-@lru_cache(maxsize=1)
-def cycle_groups() -> list[list[str]]:
-    """产出图谱(不含拆解配方)上的极大强连通分量,即潜在循环依赖组。"""
-    produced = produced_ids()
-    graph: dict[str, set[str]] = {i: set() for i in produced}
-    for r in load_recipes():
-        if r.id.startswith(RECYCLER_PREFIX):
-            continue
-        for s in r.produce_items:
-            if s.id in graph:
-                graph[s.id].update(d.id for d in r.require_items if d.id in produced)
-    index, low, on_stack, stack, counter, sccs = {}, {}, set(), [], [0], []
-
-    def strong(v: str) -> None:
-        index[v] = low[v] = counter[0]
-        counter[0] += 1
-        stack.append(v)
-        on_stack.add(v)
-        for w in graph[v]:
-            if w not in index:
-                strong(w)
-                low[v] = min(low[v], low[w])
-            elif w in on_stack:
-                low[v] = min(low[v], index[w])
-        if low[v] == index[v]:
-            comp = []
-            while True:
-                w = stack.pop()
-                on_stack.discard(w)
-                comp.append(w)
-                if w == v:
-                    break
-            if len(comp) > 1 or v in graph[v]:
-                sccs.append(sorted(comp, key=name_of))
-
-    for v in sorted(graph):
-        if v not in index:
-            strong(v)
-    return sorted(sccs, key=lambda c: (-len(c), name_of(c[0])))
 
 
 # ---------------------------------------------------------------- 倒推引擎
@@ -771,7 +730,7 @@ def result_json(recipes_by_id: dict[str, Recipe], targets: Mapping[str, Fraction
 
 # ---------------------------------------------------------------- 总览报告
 def build_report(demos: list[tuple[str, Fraction, frozenset[str]]]) -> str:
-    """数据概览 + 择路口径 + 潜在循环依赖组 + 示例倒推(reports/recipe-analysis.md)。"""
+    """数据概览 + 口径说明 + 示例倒推(reports/recipe-analysis.md)。"""
     lines = ["# 配方用料倒推 · 数据概览", ""]
     lines.append(f"- 配方 {len(load_recipes())} 条(" +
                  "、".join(f"{s} {sum(1 for r in load_recipes() if r.station == s)}" for s in STATIONS) +
@@ -787,17 +746,6 @@ def build_report(demos: list[tuple[str, Fraction, frozenset[str]]]) -> str:
                  "拆解(dismantler_)配方不列为产出途径")
     lines.append("- 环处理:z3 整图线性约束,每种物品一条净流量守恒等式,环与共享"
                  "中间品天然可解;采集类资源(obtainWays 非空)允许外部供给")
-    lines.append("")
-
-    groups = cycle_groups()
-    lines.append(f"## 潜在循环依赖(产出图谱,{len(groups)} 组)")
-    lines.append("")
-    lines.append("以下物品组在图谱上互达成环;z3 求解器以净流量守恒直接解出环内配比"
-                 "(如种子⇄作物自持、清水⇄水蒸气回收),环上采集类资源(清水等)"
-                 "按外部投料计,亦可用 --have 指定持有:")
-    lines.append("")
-    for comp in groups:
-        lines.append(f"- {' → '.join(name_of(i) for i in comp)} → {name_of(comp[0])}")
     lines.append("")
 
     for label, qty, provided in demos:
@@ -871,8 +819,7 @@ def main(item: str | None = None, qty: str = "1", have: str = "",
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         REPORT_PATH.write_text(report, encoding="utf-8")
         print(f"配方用料倒推 · 数据概览 → {REPORT_PATH}")
-        print(f"  配方 {len(load_recipes())} 条,物品 {len(produced_ids())} 种,"
-              f"潜在循环依赖 {len(cycle_groups())} 组")
+        print(f"  配方 {len(load_recipes())} 条,物品 {len(produced_ids())} 种")
         return
 
     target, cands = resolve_item(item)

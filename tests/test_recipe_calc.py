@@ -400,5 +400,4 @@ def test_build_report_sections():
     from analysis.recipe_calc import build_report
     report = build_report(demos=[("铁制零件", Fraction(10), frozenset())])
     assert "# 配方用料倒推 · 数据概览" in report
-    assert "## 潜在循环依赖" in report
     assert "## 示例:铁制零件 ×10" in report
