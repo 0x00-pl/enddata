@@ -36,14 +36,15 @@ class Z3Solver(RecipeSolver):
         - preferred 暂未生效;
         - 环境维持按用到的环境计入 6/min 采集气体;设备维持(转化机气体)按
           运行时长线性计入流量(维持速率 × 设备占用率,速率语义下精确);
-        - byproducts=False 是硬约束:依赖副产物的路线(如需冶炼产污水)会不可行。
+        - byproducts=False 是硬约束:依赖副产物的路线(如需冶炼产污水)会不可行
+          (maximize 物品豁免该约束)。
     """
 
     def solve(self, request: SolveRequest) -> SolveResult:
         from z3 import Optimize, Real, sat
 
         targets = {t: Fraction(q) for t, q in request.targets.items()}
-        available = {a: Fraction(q) for a, q in request.available.items()}
+        available = set(request.available)
         preferred = request.preferred
         byproducts = request.byproducts
 
@@ -75,13 +76,13 @@ class Z3Solver(RecipeSolver):
             if i in target_ids:
                 continue
             if i in available:
-                opt.add(f <= 0)              # 持有物品:只耗不产,差额外部供给
-            elif i in self.produced and not is_gatherable(i):
-                opt.add(f >= 0)              # 可制造且不可采集:必须自产
+                opt.add(f <= 0)              # available 清单:可外部供给(只耗不产)
+            elif i not in self.produced or is_gatherable(i):
+                opt.add(f <= 0)              # 无产出配方物品/采集资源:外部获取
             else:
-                opt.add(f <= 0)              # 最初用料/采集资源:外部获取
-            if not byproducts and i not in target_ids:
-                opt.add(f <= 0)              # 不允许副产物净剩余(硬约束)
+                opt.add(f >= 0)              # 可制造且未列 available:必须自产
+            if not byproducts:
+                opt.add(f <= 0)              # 不允许副产物净剩余(硬约束;最大化物品豁免)
 
         # 目标函数:制造次数计价,优先使用配方按半价(软偏好;整数计价规避除法节点)
         def cost(rid: str):

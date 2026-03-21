@@ -335,7 +335,7 @@ def compute(target: str, qty: Fraction,
             byproducts: bool = True) -> "SolveResult":
     """单目标求解入口(全量配方):等价 Z3Solver 求解,返回平面解(配方 → 制造次数)。
 
-    provided 为持有物品 id 集合(等价 available={id: 0} 的数量不限清单);
+    provided 为持有物品 id 集合(即 available 清单,不限量);
     pinned/byproducts 语义见 analysis.solvers.SolveRequest;限定配方子集的
     场景直接构造 Z3Solver(subset);叶子/副产物等展示合计经 FlowGraph
     按制造次数推导。
@@ -344,7 +344,7 @@ def compute(target: str, qty: Fraction,
     from analysis.solvers.z3 import Z3Solver
     return Z3Solver(load_recipes()).solve(SolveRequest(
         targets={target: qty},
-        available={a: 0 for a in provided},
+        available=provided,
         preferred=dict(pinned or {}),
         per_min=per_min, byproducts=byproducts))
 
@@ -800,7 +800,7 @@ def main(item: str | None = None, qty: str = "1", have: str = "",
 
     result = solver_cls(load_recipes()).solve(SolveRequest(
         targets={target: amount},
-        available={a: 0 for a in provided},
+        available=provided,
         preferred=pinned, per_min=per_min,
         byproducts=byproducts))
     chart = FlowGraph(rbi, {target: amount}, result)

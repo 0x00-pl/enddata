@@ -1,12 +1,12 @@
 """RecipeSolver 抽象基类:solve 的输入/输出契约(所有集合以物品 id 为键)。
 
 求解器只依赖配方清单(Iterable[Recipe])与 recipe_calc 的数据层服务
-(item_catalog/is_gatherable 等),不经过任何索引对象;求解所需的派生
+(is_gatherable 等),不经过任何索引对象;求解所需的派生
 索引(产出集合、id 直查)由基类从配方清单自行构建。
 """
 
 from abc import ABC, abstractmethod
-from collections.abc import Iterable, Mapping
+from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
 from fractions import Fraction
 
@@ -22,8 +22,8 @@ class SolveRequest:
     """solve 的打包输入:目标产物与求解开关(所有集合以物品 id 为键)。"""
 
     targets: Mapping[str, Fraction]                 # 目标产物 → 需求量(多目标聚合为一份需求)
-    available: Mapping[str, Fraction] = field(default_factory=dict)   # 持有原料(只耗不产,差额外部供给)
-    preferred: Mapping[str, str] = field(default_factory=dict)        # 物品 → 优先配方 id(软偏好)
+    available: Collection[str] = field(default_factory=frozenset)   # 持有/可外部供给清单(只耗不产,不限量)
+    preferred: Mapping[str, str] = field(default_factory=dict)      # 物品 → 优先配方 id(软偏好)
     per_min: bool = False                           # 速率口径:数量按每分钟产出计
     byproducts: bool = True                         # 结果是否计入副产物与维持流量
 
@@ -34,8 +34,8 @@ class SolveResult:
 
     crafts    配方 id → 制造次数(仅计入 > 0 的配方);
     strict_ok False = 约束不可满足(crafts 为空,目标无法满足);
-    叶子/副产物/环境等展示合计不由求解器给出——由 recipe_calc 的
-    推导函数(net_flows/demand_leaves 等)按制造次数重算。
+    叶子/副产物/环境等展示合计不由求解器给出,由 recipe_calc 的
+    FlowGraph 按制造次数推导。
     """
 
     crafts: Mapping[str, Fraction]

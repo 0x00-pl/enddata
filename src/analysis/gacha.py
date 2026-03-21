@@ -171,8 +171,9 @@ class GachaPool:
     freeTenGrantAt: int = 30
     nextTenTicketAt: int = 60
     intervalRewardAt: int = 240
-    extraTenGrantAt: int = 0       # 每累计 N 次再赠 10 连(正常寻访口径;0 = 无)
+    extraTenGrantAt: int = 0       # 每累计 N 次再赠 10 连(加急招募;0 = 无)
     quota_base: int = 0            # 每寻访基础配额(特殊寻访 +1,普通限定 0)
+    sign_in_tickets: int = 5       # 登录签到送当期凭证张数(复刻池 0)
     banner_tickets: int = BANNER_TICKETS  # 开局可购当期券张数(复刻池 0)
     pool_name: str = "寻访池"
     progress_in_global: bool = False  # 进度入全局状态跨轮继承(重构寻访 = True)
@@ -186,8 +187,11 @@ class GachaPool:
                  guarantee_id: str = "",
                  rateup_ids: tuple[str, ...] = (),
                  standard_ids: tuple[str, ...] = (),
-                 sign_in_tickets: int = 5,
+                 sign_in_tickets: int | None = None,
                  banner_tickets: int | None = None):
+        # 签到/可购当期券张数:显式参数 > 类属性 > 默认;复刻池类属性为 0
+        if banner_tickets is not None:
+            self.banner_tickets = banner_tickets
         self.g = global_state or GachaGlobalState()
         self.rng = rng or random.Random()
         self.pool_id = pool_id
@@ -197,11 +201,8 @@ class GachaPool:
         self.guarantee_id = guarantee_id               # 120硬保底对象(联合池为空)
         self.rateup_ids = rateup_ids                   # 往期限定段:25% 平分
         self.standard_ids = standard_ids or _STD6      # 名单内常驻6★:25% 平分
-        self.sign_in_tickets = sign_in_tickets         # 登录签到送当期凭证张数
-        self.banner_tickets = BANNER_TICKETS if banner_tickets is None \
-            else banner_tickets
-        self.banner_tickets = (BANNER_TICKETS if banner_tickets is None
-                               else banner_tickets)  # 开局可购当期券张数
+        self.sign_in_tickets = (self.sign_in_tickets if sign_in_tickets is None
+                                else sign_in_tickets)  # 登录签到送当期凭证张数
         self.pulls = 0                 # 本池累计寻访 = 大保底计数
         self.up_got = 0                # 已获得当期干员次数(硬保底上限1)
         self.free_ten_left = 0         # 待抽的赠送十连余量
@@ -210,7 +211,7 @@ class GachaPool:
         self.interval_got = 0           # 已领取的 240 抽循环潜能信物数
         self.extra_ten_granted = False  # 额外 10 连档位(如复刻池 90 抽)是否已发
         self.exchange_left = 0          # 免费券余量(下期券/配额券,正常寻访)
-        self.banner_ticket_left = BANNER_TICKETS + self.sign_in_tickets
+        self.banner_ticket_left = self.banner_tickets + self.sign_in_tickets
 
     def reset(self, global_state: GachaGlobalState | None = None) -> None:
         """重置当期卡池状态(配置保留;可注入新的全局状态)。
@@ -281,9 +282,12 @@ class GachaPool:
                 six_id = self._pick_six()
                 dup = six_id in g.owned            # 第 2 次及后续获取
                 g.owned.add(six_id)
+                if six_id == self.guarantee_id:
+                    self.up_got += 1               # 加急招募同样能获得当期干员
             self._grant_quota(star, six_id, dup)
             self._persist_progress()
-            return Pull(star, star == 6, True, g.pity, self.pulls, six_id)
+            return Pull(star, star == 6 and six_id in self.up_ids,
+                        True, g.pity, self.pulls, six_id)
         free_kind = None                  # 当期卡池券 / 配额兑换券:计保底不计付费
         if self.banner_ticket_left:
             self.banner_ticket_left -= 1
@@ -386,11 +390,11 @@ class GachaPool:
                 self.g.next_ten_tickets[self.next_pool_id] = \
                     self.g.next_ten_tickets.get(self.next_pool_id, 0) + 1
             else:
-                self.exchange_left += FREE_TEN_SIZE  # 无下期绑定:当期 10 连
+                self.free_ten_left += FREE_TEN_SIZE  # 复刻:加急招募(赠送口径)
         if (self.extraTenGrantAt and not self.extra_ten_granted
                 and self.pulls >= self.extraTenGrantAt):
             self.extra_ten_granted = True
-            self.exchange_left += FREE_TEN_SIZE   # 额外 10 连:正常寻访口径
+            self.free_ten_left += FREE_TEN_SIZE   # 90 档加急招募(赠送口径)
         while (self.intervalRewardAt
                and self.pulls >= (self.interval_got + 1) * self.intervalRewardAt):
             self.interval_got += 1     # 循环潜能信物:额外当期份,不影响保底
@@ -413,7 +417,7 @@ class RerunGacha(LimitedGacha):     # type 4 复刻寻访(官方「重构寻访�
     # 随抽存档(progress_in_global = True)。
     progress_in_global = True
     quota_base = 1                  # 特殊寻访:每寻访额外 +1 基础配额(重构寻访同规)
-    extraTenGrantAt = 90            # 复刻池 90 抽再赠 10 连(30/60/90 三档)
+    extraTenGrantAt = 90            # 复刻池 90 抽再赠加急招募十连(30/60/90 三档)
     sign_in_tickets = 0             # 复刻池无签到当期凭证
     banner_tickets = 0              # 复刻池无可购当期券
 

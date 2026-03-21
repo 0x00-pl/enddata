@@ -122,7 +122,7 @@ def test_available_stops_production(rbi):
     solver = Z3Solver(load_recipes())
     targets = {"item_plant_grass_1": Fraction(10)}
     res = solver.solve(SolveRequest(targets,
-                                    available={"item_plant_grass_seed_1": 0}))
+                                    available={"item_plant_grass_seed_1"}))
     chart = FlowGraph(rbi, targets, res)
     assert chart.crafts == {"planter_plant_grass_1_1": Fraction(5)}   # 单次产 2
     assert chart.leaves == {
@@ -170,7 +170,7 @@ def test_preferred_twin_recipes():
     """完全等价的双胞胎配方(反应池 _1/_2,给定息壤/清水):折扣确定性选中首选。"""
     res = Z3Solver(load_recipes()).solve(
         SolveRequest({"item_liquid_xiranite": Fraction(2)},
-                     available={"item_xiranite_powder": 0, "item_liquid_water": 0},
+                     available={"item_xiranite_powder", "item_liquid_water"},
                      preferred={"item_liquid_xiranite": "pool_liquid_liquid_xiranite_2"}))
     assert set(res.crafts) == {"pool_liquid_liquid_xiranite_2"}
 
@@ -213,7 +213,7 @@ def test_rate_filter_core_provided(rbi):
     solver = Z3Solver(load_recipes())
     targets = {"item_filter_core": Fraction(60)}
     res = solver.solve(SolveRequest(targets,
-                                    available={"item_xiranite_powder": 0, "item_liquid_water": 0},
+                                    available={"item_xiranite_powder", "item_liquid_water"},
                                     per_min=True))
     chart = FlowGraph(rbi, targets, res)
     assert chart.crafts == {
@@ -235,8 +235,8 @@ def test_rate_copper_enr2_6_per_min_provided(rbi):
     solver = Z3Solver(load_recipes())
     targets = {"item_copper_enr2_cmpt": Fraction(6)}
     res = solver.solve(SolveRequest(targets,
-                                    available={"item_xiranite_powder": 0, "item_liquid_water": 0,
-                                               "item_copper_nugget": 0},
+                                    available={"item_xiranite_powder", "item_liquid_water",
+                                               "item_copper_nugget"},
                                     per_min=True))
     chart = FlowGraph(rbi, targets, res)
     assert chart.strict_ok
@@ -268,8 +268,8 @@ def test_byproducts_flag(rbi):
     solver = Z3Solver(load_recipes())
     targets = {"item_copper_enr2_cmpt": Fraction(6)}
     ok = solver.solve(SolveRequest(targets,
-                                   available={"item_xiranite_powder": 0, "item_liquid_water": 0,
-                                              "item_copper_nugget": 0},
+                                   available={"item_xiranite_powder", "item_liquid_water",
+                                              "item_copper_nugget"},
                                    per_min=True, byproducts=False))
     chart = FlowGraph(rbi, targets, ok)
     assert chart.strict_ok
@@ -324,6 +324,21 @@ def test_solver_abstraction(rbi):
             == FlowGraph(rbi, targets, via_class).leaves)
 
 
+# ---------------------------------------------------------------- 外部供给清单
+def test_available_external_supply(rbi):
+    """available 为无数量清单:列入的可制造物品按外部投料计——只剩最终封装步骤。"""
+    targets = {"item_filter_core": Fraction(60)}
+    res = Z3Solver(load_recipes()).solve(
+        SolveRequest(targets, per_min=True,
+                     available={"item_copper_jar", "item_xiranite_powder"}))
+    chart = FlowGraph(rbi, targets, res)
+    assert res.crafts == {"tools_proc_filter_core_2": Fraction(30)}
+    assert chart.leaves == {
+        ("item_copper_jar", KIND_EXTERN): Fraction(30),
+        ("item_xiranite_powder", KIND_EXTERN): Fraction(30),
+    }
+
+
 # ---------------------------------------------------------------- 渲染 / 链路图 / JSON / 报告
 def test_mermaid_flow(rbi):
     """链路图:流量建点 + 二部边(副产物同权实线)+ 单入单出收缩。"""
@@ -367,8 +382,8 @@ def test_render_sections(rbi):
     solver = Z3Solver(load_recipes())
     targets = {"item_copper_enr2_cmpt": Fraction(6)}
     res = solver.solve(SolveRequest(targets,
-                                    available={"item_xiranite_powder": 0, "item_liquid_water": 0,
-                                               "item_copper_nugget": 0}, per_min=True))
+                                    available={"item_xiranite_powder", "item_liquid_water",
+                                               "item_copper_nugget"}, per_min=True))
     text = FlowGraph(rbi, targets, res).summary("灼铜零件", per_min=True)
     for section in ("目标 灼铜零件", "需求原料", "产出:", "制造步骤",
                     "设备需求", "环境需求", "稳定环境", "酸性环境",
