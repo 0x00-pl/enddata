@@ -26,6 +26,7 @@ class SolveRequest:
     preferred: Mapping[str, str] = field(default_factory=dict)      # 物品 → 优先配方 id(软偏好)
     per_min: bool = False                           # 速率口径:数量按每分钟产出计
     byproducts: bool = True                         # 结果是否计入副产物与维持流量
+    maximize: Mapping[str, Fraction] = field(default_factory=dict)   # 最大化净产出:物品 → 权重
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,8 @@ class SolveResult:
     strict_ok False = 约束不可满足(crafts 为空,目标无法满足);
     叶子/副产物/环境等展示合计不由求解器给出,由 recipe_calc 的
     FlowGraph 按制造次数推导。
+    多目标求解为字典序:minimize 制造次数成本 → maximize 指定物品净产出
+    (先保成本最优,再在等价最优解中最大化 maximize 物品的盈余)。
     """
 
     crafts: Mapping[str, Fraction]

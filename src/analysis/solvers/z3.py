@@ -30,9 +30,11 @@ class Z3Solver(RecipeSolver):
         可制造物品净流量 ≥ 0(必须自产,不允许外部缺口);
         最初用料(无产出配方)净流量 ≤ 0(消耗量即需求);
         byproducts=False 时追加硬约束:非目标物品净流量 == 0(不允许副产物)。
-    目标函数:
-        minimize Σ 制造次数(最少制造次数口径;替代口径如最少设备台数、
-        最少外部购买可按同样框架扩展)。
+    目标函数(字典序):
+        ① minimize Σ 制造次数(最少制造次数口径;替代口径如最少设备台数、
+          最少外部购买可按同样框架扩展),preferred 配方成本按 1/4 计(软偏好);
+        ② maximize 指定物品的加权净产出——只在成本最优的等价解中挑选盈余
+          最大的,不会为多产副产物而增加制造次数;
         - preferred 暂未生效;
         - 环境维持按用到的环境计入 6/min 采集气体;设备维持(转化机气体)按
           运行时长线性计入流量(维持速率 × 设备占用率,速率语义下精确);
@@ -47,6 +49,7 @@ class Z3Solver(RecipeSolver):
         available = set(request.available)
         preferred = request.preferred
         byproducts = request.byproducts
+        maximize = {m: Fraction(w) for m, w in request.maximize.items()}
 
         recipes = {r.id: r for r in self.recipes
                    if not r.id.startswith(RECYCLER_PREFIX)}
@@ -70,6 +73,7 @@ class Z3Solver(RecipeSolver):
 
         preferred_recipes = set(preferred.values()) if preferred else set()
         target_ids = set(targets)
+        max_ids = set(maximize)
         for t, q in targets.items():
             opt.add(flow.get(t, 0) == q)
         for i, f in flow.items():
@@ -77,11 +81,13 @@ class Z3Solver(RecipeSolver):
                 continue
             if i in available:
                 opt.add(f <= 0)              # available 清单:可外部供给(只耗不产)
+            elif i in max_ids:
+                pass                         # 最大化物品:净产出方向不受限(允许盈余)
             elif i not in self.produced or is_gatherable(i):
                 opt.add(f <= 0)              # 无产出配方物品/采集资源:外部获取
             else:
                 opt.add(f >= 0)              # 可制造且未列 available:必须自产
-            if not byproducts:
+            if not byproducts and i not in max_ids:
                 opt.add(f <= 0)              # 不允许副产物净剩余(硬约束;最大化物品豁免)
 
         # 目标函数:制造次数计价,优先使用配方按半价(软偏好;整数计价规避除法节点)
@@ -89,6 +95,9 @@ class Z3Solver(RecipeSolver):
             return crafts[rid] * (1 if rid in preferred_recipes else 4)
 
         opt.minimize(sum(cost(rid) for rid in recipes))
+        if maximize:
+            # 字典序第二目标:成本最优的等价解中,最大化指定物品的加权净产出
+            opt.maximize(sum(w * flow.get(m, 0) for m, w in maximize.items()))
         if opt.check() != sat:
             return SolveResult(crafts={}, strict_ok=False)
 

@@ -324,7 +324,7 @@ def test_solver_abstraction(rbi):
             == FlowGraph(rbi, targets, via_class).leaves)
 
 
-# ---------------------------------------------------------------- 外部供给清单
+# ---------------------------------------------------------------- 最大化与外部供给
 def test_available_external_supply(rbi):
     """available 为无数量清单:列入的可制造物品按外部投料计——只剩最终封装步骤。"""
     targets = {"item_filter_core": Fraction(60)}
@@ -337,6 +337,37 @@ def test_available_external_supply(rbi):
         ("item_copper_jar", KIND_EXTERN): Fraction(30),
         ("item_xiranite_powder", KIND_EXTERN): Fraction(30),
     }
+
+
+def test_maximize_lexicographic(rbi):
+    """maximize 为字典序第二目标:成本最优不变,副产物盈余保留;
+    无关物品的 maximization 与 available 外部供给叠加时均不为盈余增加制造次数。"""
+    targets = {"item_filter_core": Fraction(60)}
+    res = Z3Solver(load_recipes()).solve(
+        SolveRequest(targets, per_min=True, maximize={"item_liquid_sewage": 1}))
+    chart = FlowGraph(rbi, targets, res)
+    assert res.crafts == {
+        "furnance_copper_nugget_1": Fraction(60),
+        "liquid_transmuter_2_solid_xiranite_powder_1": Fraction(30),
+        "shaper_gas_copper_jar_1": Fraction(30),
+        "tools_proc_filter_core_2": Fraction(30),
+    }
+    assert chart.byproducts == {"item_liquid_sewage": Fraction(60)}
+    # 无关物品:成本最优优先,不为其额外制造
+    res4 = Z3Solver(load_recipes()).solve(
+        SolveRequest({"item_iron_cmpt": Fraction(10)},
+                     maximize={"item_liquid_sewage": 1}))
+    assert res4.crafts == {
+        "component_iron_cmpt_1": Fraction(10),
+        "furnance_iron_nugget_1": Fraction(10),
+    }
+    assert FlowGraph(rbi, {"item_iron_cmpt": Fraction(10)}, res4).byproducts == {}
+    # 可制造物品列入 available 后成本最优(仅封装)优先,不为污水盈余回头冶炼
+    res3 = Z3Solver(load_recipes()).solve(
+        SolveRequest(dict(targets), per_min=True,
+                     available={"item_copper_jar", "item_xiranite_powder"},
+                     maximize={"item_liquid_sewage": 1}))
+    assert res3.crafts == {"tools_proc_filter_core_2": Fraction(30)}
 
 
 # ---------------------------------------------------------------- 渲染 / 链路图 / JSON / 报告
