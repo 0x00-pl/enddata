@@ -324,7 +324,7 @@ def test_solver_abstraction(rbi):
             == FlowGraph(rbi, targets, via_class).leaves)
 
 
-# ---------------------------------------------------------------- 最大化与外部供给
+# ---------------------------------------------------------------- 最大化 / 供给范围 / 使用量限制
 def test_available_external_supply(rbi):
     """available 为无数量清单:列入的可制造物品按外部投料计——只剩最终封装步骤。"""
     targets = {"item_filter_core": Fraction(60)}
@@ -368,6 +368,27 @@ def test_maximize_lexicographic(rbi):
                      available={"item_copper_jar", "item_xiranite_powder"},
                      maximize={"item_liquid_sewage": 1}))
     assert res3.crafts == {"tools_proc_filter_core_2": Fraction(30)}
+
+
+def test_usage_limits(rbi):
+    """usage_max/usage_min 约束外部使用量(净缺口):宽松上限不影响原方案,
+    过紧上限迫使换路,下限迫使过量生产并产生盈余副产物。"""
+    targets = {"item_filter_core": Fraction(60)}
+    solver = Z3Solver(load_recipes())
+    loose = solver.solve(SolveRequest(dict(targets), per_min=True,
+                                      usage_max={"item_gas_xiranite": Fraction(40)}))
+    assert loose.strict_ok and len(loose.crafts) == 4      # 原方案不变(息壤气 36 ≤ 40)
+    tight = solver.solve(SolveRequest(dict(targets), per_min=True,
+                                      usage_max={"item_liquid_water": Fraction(30)}))
+    chart_t = FlowGraph(rbi, targets, tight)
+    assert tight.strict_ok
+    assert chart_t.leaves[("item_liquid_water", KIND_EXTERN)] <= Fraction(30)
+    floor = solver.solve(SolveRequest(dict(targets), per_min=True,
+                                      usage_min={"item_liquid_water": Fraction(100)}))
+    chart_f = FlowGraph(rbi, targets, floor)
+    assert floor.strict_ok
+    assert chart_f.leaves[("item_liquid_water", KIND_EXTERN)] == Fraction(100)
+    assert chart_f.byproducts["item_copper_nugget"] == Fraction(10)   # 过量冶炼的铜盈余
 
 
 # ---------------------------------------------------------------- 渲染 / 链路图 / JSON / 报告

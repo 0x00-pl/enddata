@@ -27,6 +27,8 @@ class SolveRequest:
     per_min: bool = False                           # 速率口径:数量按每分钟产出计
     byproducts: bool = True                         # 结果是否计入副产物与维持流量
     maximize: Mapping[str, Fraction] = field(default_factory=dict)   # 最大化净产出:物品 → 权重
+    usage_max: Mapping[str, Fraction] = field(default_factory=dict)  # 外部使用量上限:物品 → 量
+    usage_min: Mapping[str, Fraction] = field(default_factory=dict)  # 外部使用量下限:物品 → 量
 
 
 @dataclass(frozen=True)

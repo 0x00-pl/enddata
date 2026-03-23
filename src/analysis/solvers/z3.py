@@ -36,6 +36,9 @@ class Z3Solver(RecipeSolver):
         ② maximize 指定物品的加权净产出——只在成本最优的等价解中挑选盈余
           最大的,不会为多产副产物而增加制造次数;
         - preferred 暂未生效;
+        - 外部供给仅限 无产出配方物品、采集资源 与 available 清单——可制造
+          物品要外部获取须显式列入 available;usage_max/usage_min 约束各
+          物品外部使用量(净缺口)上下限;
         - 环境维持按用到的环境计入 6/min 采集气体;设备维持(转化机气体)按
           运行时长线性计入流量(维持速率 × 设备占用率,速率语义下精确);
         - byproducts=False 是硬约束:依赖副产物的路线(如需冶炼产污水)会不可行
@@ -50,6 +53,8 @@ class Z3Solver(RecipeSolver):
         preferred = request.preferred
         byproducts = request.byproducts
         maximize = {m: Fraction(w) for m, w in request.maximize.items()}
+        usage_max = {i: Fraction(v) for i, v in request.usage_max.items()}
+        usage_min = {i: Fraction(v) for i, v in request.usage_min.items()}
 
         recipes = {r.id: r for r in self.recipes
                    if not r.id.startswith(RECYCLER_PREFIX)}
@@ -89,6 +94,11 @@ class Z3Solver(RecipeSolver):
                 opt.add(f >= 0)              # 可制造且未列 available:必须自产
             if not byproducts and i not in max_ids:
                 opt.add(f <= 0)              # 不允许副产物净剩余(硬约束;最大化物品豁免)
+        # 外部使用量(净缺口)上下限:使用量 = −净流量
+        for i, cap in usage_max.items():
+            opt.add(flow.get(i, 0) >= -cap)
+        for i, floor in usage_min.items():
+            opt.add(flow.get(i, 0) <= -floor)
 
         # 目标函数:制造次数计价,优先使用配方按半价(软偏好;整数计价规避除法节点)
         def cost(rid: str):
