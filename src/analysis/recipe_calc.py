@@ -331,7 +331,6 @@ def resolve_item(query: str) -> tuple[str | None, list[str]]:
 def compute(target: str, qty: Fraction,
             provided: frozenset[str] = frozenset(),
             pinned: dict[str, str] | None = None,
-            per_min: bool = False,
             byproducts: bool = True) -> "SolveResult":
     """单目标求解入口(全量配方):等价 Z3Solver 求解,返回平面解(配方 → 制造次数)。
 
@@ -345,8 +344,7 @@ def compute(target: str, qty: Fraction,
     return Z3Solver(load_recipes()).solve(SolveRequest(
         targets={target: qty},
         available=provided,
-        preferred=dict(pinned or {}),
-        per_min=per_min, byproducts=byproducts))
+        preferred=dict(pinned or {}), byproducts=byproducts))
 
 
 # ---------------------------------------------------------------- 展示
@@ -801,8 +799,7 @@ def main(item: str | None = None, qty: str = "1", have: str = "",
     result = solver_cls(load_recipes()).solve(SolveRequest(
         targets={target: amount},
         available=provided,
-        preferred=pinned, per_min=per_min,
-        byproducts=byproducts))
+        preferred=pinned, byproducts=byproducts))
     chart = FlowGraph(rbi, {target: amount}, result)
     if as_json:
         print(json.dumps(chart.to_dict(per_min), ensure_ascii=False, indent=2))

@@ -24,7 +24,6 @@ class SolveRequest:
     targets: Mapping[str, Fraction]                 # 目标产物 → 需求量(多目标聚合为一份需求)
     available: Collection[str] = field(default_factory=frozenset)   # 持有/可外部供给清单(只耗不产,不限量)
     preferred: Mapping[str, str] = field(default_factory=dict)      # 物品 → 优先配方 id(软偏好)
-    per_min: bool = False                           # 速率口径:数量按每分钟产出计
     byproducts: bool = True                         # 结果是否计入副产物与维持流量
     maximize: Mapping[str, Fraction] = field(default_factory=dict)   # 最大化净产出:物品 → 权重
     usage_max: Mapping[str, Fraction] = field(default_factory=dict)  # 外部使用量上限:物品 → 量

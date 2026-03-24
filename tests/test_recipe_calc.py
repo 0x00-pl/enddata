@@ -188,7 +188,7 @@ def test_solver_ctor_recipe_subset():
 # ---------------------------------------------------------------- 速率口径(60/min)
 def test_rate_filter_core_60_per_min():
     """分离芯 60/min:材料流量 + 设施维持(息壤气 36 = 30 原料 + 6 维持)。"""
-    chart = solve_chart("item_filter_core", 60, per_min=True)
+    chart = solve_chart("item_filter_core", 60)
     assert chart.leaves == {
         ("item_liquid_water", KIND_EXTERN): Fraction(60),
         ("item_gas_xiranite", KIND_EXTERN): Fraction(36),
@@ -214,7 +214,7 @@ def test_rate_filter_core_provided(rbi):
     targets = {"item_filter_core": Fraction(60)}
     res = solver.solve(SolveRequest(targets,
                                     available={"item_xiranite_powder", "item_liquid_water"},
-                                    per_min=True))
+                                    ))
     chart = FlowGraph(rbi, targets, res)
     assert chart.crafts == {
         "furnance_copper_nugget_1": Fraction(60),
@@ -237,7 +237,7 @@ def test_rate_copper_enr2_6_per_min_provided(rbi):
     res = solver.solve(SolveRequest(targets,
                                     available={"item_xiranite_powder", "item_liquid_water",
                                                "item_copper_nugget"},
-                                    per_min=True))
+                                    ))
     chart = FlowGraph(rbi, targets, res)
     assert chart.strict_ok
     assert chart.crafts == {
@@ -270,7 +270,7 @@ def test_byproducts_flag(rbi):
     ok = solver.solve(SolveRequest(targets,
                                    available={"item_xiranite_powder", "item_liquid_water",
                                               "item_copper_nugget"},
-                                   per_min=True, byproducts=False))
+                                   byproducts=False))
     chart = FlowGraph(rbi, targets, ok)
     assert chart.strict_ok
     assert chart.byproducts == {} and chart.byproduct_sources == {}
@@ -284,7 +284,7 @@ def test_multi_target(rbi):
     """多目标:一张约束网同时满足,原料聚合不重不漏。"""
     solver = Z3Solver(load_recipes())
     targets = {"item_filter_core": Fraction(60), "item_iron_cmpt": Fraction(10)}
-    res = solver.solve(SolveRequest(targets, per_min=True))
+    res = solver.solve(SolveRequest(targets))
     chart = FlowGraph(rbi, targets, res)
     assert chart.strict_ok
     mats = chart.materials()
@@ -329,7 +329,7 @@ def test_available_external_supply(rbi):
     """available 为无数量清单:列入的可制造物品按外部投料计——只剩最终封装步骤。"""
     targets = {"item_filter_core": Fraction(60)}
     res = Z3Solver(load_recipes()).solve(
-        SolveRequest(targets, per_min=True,
+        SolveRequest(targets,
                      available={"item_copper_jar", "item_xiranite_powder"}))
     chart = FlowGraph(rbi, targets, res)
     assert res.crafts == {"tools_proc_filter_core_2": Fraction(30)}
@@ -344,7 +344,7 @@ def test_maximize_lexicographic(rbi):
     无关物品的 maximization 与 available 外部供给叠加时均不为盈余增加制造次数。"""
     targets = {"item_filter_core": Fraction(60)}
     res = Z3Solver(load_recipes()).solve(
-        SolveRequest(targets, per_min=True, maximize={"item_liquid_sewage": 1}))
+        SolveRequest(targets, maximize={"item_liquid_sewage": 1}))
     chart = FlowGraph(rbi, targets, res)
     assert res.crafts == {
         "furnance_copper_nugget_1": Fraction(60),
@@ -364,7 +364,7 @@ def test_maximize_lexicographic(rbi):
     assert FlowGraph(rbi, {"item_iron_cmpt": Fraction(10)}, res4).byproducts == {}
     # 可制造物品列入 available 后成本最优(仅封装)优先,不为污水盈余回头冶炼
     res3 = Z3Solver(load_recipes()).solve(
-        SolveRequest(dict(targets), per_min=True,
+        SolveRequest(dict(targets),
                      available={"item_copper_jar", "item_xiranite_powder"},
                      maximize={"item_liquid_sewage": 1}))
     assert res3.crafts == {"tools_proc_filter_core_2": Fraction(30)}
@@ -375,15 +375,15 @@ def test_usage_limits(rbi):
     过紧上限迫使换路,下限迫使过量生产并产生盈余副产物。"""
     targets = {"item_filter_core": Fraction(60)}
     solver = Z3Solver(load_recipes())
-    loose = solver.solve(SolveRequest(dict(targets), per_min=True,
+    loose = solver.solve(SolveRequest(dict(targets),
                                       usage_max={"item_gas_xiranite": Fraction(40)}))
     assert loose.strict_ok and len(loose.crafts) == 4      # 原方案不变(息壤气 36 ≤ 40)
-    tight = solver.solve(SolveRequest(dict(targets), per_min=True,
+    tight = solver.solve(SolveRequest(dict(targets),
                                       usage_max={"item_liquid_water": Fraction(30)}))
     chart_t = FlowGraph(rbi, targets, tight)
     assert tight.strict_ok
     assert chart_t.leaves[("item_liquid_water", KIND_EXTERN)] <= Fraction(30)
-    floor = solver.solve(SolveRequest(dict(targets), per_min=True,
+    floor = solver.solve(SolveRequest(dict(targets),
                                       usage_min={"item_liquid_water": Fraction(100)}))
     chart_f = FlowGraph(rbi, targets, floor)
     assert floor.strict_ok
@@ -409,7 +409,7 @@ def test_mermaid_upkeep_edge(rbi):
     """设施维持边:固气转化机的息壤气 = 原料边 ×30 + 维持边 ×6,源节点标 36。"""
     targets = {"item_filter_core": Fraction(60)}
     chart = FlowGraph(rbi, targets,
-                      compute("item_filter_core", Fraction(60), per_min=True))
+                      compute("item_filter_core", Fraction(60)))
     text = chart.mermaid()
     assert 'I_item_gas_xiranite[["息壤气 ×36"]]' in text
     assert '-->|"×30"| R_liquid_transmuter_2_solid_xiranite_powder_1' in text
@@ -419,7 +419,7 @@ def test_mermaid_upkeep_edge(rbi):
 def test_render_rate_and_batch(rbi):
     targets = {"item_filter_core": Fraction(60)}
     chart = FlowGraph(rbi, targets,
-                      compute("item_filter_core", Fraction(60), per_min=True))
+                      compute("item_filter_core", Fraction(60)))
     text = chart.summary("分离芯", per_min=True)
     assert "×60/min" in text and "设备需求" in text
     batch_targets = {"item_filter_core": Fraction(4)}
@@ -435,7 +435,7 @@ def test_render_sections(rbi):
     targets = {"item_copper_enr2_cmpt": Fraction(6)}
     res = solver.solve(SolveRequest(targets,
                                     available={"item_xiranite_powder", "item_liquid_water",
-                                               "item_copper_nugget"}, per_min=True))
+                                               "item_copper_nugget"}))
     text = FlowGraph(rbi, targets, res).summary("灼铜零件", per_min=True)
     for section in ("目标 灼铜零件", "需求原料", "产出:", "制造步骤",
                     "设备需求", "环境需求", "稳定环境", "酸性环境",
@@ -447,7 +447,7 @@ def test_to_dict(rbi):
     import json
     solver = Z3Solver(load_recipes())
     targets = {"item_filter_core": Fraction(60)}
-    res = solver.solve(SolveRequest(dict(targets), per_min=True))
+    res = solver.solve(SolveRequest(dict(targets)))
     payload = json.loads(json.dumps(
         FlowGraph(rbi, targets, res).to_dict(per_min=True)))
     assert payload["target"]["per_min"] is True
