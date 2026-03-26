@@ -24,11 +24,12 @@
                ③ 环境维持(env):链上配方要求气体环境时,气体散布机持续
                  通入对应气体 6/min(惰气→稳定、水蒸气→湿润、酸气→酸性、
                  息壤气→息壤),作为附加叶子计入需求原料;
-               ④ 设备维持(upkeep,仅速率口径):转化机运行需持续通入息壤系
-                 气体(FactoryTransmuterTable:液气转化机通液化息壤、固气
-                 转化机通息壤气,6/min/台、上限 30),按运行时长线性计入
-                 需求原料——「溶液方案省息壤气」即源于液气路线把维持消耗
-                 从息壤气换成液化息壤
+               ④ 设备维持(upkeep):转化机运行需持续通入息壤系气体
+                 (FactoryTransmuterTable:液气转化机通液化息壤、固气
+                 转化机通息壤气,6/min/台、上限 30)——按占用台数计入
+                 (向上取整,不满载也按整台全额);要按运行时长线性折算,
+                 可另行添加临时配方表达;「溶液方案省息壤气」即源于液气
+                 路线把维持气体从息壤气换成液化息壤
     副产物     仅统计目标产物所需,污水等副产物不做回收抵扣(那属于产线
                规划/LP 范畴,见 README 对旧 planner 的说明)
 
@@ -83,22 +84,13 @@ GAS_ENV_PROVIDERS = {
 GAS_ENV_RATE = Fraction(6)
 # 设备维持消耗(FactoryTransmuterTable):转化机运行需持续通入息壤系气体
 # 6/min/台(上限 30)——液气转化机通液化息壤、固气转化机通息壤气;
-# 这就是「溶液方案省息壤气」的出处:液气路线把维持消耗从息壤气换成液化息壤
+# 口径:按占用台数计(向上取整),不满载也按整台全额计——要按运行时长线性
+# 折算(按需 upkeep),可另行添加临时配方表达;「溶液方案省息壤气」即源于
+# 液气路线把维持气体从息壤气换成液化息壤
 MACHINE_UPKEEP = {
     "transmuter_1": "item_liquid_xiranite",   # 液气转化机:液化息壤
     "transmuter_2": "item_gas_xiranite",      # 固气转化机:息壤气
 }
-
-
-def _facility_upkeep(craft_time: float | None) -> Fraction:
-    """单次制造的设施维持气体通入量:6/min × 单次耗时 ÷ 60(线性占用)。
-
-    与设备台数(向上取整,见 FlowGraph.machines)分开:气体按实际运行时长线性
-    消耗,不随取整虚增;多次制造的总量 = 次数 × 本值,由调用方线性放大。
-    """
-    if not craft_time:
-        return Fraction(0)
-    return GAS_ENV_RATE * Fraction(str(craft_time)) / 60
 
 # 叶子类型(需求来源)
 KIND_RAW = "raw"            # 采集资源(无产出配方或 obtainWays 非空)→ 最初用料
@@ -139,16 +131,14 @@ class Recipe:
         return GAS_ENV_NAMES.get(self.require_env)
 
     @property
-    def require_upkeep(self) -> tuple[str, Fraction] | None:
-        """设施维持:(维持气体 id, 单次制造通入量);无维持设施为 None。
+    def upkeep_gas(self) -> str | None:
+        """设施维持声明:本配方设施需持续通入的气体 id(无维持设施为 None)。
 
-        转化机类设施运行需通入息壤系气体(见 MACHINE_UPKEEP),按运行时长
-        线性折算到每次制造;求解器与链路图共用此口径。
+        只声明"需要哪种维持";金额由消费方计算——占用台数 =
+        ceil(次数 × require_time ÷ 60),每台恒 6/min、不满载也按整台
+        全额计(保守口径;线性折算可经临时配方表达,见 MACHINE_UPKEEP 注)。
         """
-        gas = MACHINE_UPKEEP.get(self.require_machine or "")
-        if gas is None:
-            return None
-        return gas, _facility_upkeep(self.require_time)
+        return MACHINE_UPKEEP.get(self.require_machine or "")
 
     def produce_of(self, item: str) -> int:
         """单次制造产出 item 的数量(仅统计目标物品本身,副产物另计不计抵扣)。"""
@@ -170,8 +160,8 @@ class Recipe:
         notes = []
         if self.env_name:
             notes.append(self.env_name)
-        if (upkeep := self.require_upkeep) is not None:
-            notes.append(f"维持{_item_name(upkeep[0]) or upkeep[0]}*{GAS_ENV_RATE}/min")
+        if (gas := self.upkeep_gas) is not None:
+            notes.append(f"维持{_item_name(gas) or gas}*{GAS_ENV_RATE}/min")
         deco = (f"--{device}({','.join(notes)})-->" if notes
                 else f"--{device}-->" if device else "-->")
         return f"{ins} {deco} {outs}"
@@ -418,6 +408,17 @@ class FlowGraph:
         self._contract_pass_through()
 
     # -- 构造期推导 -----------------------------------------------------------
+    def _upkeep_amount(self, rid: str) -> tuple[str, Fraction] | None:
+        """(维持气体, 该配方维持通入量) = 6 × ceil(次数 × 耗时 ÷ 60)。
+
+        不满载也按整台全额计(与求解器的整型台数约束同式)。
+        """
+        r = self.recipes_by_id[rid]
+        if (gas := r.upkeep_gas) is None or not r.require_time:
+            return None
+        busy = self.crafts[rid] * Fraction(str(r.require_time)) / 60
+        return gas, GAS_ENV_RATE * math.ceil(busy)
+
     def _net_flows(self) -> dict[str, Fraction]:
         """各物品净流量 = Σ 制造次数 ×(产出 − 消耗 − 设施维持);与求解器守恒一致。"""
         flows: dict[str, Fraction] = {}
@@ -427,9 +428,9 @@ class FlowGraph:
                 flows[s.id] = flows.get(s.id, Fraction(0)) + n * s.count
             for s in r.require_items:
                 flows[s.id] = flows.get(s.id, Fraction(0)) - n * s.count
-            if (upkeep := r.require_upkeep) is not None:
-                gas_id, per_craft = upkeep
-                flows[gas_id] = flows.get(gas_id, Fraction(0)) - n * per_craft
+            if (upkeep := self._upkeep_amount(rid)) is not None:
+                gas_id, q = upkeep
+                flows[gas_id] = flows.get(gas_id, Fraction(0)) - q
         return flows
 
     def _split_demand(self) -> None:
@@ -459,10 +460,10 @@ class FlowGraph:
         即使维持气体同时是配方原料(如固气转化机的息壤气)也分别画出。"""
         upkeep_in: dict[tuple[str, str], Fraction] = {}
         for rid, n in self.crafts.items():
-            if (upkeep := self.recipes_by_id[rid].require_upkeep) is not None \
-                    and (q := n * upkeep[1]) > 0:
-                key = (upkeep[0], rid)
-                upkeep_in[key] = upkeep_in.get(key, Fraction(0)) + q
+            if (upkeep := self._upkeep_amount(rid)) is not None:
+                gas_id, q = upkeep
+                if q > 0:
+                    upkeep_in[(gas_id, rid)] = upkeep_in.get((gas_id, rid), Fraction(0)) + q
         return upkeep_in
 
     def _bipartite(self) -> None:
@@ -523,7 +524,7 @@ class FlowGraph:
         for rid, n in sorted(self.crafts.items()):
             r = self.recipes_by_id[rid]
             if r.require_time:
-                out.append((r, n, math.ceil(n * r.require_time / 60)))
+                out.append((r, n, math.ceil(n * Fraction(str(r.require_time)) / 60)))
         return out
 
     def required_envs(self) -> list[tuple[str, list[str]]]:

@@ -12,7 +12,7 @@
 
 from fractions import Fraction
 
-from analysis.recipe_calc import RECYCLER_PREFIX, is_gatherable
+from analysis.recipe_calc import GAS_ENV_RATE, RECYCLER_PREFIX, is_gatherable
 
 
 from analysis.solvers import RecipeSolver, SolveRequest, SolveResult, register
@@ -23,7 +23,8 @@ class Z3Solver(RecipeSolver):
     """Z3 (SMT/LP) 求解器:整图约束一次求解,环路与共享中间品天然可解。
 
     建模:
-        变量      每条产出配方(不含拆解)一个 ≥0 有理数变量 = 制造次数;
+        变量      每条产出配方(不含拆解)一个 ≥0 有理数变量 = 制造次数,
+                  维持设施另有 ≥0 整数台数变量(次数 ≤ 台数 × 单台容量);
         守恒      每种物品:产出 − 消耗 = 净流量;
         目标      净流量 == 需求量(多目标合并为一张约束网);
         available 持有物品只允许消耗(其产出配方强制为 0)→ 差额全部外部供给;
@@ -40,13 +41,19 @@ class Z3Solver(RecipeSolver):
           物品要外部获取须显式列入 available;usage_max/usage_min 约束各
           物品外部使用量(净缺口)上下限;
         - 环境维持按用到的环境计入 6/min 采集气体;设备维持(转化机气体)按
-          运行时长线性计入流量(维持速率 × 设备占用率,速率语义下精确);
+          占用台数计入(整数变量,向上取整,不满载也按整台 6/min;线性
+          折算口径可经临时配方表达);
         - byproducts=False 是硬约束:依赖副产物的路线(如需冶炼产污水)会不可行
           (maximize 物品豁免该约束)。
     """
 
     def solve(self, request: SolveRequest) -> SolveResult:
-        from z3 import Optimize, Real, sat
+        import z3
+
+        # 独立 Context:隔离跨调用的求解器状态(复用全局上下文会在多次
+        # Optimize 后劣化,个别查询从亚秒级劣化到分钟级)
+        ctx = z3.Context()
+        sat = z3.sat
 
         targets = {t: Fraction(q) for t, q in request.targets.items()}
         available = set(request.available)
@@ -58,23 +65,28 @@ class Z3Solver(RecipeSolver):
 
         recipes = {r.id: r for r in self.recipes
                    if not r.id.startswith(RECYCLER_PREFIX)}
-        opt = Optimize()
-        crafts = {rid: Real(f"x__{rid}") for rid in recipes}
+        opt = z3.Optimize(ctx=ctx)
+        crafts = {rid: z3.Real(f"x__{rid}", ctx=ctx) for rid in recipes}
         for v in crafts.values():
             opt.add(v >= 0)
 
         # 全链净流量(产出 − 消耗),按物品累计 z3 算术表达式
         flow: dict[str, object] = {}
+        machine_vars: list = []                       # 维持设施占用台数(整数)
         for rid, r in recipes.items():
             for s in r.produce_items:
                 flow[s.id] = flow.get(s.id, 0) + crafts[rid] * s.count
             for s in r.require_items:
                 flow[s.id] = flow.get(s.id, 0) - crafts[rid] * s.count
-            # 设施维持:机器运行期间持续通入息壤系气体,按运行时长线性计入
-            upkeep = r.require_upkeep
-            if upkeep is not None:
-                gas_id, per_craft = upkeep
-                flow[gas_id] = flow.get(gas_id, 0) - crafts[rid] * per_craft
+            # 设施维持:按占用台数计——占用秒数 ≤ 整数台数 × 60,气体 = 6 × 台数
+            # (不满载也按整台全额;线性口径可经临时配方表达,见模块注释)
+            if (gas_id := r.upkeep_gas) is not None and r.require_time:
+                t = Fraction(str(r.require_time))
+                m = z3.Int(f"m__{rid}", ctx=ctx)
+                machine_vars.append(m)
+                opt.add(m >= 0)
+                opt.add(crafts[rid] * t.numerator <= m * 60 * t.denominator)
+                flow[gas_id] = flow.get(gas_id, 0) - int(GAS_ENV_RATE) * m
 
         preferred_recipes = set(preferred.values()) if preferred else set()
         target_ids = set(targets)
@@ -105,6 +117,9 @@ class Z3Solver(RecipeSolver):
             return crafts[rid] * (1 if rid in preferred_recipes else 4)
 
         opt.minimize(sum(cost(rid) for rid in recipes))
+        if machine_vars:
+            # 字典序第二目标:维持台数最少(把整数台数压到 ceil,不虚增)
+            opt.minimize(sum(machine_vars))
         if maximize:
             # 字典序第二目标:成本最优的等价解中,最大化指定物品的加权净产出
             opt.maximize(sum(w * flow.get(m, 0) for m, w in maximize.items()))

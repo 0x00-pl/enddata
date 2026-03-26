@@ -324,6 +324,16 @@ def test_solver_abstraction(rbi):
             == FlowGraph(rbi, targets, via_class).leaves)
 
 
+def test_upkeep_full_machine():
+    """不满载也按整台全额计维持:分离芯 30/min 固气转化机占用 0.5 台,
+    息壤气 = 15 原料 + 6 维持(线性口径为 3);设备折算与流量口径一致。"""
+    chart = solve_chart("item_filter_core", 30)
+    assert chart.crafts["liquid_transmuter_2_solid_xiranite_powder_1"] == Fraction(15)
+    assert chart.leaves[("item_gas_xiranite", KIND_EXTERN)] == Fraction(21)
+    machines = {r.id: m for r, _, m in chart.machines()}
+    assert machines["liquid_transmuter_2_solid_xiranite_powder_1"] == 1
+
+
 # ---------------------------------------------------------------- 最大化 / 供给范围 / 使用量限制
 def test_available_external_supply(rbi):
     """available 为无数量清单:列入的可制造物品按外部投料计——只剩最终封装步骤。"""
