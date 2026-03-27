@@ -13,6 +13,11 @@ __pycache__/
 *.pyc
 .venv/
 
+# lint/类型检查缓存(ruff/mypy,pre-commit 自动运行)
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+
 # 编辑器/系统
 .DS_Store
 *.swp

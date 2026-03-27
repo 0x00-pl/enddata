@@ -23,9 +23,53 @@ enddata = "enddata.cli:main"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^9.1.1"
+ruff = "^0.16.8"
+mypy = "^2.3.1"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+# ---------------------------------------------------------------- 代码检查
+# poetry run ruff check src tests   # 风格 + lint(提交时 .githooks/pre-commit 自动跑)
+# poetry run mypy                   # 静态类型检查
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+src = ["src", "tests"]
+extend-exclude = ["sources", "data", "dist", "web", "docs"]
+
+[tool.ruff.lint]
+select = [
+    "E4", "E7", "E9", "F",        # pycodestyle 错误 + pyflakes(未定义名/未用导入等)
+    "I",                          # import 排序
+    "B",                          # bugbear(循环变量捕获等易错模式)
+    "UP",                         # pyupgrade(语法现代化)
+    "S",                          # 安全(bandit:盲 except/子进程等)
+    "BLE",                        # 盲 except 必须显式 noqa 说明
+    "PIE", "PLW", "PERF", "FURB", # 杂项 / pylint 警告 / 性能 / refurb
+    "RUF",                        # ruff 自有规则
+    "ISC",                        # 隐式字符串拼接
+    "EXE",                        # shebang
+]
+ignore = [
+    "ISC004",  # 集合字面量内多行隐式字符串拼接:长中文文案的既定仓库风格
+    "RUF001", "RUF002", "RUF003", # 中文全角标点(:(),等)是本仓库文案/注释风格
+    "S603", "S607", # 子进程调用 git 等已知系统工具,不走 shell、PATH 查找是有意的
+    "S310",   # urlopen 是唯一采集通道,URL 均来自 config/sources.json 白名单
+    "S311",   # random 用于蒙特卡洛模拟(抽卡/队伍),非密码学场景
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101"] # assert 即 pytest 断言
+
+[tool.mypy]
+python_version = "3.10"
+files = ["src", "tests"]
+# 渐进式基线:不做 strict;json 重的采集层动态风格靠局部注解/断言兜底
+
+[[tool.mypy.overrides]]
+module = "z3"
+ignore_missing_imports = true # z3-solver 无 py.typed
 
 [build-system]
 requires = ["poetry-core"]
