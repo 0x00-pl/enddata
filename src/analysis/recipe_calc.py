@@ -171,10 +171,8 @@ class Recipe:
 # ---------------------------------------------------------------- 数据加载
 def _flatten(side: list[dict]) -> tuple[Stack, ...]:
     """[{group:[...]}] → 摊平元组;同组同槽原料同时消耗(AND),直接拼接。"""
-    out = []
-    for entry in side:
-        for s in entry.get("group", []):
-            out.append(Stack(s["id"], s.get("name") or s["id"], int(s.get("count", 1))))
+    out = [Stack(s["id"], s.get("name") or s["id"], int(s.get("count", 1)))
+           for entry in side for s in entry.get("group", [])]
     return tuple(out)
 
 
@@ -321,7 +319,7 @@ def resolve_item(query: str) -> tuple[str | None, list[str]]:
 def compute(target: str, qty: Fraction,
             provided: frozenset[str] = frozenset(),
             pinned: dict[str, str] | None = None,
-            byproducts: bool = True) -> "SolveResult":
+            byproducts: bool = True) -> SolveResult:
     """单目标求解入口(全量配方):等价 Z3Solver 求解,返回平面解(配方 → 制造次数)。
 
     provided 为持有物品 id 集合(即 available 清单,不限量);
@@ -390,7 +388,7 @@ class FlowGraph:
     """
 
     def __init__(self, recipes_by_id: dict[str, Recipe],
-                 targets: Mapping[str, Fraction], result: "SolveResult") -> None:
+                 targets: Mapping[str, Fraction], result: SolveResult) -> None:
         self.recipes_by_id = recipes_by_id
         self.targets = dict(targets)
         self.crafts: Mapping[str, Fraction] = result.crafts
@@ -459,7 +457,7 @@ class FlowGraph:
         """维持输入边:(气体, 配方) → 通入量。独立于配方原料边(标"维持"),
         即使维持气体同时是配方原料(如固气转化机的息壤气)也分别画出。"""
         upkeep_in: dict[tuple[str, str], Fraction] = {}
-        for rid, n in self.crafts.items():
+        for rid in self.crafts:
             if (upkeep := self._upkeep_amount(rid)) is not None:
                 gas_id, q = upkeep
                 if q > 0:
@@ -636,12 +634,12 @@ class FlowGraph:
             lines.append("使用设备:" + "、".join(names))
         envs = self.required_envs()
         if envs:
-            upkeep = {name: (gas, rate) for name, gas, rate in self._env_upkeep()}
+            upkeep_by_name = {name: (gas, rate) for name, gas, rate in self._env_upkeep()}
             parts = []
             for env, rids in envs:
                 base = f"{env}({', '.join(rids)})"
-                if env in upkeep:
-                    gas, rate = upkeep[env]
+                if env in upkeep_by_name:
+                    gas, rate = upkeep_by_name[env]
                     base += f" ← 气体散布机 通入{name_of(gas)} ×{_fmt_qty(rate)}/min"
                 parts.append(base)
             lines.append("环境需求:" + ";".join(parts))
@@ -664,7 +662,8 @@ class FlowGraph:
 
         upkeep_by_name = {name: (gas, rate) for name, gas, rate in self._env_upkeep()}
         environments = [{"name": env, "recipes": rids,
-                         **({"provider_gas": gas, "provider_rate_per_min": str(rate)}
+                         **({"provider_gas": pair[0],
+                             "provider_rate_per_min": str(pair[1])}
                             if (pair := upkeep_by_name.get(env)) else {})}
                         for env, rids in self.required_envs()]
         tid, qty = next(iter(self.targets.items()))
@@ -715,7 +714,7 @@ def build_report(demos: list[tuple[str, Fraction, frozenset[str]]]) -> str:
     lines.append("")
 
     for label, qty, provided in demos:
-        target, cands = resolve_item(label)
+        target, _cands = resolve_item(label)
         if target is None:
             continue
         res = compute(target, qty, provided)
@@ -766,7 +765,7 @@ def _resolve_provided(have: str) -> frozenset[str]:
 def main(item: str | None = None, qty: str = "1", have: str = "",
          as_json: bool = False, recipe_pins: list[str] | None = None,
          solver: str = "z3", byproducts: bool = True) -> None:
-    from analysis.solvers import SOLVERS, SolveRequest   # 惰性导入,避免与求解器实现的循环依赖
+    from analysis.solvers import SOLVERS, SolveRequest  # 惰性导入,避免与求解器实现的循环依赖
     rbi = recipes_by_id()
     solver_cls = SOLVERS.get(solver)
     if solver_cls is None:
@@ -775,7 +774,7 @@ def main(item: str | None = None, qty: str = "1", have: str = "",
     provided = _resolve_provided(have)
 
     if item is None:  # 总览报告模式
-        demos = [
+        demos: list[tuple[str, Fraction, frozenset[str]]] = [
             ("铁制零件", Fraction(10), frozenset()),
             ("分离芯", Fraction(4), frozenset()),
             ("锦草", Fraction(10), frozenset()),

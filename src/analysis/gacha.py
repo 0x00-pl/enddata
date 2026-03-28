@@ -59,10 +59,11 @@ from __future__ import annotations
 import json
 import random
 import re
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from itertools import accumulate
+from pathlib import Path
 
 from tools.tables import DATA_DIR, REPORTS_DIR
 
@@ -260,7 +261,7 @@ class GachaPool:
         """保底周期第 cycle 抽的6★概率(含提升段与保底必出;按调用子类参数)。"""
         r = cls.star6BaseRate
         for start, val in zip(cls.star6RatePromotePullCount,
-                              cls.star6RatePromoteValue):
+                              cls.star6RatePromoteValue, strict=False):
             if cycle >= start:
                 r += val * (cycle - start + 1)
         if cycle >= cls.softGuarantee:
@@ -272,12 +273,13 @@ class GachaPool:
         """单次寻访:优先消耗赠送抽数(基础概率,不动任何计数);否则为有效
         寻访 —— 推进全局保底计数与本池累计,结算星级/干员与累计赠礼。"""
         g, rng = self.g, self.rng
+        six_id: str | None = None
+        dup = False
         if self.free_ten_left:                     # 加急招募:不计保底
             self.free_ten_left -= 1
             g.total_pulls += 1
             g.free_pulls += 1
-            star, six_id = self._free_star(), None
-            dup = False
+            star = self._free_star()
             if star == 6:
                 six_id = self._pick_six()
                 dup = six_id in g.owned            # 第 2 次及后续获取
@@ -305,8 +307,6 @@ class GachaPool:
         g.five_pity += 1
         forced = (bool(self.hardGuarantee) and bool(self.guarantee_id)
                   and self.up_got == 0 and self.pulls >= self.hardGuarantee)
-        six_id: str | None
-        dup = False
         if forced or g.pity >= self.softGuarantee \
                 or rng.random() < self.star6_rate(g.pity):
             g.pity = 0
@@ -538,7 +538,7 @@ POOLS: dict[str, list[GachaPool]] = {
 for _cur, _nxt in zip((p for pools in POOLS.values() for p in pools
                        if isinstance(p, LimitedGacha)),
                       [p for pools in POOLS.values() for p in pools
-                       if isinstance(p, LimitedGacha)][1:]):
+                       if isinstance(p, LimitedGacha)][1:], strict=False):
     _cur.next_pool_id = _nxt.pool_id
 
 
@@ -863,16 +863,6 @@ def sample_pmf(samples: list[int]) -> list[float]:
 
 
 # ---------------------------------------------------------------- ④ 版本与绘图
-def version_key(v: str) -> tuple[int, ...]:
-    """版本号 → 可比较元组(1.10 > 1.9)。"""
-    return tuple(int(x) for x in v.split("."))
-
-
-def latest_version() -> str:
-    """POOLS 中最新的版本号。"""
-    return max(POOLS, key=version_key)
-
-
 def version_banners(version: str) -> list[GachaPool]:
     """截至 version(含)的全部首发限定池(按版本顺序平铺)。"""
     return [p for v, pools in sorted(POOLS.items(), key=lambda kv: version_key(kv[0]))
@@ -942,7 +932,7 @@ def resolve_plan(target: str | None) -> tuple[str, str, str, list[GachaPool]]:
         version_key(target)
     except ValueError:
         raise SystemExit(f"未知版本或卡池:{target}(版本:{'、'.join(POOLS)};"
-                         f"卡池可用 pool_id/名称,切片如 1.0[:1],范围如 ..1.4)")
+                         f"卡池可用 pool_id/名称,切片如 1.0[:1],范围如 ..1.4)") from None
     plan = plan_of(target)
     if not plan:
         raise SystemExit(f"版本 {target} 没有首发限定池(复刻池用 pool_id 指定)")
@@ -971,7 +961,7 @@ def collection_cdf(plan: list[GachaPool], trials: int = 5_000,
             run_banner(pool, strategy)
         paid.append(g.paid_pulls)
         free.append(g.free_pulls)
-    arr = cdf(sample_pmf([p + f for p, f in zip(paid, free)]))
+    arr = cdf(sample_pmf([p + f for p, f in zip(paid, free, strict=False)]))
     return arr, cdf_expectation(arr), sum(free) / len(free)
 
 
@@ -990,14 +980,14 @@ def collection_cdf_upper(plan: list[GachaPool]) -> tuple[list[float], float]:
 
 
 def render_collection_chart(title: str,
-                            curves: list[tuple[str, list[float], str, float]],
+                            curves: Sequence[tuple[str, list[float], str, float, float]],
                             out_path: Path,
-                            marks: list[tuple[str, float, str, str]] = ()
+                            marks: Sequence[tuple[str, float, str, str]] = ()
                             ) -> Path:
     """全图鉴集齐概率折线图(手写 SVG,零依赖):横坐标总寻访次数、纵坐标
-    集齐概率;curves = [(图例, CDF, 颜色, 期望)];marks = [(标签, 抽数,
-    颜色, 与期望的差)] 为参考竖线。全部文字说明集中在左上信息卡,竖排,
-    不与曲线/竖线/交点标注重叠;竖线交点处圆点 + 集齐概率。"""
+    集齐概率;curves = [(图例, CDF, 颜色, 期望, 免费抽数均值)];marks =
+    [(标签, 抽数, 颜色, 与期望的差)] 为参考竖线。全部文字说明集中在左上
+    信息卡,竖排,不与曲线/竖线/交点标注重叠;竖线交点处圆点 + 集齐概率。"""
 
     def prob_at(cdf_arr: list[float], x: float) -> float:
         """竖线位置在主曲线上的概率(线性插值)。"""
@@ -1010,7 +1000,6 @@ def render_collection_chart(title: str,
     ml, mr, mt, mb = 64, 24, 46, 52
     pw, ph = w - ml - mr, h - mt - mb
     x_max = max(len(c) for _, c, _, _, _ in curves) + 1  # cdf 第 i 项 = 前 i 抽
-    x_step = 100 if x_max <= 600 else (200 if x_max <= 1200 else 400)
 
     def X(v: float) -> float:
         return ml + v / x_max * pw
@@ -1058,7 +1047,7 @@ def render_collection_chart(title: str,
         return cdf_arr[i] + (cdf_arr[i + 1] - cdf_arr[i]) * (x - i)
 
     lines: list[str] = []
-    for li, (label, cdf_arr, color, expect, _fm) in enumerate(curves):
+    for li, (_label, cdf_arr, color, expect, _fm) in enumerate(curves):
         pts = " ".join(f"{X(i):.1f},{Y(p):.1f}"
                        for i, p in enumerate(cdf_arr[:x_max]))
         lines.append(f'<polyline points="{pts}" fill="none" stroke="{color}" '
@@ -1073,7 +1062,7 @@ def render_collection_chart(title: str,
             lines.append(f'<text x="{ex - 7:.1f}" y="{ey - 8:.1f}" '
                          f'text-anchor="end" font-size="12" font-weight="bold" '
                          f'fill="{color}">{prob_at_c(main_cdf, expect):.0%}</text>')
-    for mk_label, x, color, note in marks:
+    for _mk_label, x, color, _note in marks:
         mx, my = X(min(x, x_max)), Y(prob_at_c(main_cdf, x))
         lines.append(f'<line x1="{mx:.1f}" y1="{mt}" x2="{mx:.1f}" '
                      f'y2="{mt + ph}" stroke="{color}" stroke-width="1.5"/>')
@@ -1142,14 +1131,14 @@ def _load_build() -> str:
         return "?"
 
 
-def render_report(col_pmf: list[float], col_samples: list[int],
-                  now: str) -> str:
+def render_report(col_pmf: list[float],
+                  col_samples: list[tuple[int, int, int]], now: str) -> str:
     """报告:版本卡池安排 + 规则口径 + 全图鉴所需抽数统计(解析上界 vs 模拟)。"""
     paid = [s[0] for s in col_samples]
     free = [s[1] for s in col_samples]
     total = [s[2] for s in col_samples]
     col_cdf, sim_cdf = cdf(col_pmf), cdf(sample_pmf(total))
-    last_ver = [v for v, pools in POOLS.items() if first_banners()[-1] in pools][0]
+    last_ver = next(v for v, pools in POOLS.items() if first_banners()[-1] in pools)
     free_total = total_free_pulls(last_ver)
     excluded = sum(p.sign_in_tickets + BANNER_TICKETS for p in first_banners())
     lines = [
@@ -1263,7 +1252,7 @@ def run(version: str | None = None, plot: bool = False,
           f"90%分位 {pulls_needed(ana['target'], 0.9)} 抽")
     for key in ("six", "target", "five"):
         if key in sim:
-            diff = max(abs(a - b) for a, b in zip(ana[key], sim[key]))
+            diff = max(abs(a - b) for a, b in zip(ana[key], sim[key], strict=False))
             print(f"  对拍  {key:<7} 模拟{DEFAULT_TRIALS}次(seed={DEFAULT_SEED}) "
                   f"max|Δpmf| = {diff:.4f}")
 
@@ -1294,8 +1283,9 @@ def run(version: str | None = None, plot: bool = False,
             sim_cdf, sim_e, sim_f = collection_cdf(plan)
             curves.append(("模拟", sim_cdf, "#1565c0", sim_e, sim_f))
         if method in ("both", "analytic"):
-            ana_cdf, ana_e, ana_f = collection_cdf_upper(plan)
-            curves.append(("解析上界(未计顺路)", ana_cdf, "#ef6c00", ana_e, ana_f))
+            # 解析上界不建模免费券,免费均值列填 0(绘图仅用模拟曲线的该列)
+            ana_cdf, ana_e = collection_cdf_upper(plan)
+            curves.append(("解析上界(未计顺路)", ana_cdf, "#ef6c00", ana_e, 0.0))
         exp0 = curves[0][3]
         free_mean = curves[0][4]
         # 供给(总口径)= ③ 福利直送(VERSION_FREE_PULLS,已含签到当期凭证与

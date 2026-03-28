@@ -22,19 +22,18 @@ import json
 import re
 import subprocess
 import time
-from difflib import SequenceMatcher
 
+from tools.datasource import repo_dir
 from tools.tables import (
     ATTRACTIONS_OF_INTEREST,
     DATA_DIR,
     I18n,
     attr_name,
     dump_dir,
-    i18n_table,
     flat_attrs,
+    i18n_table,
     load_tables,
 )
-from tools.datasource import repo_dir
 
 PRODUCT = "characters"
 
@@ -62,7 +61,7 @@ def _pack_file(repo: str, pack_dir: str, name: str) -> bytes | None:
 
 def _git_bytes(repo: str, *args, timeout: int = 300) -> bytes | None:
     d = repo_dir(repo)
-    r = subprocess.run(["git", "-C", str(d), *args],
+    r = subprocess.run(["git", "-C", str(d), *args], check=False,
                        capture_output=True, timeout=timeout)
     return r.stdout if r.returncode == 0 else None
 
@@ -72,7 +71,7 @@ def load_wiki_operators() -> dict[str, dict]:
 
     文件路径含中文,git 命令用 -z 避免路径转义;懒取 blob 失败时重试。
     """
-    out = {}
+    out: dict[str, dict] = {}
     listing = _git_bytes(WIKI_REPO, "ls-tree", "-z", "--name-only", f"HEAD:{WIKI_PACK_DIR}")
     if not listing:
         return out
@@ -305,7 +304,7 @@ def collect_skills(raw: dict, t: I18n, group_index: dict) -> dict[str, list[dict
     return by_char
 
 
-def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[dict]:
+def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> dict:
     wiki_ops = wiki_ops or load_wiki_operators()
     professions = {v["profession"]: (t(v.get("name")), v.get("iconId"))
                    for v in raw["CharProfessionTable"].values()}
@@ -334,8 +333,8 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
     talent_map = {}
     for cid, g in growth_map.items():
         grouped: dict[str, list[dict]] = {}
-        for nid, node in (g.get("talentNodeMap") or {}).items():
-            node = _resolve_i18n_deep(node, t)
+        for node in (g.get("talentNodeMap") or {}).values():
+            node = _resolve_i18n_deep(node, t)  # noqa: PLW2901 - 原地解析转换
             if not isinstance(node, dict):
                 continue
             nt = node.pop("nodeType", None)
@@ -363,8 +362,8 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
     for nodes in talent_map.values():
         for node in nodes.get("4", []):
             psi = node.get("passiveSkillNodeInfo") or {}
-            eff_id = _TALENT_EFFECT_REDIRECT.get(psi.get("talentEffectId"),
-                                                 psi.get("talentEffectId"))
+            te = psi.get("talentEffectId") or ""
+            eff_id = _TALENT_EFFECT_REDIRECT.get(te, te)
             eff = pet_table.get(eff_id) or {}
             desc = t(eff.get("desc"))
             if desc:
@@ -373,7 +372,8 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             if vals:
                 psi["values"] = vals
     for cid, c in raw["CharacterTable"].items():
-        lv1, lv_max = {}, {}
+        lv1: dict = {}
+        lv_max: dict = {}
         for seg in c.get("attributes", []):
             attrs = flat_attrs((seg.get("Attribute") or {}).get("attrs"))
             if attrs.get("Level") == 1 and not lv1:
@@ -399,7 +399,8 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                             if tab.get("type"):
                                 skill_family_names[tab["type"]] = (tab.get("name"), tab.get("desc"))
 
-        def _enriched_skills(skills: list[dict]) -> list[dict]:
+        def _enriched_skills(skills: list[dict],
+                             family_names: dict[str, tuple[str, str | None]]) -> list[dict]:
             def family_of(skill_id: str) -> str | None:
                 if "normal_skill" in skill_id:
                     return "战技"
@@ -411,11 +412,11 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
                     return "普通攻击"
                 return None
             out = []
-            for sk in sorted(skills, key=lambda x: x["skillId"]):
-                sk = dict(sk)
+            for sk in sorted(skills, key=lambda x: x["skillId"]):  # noqa: B023 - x 是本 lambda 形参
+                sk = dict(sk)  # noqa: PLW2901 - 浅拷贝防改写源技能行
                 family = family_of(sk["skillId"])
-                if family and family in skill_family_names and not sk.get("name"):
-                    nm, ds = skill_family_names[family]
+                if family and family in family_names and not sk.get("name"):
+                    nm, ds = family_names[family]
                     if nm:
                         sk["name"] = nm
                     if ds and not sk.get("desc"):
@@ -431,10 +432,9 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             effect = raw["PotentialTalentEffectTable"].get(effect_id, {})
             desc = re.sub(r"<[^>]+>", "", t(effect.get("desc")) or "")
             materials = [{"id": i, "count": c2}
-                         for i, c2 in zip(b.get("itemIds") or [], b.get("itemCnts") or [])]
-            skills_hit = sorted({(d.get("attachSkill") or {}).get("skillId")
-                                 for d in effect.get("dataList") or []
-                                 if (d.get("attachSkill") or {}).get("skillId")})
+                         for i, c2 in zip(b.get("itemIds") or [], b.get("itemCnts") or [], strict=False)]
+            skills_hit = sorted({sid for d in effect.get("dataList") or []
+                                 if (sid := (d.get("attachSkill") or {}).get("skillId"))})
             buff_json = _repo_json("rmxlinux/EndfieldData",
                                    f"Json/BuffData/buff_{cid}_potential_{b.get('level')}.json")
             # 描述占位符数值:BuffData 黑板垫底、effect.dataList 直接覆盖——
@@ -500,7 +500,8 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             "maxLevel": max_level,
             "lv1": {k: lv1.get(k) for k in ATTRACTIONS_OF_INTEREST},
             "lvMax": {k: lv_max.get(k) for k in ATTRACTIONS_OF_INTEREST},
-            "skills": _enriched_skills(skills_by_char.get(cid, [])),
+            "skills": _enriched_skills(skills_by_char.get(cid, []),
+                                       skill_family_names),
             "potentials": potentials,
             "weapon": weapon,
             "recommendedWeapons": recommended,
@@ -558,9 +559,10 @@ def build(raw: dict, t: I18n, wiki_ops: dict[str, dict] | None = None) -> list[d
             skill_group_map[gid] = grp
 
         # 排序:主技能槽 0普攻/1战技/2终结/3连携 在前,其余(unknown)垫底
-        order_key = lambda item: (item[1].get("skillGroupType") is None,
-                                  item[1].get("skillGroupType") if item[1].get("skillGroupType") is not None else 99,
-                                  item[0])
+        def order_key(item):
+            return (item[1].get("skillGroupType") is None,
+                    item[1].get("skillGroupType") if item[1].get("skillGroupType") is not None else 99,
+                    item[0])
         c["skillGroupMap"] = dict(sorted(skill_group_map.items(), key=order_key))
 
     return {"characters": characters, "breakStages": break_stages}
