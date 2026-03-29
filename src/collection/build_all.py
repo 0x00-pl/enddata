@@ -8,18 +8,18 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any
 
 from collection import characters, enemies, equips, items, recipes, settlements, weapons
-from tools import versions
-from tools import tables
+from tools import tables, versions
+from tools.datasource import PROJECT_ROOT, info, load_json
 from tools.tables import (
-    I18n,
     REPORTS_DIR,
+    I18n,
     dump,
     i18n_table,
     load_tables,
 )
-from tools.datasource import PROJECT_ROOT, info, load_json
 
 PRODUCT_MODULES = (characters, items, recipes, weapons, equips, enemies, settlements)
 
@@ -30,14 +30,16 @@ def run(force: bool = False) -> None:
     if tables.online():
         versions.refresh_game_build()  # 联网探测官方构建号;离线沿用 data/versions.json 旧值
 
-    payloads: dict[str, object] = {}
-    t = None
+    payloads: dict[str, Any] = {}
+    t: I18n | None = None
     for mod in PRODUCT_MODULES:
         raw = load_tables(mod.REQUIRED_TABLES, force=force)  # 直读本地 git 仓库
         t = I18n(raw[i18n_table()])
         payloads[mod.PRODUCT] = mod.build(raw, t)
         mod.write(payloads[mod.PRODUCT])  # 各产物统一目录化(每条一个文件 + index.json)
 
+    if t is None:  # PRODUCT_MODULES 非空,正常不可达;防御性兜底
+        raise RuntimeError("PRODUCT_MODULES 为空,i18n 未初始化")
     equips_payload = payloads["equips"]
     meta = {
         "generatedAt": t0.isoformat(timespec="seconds"),

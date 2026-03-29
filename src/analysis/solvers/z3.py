@@ -11,10 +11,9 @@
 """
 
 from fractions import Fraction
+from typing import Any
 
 from analysis.recipe_calc import GAS_ENV_RATE, RECYCLER_PREFIX, is_gatherable
-
-
 from analysis.solvers import RecipeSolver, SolveRequest, SolveResult, register
 
 
@@ -71,7 +70,7 @@ class Z3Solver(RecipeSolver):
             opt.add(v >= 0)
 
         # 全链净流量(产出 − 消耗),按物品累计 z3 算术表达式
-        flow: dict[str, object] = {}
+        flow: dict[str, Any] = {}
         machine_vars: list = []                       # 维持设施占用台数(整数)
         for rid, r in recipes.items():
             for s in r.produce_items:
@@ -81,18 +80,18 @@ class Z3Solver(RecipeSolver):
             # 设施维持:按占用台数计——占用秒数 ≤ 整数台数 × 60,气体 = 6 × 台数
             # (不满载也按整台全额;线性口径可经临时配方表达,见模块注释)
             if (gas_id := r.upkeep_gas) is not None and r.require_time:
-                t = Fraction(str(r.require_time))
+                dur = Fraction(str(r.require_time))
                 m = z3.Int(f"m__{rid}", ctx=ctx)
                 machine_vars.append(m)
                 opt.add(m >= 0)
-                opt.add(crafts[rid] * t.numerator <= m * 60 * t.denominator)
+                opt.add(crafts[rid] * dur.numerator <= m * 60 * dur.denominator)
                 flow[gas_id] = flow.get(gas_id, 0) - int(GAS_ENV_RATE) * m
 
         preferred_recipes = set(preferred.values()) if preferred else set()
         target_ids = set(targets)
         max_ids = set(maximize)
-        for t, q in targets.items():
-            opt.add(flow.get(t, 0) == q)
+        for tid, q in targets.items():
+            opt.add(flow.get(tid, 0) == q)
         for i, f in flow.items():
             if i in target_ids:
                 continue

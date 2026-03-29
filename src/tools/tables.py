@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 from datetime import date, datetime, timezone
-from pathlib import Path
 
 from tools.datasource import (
     PROJECT_ROOT,
@@ -23,8 +23,6 @@ from tools.datasource import (
 DATA_DIR = PROJECT_ROOT / "data"
 REPORTS_DIR = PROJECT_ROOT / "reports"
 
-import re
-
 _SLUG_RE = re.compile(r"[^a-z0-9]+")
 
 
@@ -41,7 +39,7 @@ LANGUAGES = ("CN", "TC", "EN", "JP", "KR", "FR", "DE", "IT", "MX", "BR", "RU", "
 
 
 def set_default_lang(lang: str) -> None:
-    global DEFAULT_LANG
+    global DEFAULT_LANG  # noqa: PLW0603 - 模块级配置开关,入口 --lang 设置一次
     DEFAULT_LANG = lang.upper()
 
 
@@ -57,7 +55,7 @@ _ONLINE = False
 
 
 def set_online(online: bool) -> None:
-    global _ONLINE
+    global _ONLINE  # noqa: PLW0603 - 模块级模式开关(CLI --online/--force 设置)
     _ONLINE = bool(online)
 
 
@@ -152,34 +150,33 @@ class I18n:
         return text
 
 
+# fffdan vfs 配置(load_vfs_config 注入;模块级可变状态,仅本模块读写)
+_vfs: dict = {"base": None, "prefix": None, "patterns": {}}
+
+
 def vfs_url(kind: str, **params) -> str | None:
     """按 config/sources.json 的 fffdan_vfs 注册项拼资源 URL(宏山档案局资源镜像,WebP)。
 
     采集管线已不再生成 vfs 直链(数据集只存裸 id,站点构建期经 icon_git 本地化),
     本函数保留作 vfs 路径模式的程序化参考。
     """
-    path = vfs_url.patterns.get(kind)
-    if vfs_url.base is None or not path:
+    path = _vfs["patterns"].get(kind)
+    if _vfs["base"] is None or not path:
         return None
     for k, v in params.items():
         if v is None or v == "":
             return None
         path = path.replace("{" + k + "}", str(v))
-    return f"{vfs_url.base}{vfs_url.prefix}/{path}"
-
-
-vfs_url.base = None
-vfs_url.prefix = None
-vfs_url.patterns = {}
+    return f"{_vfs['base']}{_vfs['prefix']}/{path}"
 
 
 def load_vfs_config() -> None:
     cfg = load_json(PROJECT_ROOT / "config" / "sources.json")["sources"].get("fffdan_vfs")
     if not cfg:
         return
-    vfs_url.base = cfg["hosts"][0]
-    vfs_url.prefix = cfg["vfs_prefix"]
-    vfs_url.patterns = cfg["paths"]
+    _vfs["base"] = cfg["hosts"][0]
+    _vfs["prefix"] = cfg["vfs_prefix"]
+    _vfs["patterns"] = cfg["paths"]
 
 
 def _tablecfg() -> dict:

@@ -124,7 +124,7 @@ def analyze_skill(sk: dict, slot: str, group_name: str | None, desc: str | None)
             support.setdefault(RES_HEAL, {})[key] = value
     desc = _fill_placeholders(desc, bb)
     return SkillRes(
-        skillId=sk.get("skillId"),
+        skillId=sk.get("skillId") or "",
         name=sk.get("name") or group_name,
         slot=slot,
         desc=desc,
@@ -185,13 +185,11 @@ def _extract_talents(entry: dict) -> list[ExtraEntry]:
 
 def _extract_potentials(entry: dict) -> list[ExtraEntry]:
     """potentials[].desc → 潜能条目。"""
-    out: list[ExtraEntry] = []
-    for p in entry.get("potentials") or []:
-        out.append(ExtraEntry(kind="潜能",
-                              name=p.get("name") or f"潜能·{p.get('level')}",
-                              desc=_fill_placeholders(_strip_tags(p.get("desc")),
-                                                      p.get("values") or {})))
-    return out
+    return [ExtraEntry(kind="潜能",
+                       name=p.get("name") or f"潜能·{p.get('level')}",
+                       desc=_fill_placeholders(_strip_tags(p.get("desc")),
+                                               p.get("values") or {}))
+            for p in entry.get("potentials") or []]
 
 
 # ---------------------------------------------------------------- ② 注册 regex
@@ -201,7 +199,7 @@ def _extract_potentials(entry: dict) -> list[ExtraEntry]:
 # 加一条表项,勿在流程里加特判。
 # 例:「<#ba.consume>消耗</>目标的<#ba.conduct>导电</>状态」→ 剥离为
 #     「消耗目标的导电状态」→ 需求短语表捕获「导电状态」→ 后处理提取词条 → 需求 导电。
-_DESC_TAG_RE = re.compile(r"<[@#]ba\.[a-z_]+>(.*?)</>", re.S)
+_DESC_TAG_RE = re.compile(r"<[@#]ba\.[a-z_]+>(.*?)</>", re.DOTALL)
 _DESC_TERMS = (
     # 元素附着与异常状态(敌人身上的"资源")
     "灼热附着", "寒冷附着", "自然附着", "电磁附着", "法术附着",
@@ -260,7 +258,10 @@ def _post_purify(text: str) -> list[str]:
     terms = _extract_terms(text)
     if not terms:
         return []
-    prefix = text[:_TERM_RE.search(text).start()]
+    m = _TERM_RE.search(text)
+    if m is None:
+        return []
+    prefix = text[:m.start()]
     return [f"净化{prefix}{t}" for t in terms]
 
 
@@ -306,7 +307,7 @@ def _post_state(text: str) -> list[str]:
 def _post_hold_state(text: str) -> list[str]:
     """持有条件:「目标已经处于(寒冷附着或冻结)状态」→ 处于xx(目标处于该
     状态是触发条件;展示截断于「状/的/时/后」边界,不吞后续谓语)。"""
-    text = re.split(r"[状的时后]", text, 1)[0]
+    text = re.split(r"[状的时后]", text, maxsplit=1)[0]
     return [f"处于{t}" for t in _extract_terms(text)]
 
 
@@ -359,35 +360,35 @@ _DEMAND_PATTERNS: list[DescPattern] = [
     # 进入事件:「当有敌人进入(导电)状态或…」→ 进入xx(敌人进入该状态是
     # 触发事件;置于首位使展示顺序与句序一致)
     DescPattern("进入事件",
-                re.compile(rf"进入(?P<demand>[^，。;\n]{{0,16}}?)[状时后]"),
+                re.compile(r"进入(?P<demand>[^，。;\n]{0,16}?)[状时后]"),
                 _post_enter_event),
     # 被动消耗:「(源石结晶)被消耗/被吸收」→ 消耗xx(捕获段排除「或」,
     # 「A或B被消耗」只取贴近被字的 B,不吞列举词)
     DescPattern("被动消耗",
-                re.compile(rf"(?P<demand>[^，。;或\n]{{0,8}})被(?:消耗|吸收|转化)"),
+                re.compile(r"(?P<demand>[^，。;或\n]{0,8})被(?:消耗|吸收|转化)"),
                 _post_passive_consume),
     # 被字状态:「被冻结」「被附着源石结晶」→ 被xx;「不会被/无法被」是
     # 免疫语态,不算需求
     DescPattern("状态前缀",
-                re.compile(rf"(?<!不会)(?<!无法)被(?P<demand>[^，。;\n]{{0,10}})"), _post_state),
+                re.compile(r"(?<!不会)(?<!无法)被(?P<demand>[^，。;\n]{0,10})"), _post_state),
     # 条件句被动施加:「每当有敌人被施加(冻结)后」→ 被施加xx(捕获段排除
     # 「或」:「A或B被消耗/进入」类并列由各自事件模式接管)
     DescPattern("条件被动施加",
                 re.compile(
-                    rf"(?:每当|当|若|如果|一旦|每次)[^。;\n]{{0,12}}?被施加(?P<demand>[^，。;或\n]{{0,10}})"),
+                    r"(?:每当|当|若|如果|一旦|每次)[^。;\n]{0,12}?被施加(?P<demand>[^，。;或\n]{0,10})"),
                 _post_cond_apply),
     # 条件受击:「当有敌人受到(物理异常效果)后」→ 被施加xx(触发受击事件,
     # 非本条目产出;无前缀的「持续受到X」仍归产出表)
     DescPattern("条件受击",
                 re.compile(
-                    rf"(?:每当|当|若|如果|一旦|每次|同一时间)[^。;\n]{{0,12}}?受到(?P<demand>[^，.。;\n]{{0,10}})"),
+                    r"(?:每当|当|若|如果|一旦|每次|同一时间)[^。;\n]{0,12}?受到(?P<demand>[^，.。;\n]{0,10})"),
                 _post_cond_apply),
     # 条件造成:「当主控干员对敌人造成(重击)后」→ 裸词条(触发事件,展示沿用
     # 发动条件句裸词条先例;无前缀的「并造成X」仍归产出表;「强制造成」是
     # 本条目自身的施加动作,不算触发)
     DescPattern("条件造成",
                 re.compile(
-                    rf"(?:每当|当|若|如果|一旦|每次)[^。;\n]{{0,20}}?(?<!强制)造成(?P<demand>[^，。;\n]{{0,10}})"),
+                    r"(?:每当|当|若|如果|一旦|每次)[^。;\n]{0,20}?(?<!强制)造成(?P<demand>[^，。;\n]{0,10})"),
                 _post_terms),
     # 被动施加:「(句首)被施加(法术附着)时」→ 被施加xx(承受型触发;句中的
     # 「目标被施加缓速」是施加陈述,仍由产出表接管)
@@ -397,27 +398,27 @@ _DEMAND_PATTERNS: list[DescPattern] = [
     # 条件持有:「如果敌人身上附着(源石结晶)」→ xx(敌人已有该状态,是需求而非
     # 施加动作;占用 span,免被产出表的「附着」截胡)
     DescPattern("条件持有",
-                re.compile(rf"身上附着(?P<demand>[^，。;\n]{{0,10}})"), _post_terms),
+                re.compile(r"身上附着(?P<demand>[^，。;\n]{0,10})"), _post_terms),
     # 定语持有:「附着(源石结晶)的敌人」→ xx(持有该状态的敌人才是触发条件,
     # 并非本条目施加;捕获段排除「或」以免吞掉「A附着或B附着的敌人」;
     # 占用 span,免被产出表的「附着」截胡)
     DescPattern("定语持有",
-                re.compile(rf"附着(?P<demand>[^，。;或\n]{{0,8}})的敌人"), _post_terms),
+                re.compile(r"附着(?P<demand>[^，。;或\n]{0,8})的敌人"), _post_terms),
     # 消耗事件:「(战技构成序列)消耗(源石结晶)时/后」→ 消耗xx(消耗动作来自
     # 其他技能/单位,本条目被动生效;「消耗的X」是定语回指,交由需求短语)
     DescPattern("消耗事件",
-                re.compile(rf"消耗(?!的)(?P<demand>[^，。;\n]{{0,16}}?)[时后]"),
+                re.compile(r"消耗(?!的)(?P<demand>[^，。;\n]{0,16}?)[时后]"),
                 _post_consume_event),
     # 施加事件:「(佩丽卡)对敌人施加(导电)后」→ 施加xx(本条目在该施加后
     # 生效;「成功施加」是技能自身动作的结果陈述,「被施加」是承受语态,均不算)
     DescPattern("施加事件",
-                re.compile(rf"施加(?<!成功施加)(?<!被)(?!的)(?P<demand>[^，。;\n]{{0,16}}?)[时后]"),
+                re.compile(r"施加(?<!成功施加)(?<!被)(?!的)(?P<demand>[^，。;\n]{0,16}?)[时后]"),
                 _post_apply_event),
     # 成功施加引述:「(战技冰冰弹·β型)成功施加(冻结)后」→ 施加xx(引述其他
     # 条目的施加动作;「战技成功施加」无技能名,是本条目自身动作,不命中)
     DescPattern("成功施加",
                 re.compile(
-                    rf"(?:战技|连携技|终结技|普攻)[^，。;\n]{{1,8}}成功施加(?P<demand>[^，。;\n]{{0,16}}?)[时后]"),
+                    r"(?:战技|连携技|终结技|普攻)[^，。;\n]{1,8}成功施加(?P<demand>[^，。;\n]{0,16}?)[时后]"),
                 _post_apply_event),
     # 处于状态:「目标已经处于(寒冷附着或冻结)状态」→ 处于xx(持有条件,
     # 与消耗/施加/进入事件同为带谓语展示;「不/未/是否处于」是否定或无关语态,不算持有;
@@ -426,28 +427,28 @@ _DEMAND_PATTERNS: list[DescPattern] = [
     # 持有即消耗:「若目标处于(腐蚀)状态，消耗其X」→ 裸词条(状态将被本条目
     # 自身消耗,成本记裸词条;置于处于状态之前优先命中)
     DescPattern("持有消耗",
-                re.compile(rf"处于(?P<demand>[^，.。;并且\n]{{1,12}}?)状态，?[^，.。;\n]{{0,14}}消耗"),
+                re.compile(r"处于(?P<demand>[^，.。;并且\n]{1,12}?)状态，?[^，.。;\n]{0,14}消耗"),
                 _post_terms),
     DescPattern("处于状态",
-                re.compile(rf"(?<!是否)处于(?![^，.。;\n]{{0,10}}时使用)(?<!不处于)(?<!未处于)(?P<demand>[^，.。;并且\n]{{0,16}})"),
+                re.compile(r"(?<!是否)处于(?![^，.。;\n]{0,10}时使用)(?<!不处于)(?<!未处于)(?P<demand>[^，.。;并且\n]{0,16})"),
                 _post_hold_state),
     # 或列尾:「被施加寒冷附着或(自然附着)时」→ 被施加xx(条件句或并列的
     # 第二个事件;或首词条由条件被动施加/进入事件等先行占用)
     DescPattern("或列尾",
-                re.compile(rf"或(?P<demand>[^，。;并且\n]{{0,10}}?)(?=[时后，。;]|状态)"),
+                re.compile(r"或(?P<demand>[^，。;并且\n]{0,10}?)(?=[时后，。;]|状态)"),
                 _post_cond_apply),
     # 或首被动消耗:「法术异常或(源石结晶)被消耗」→ 消耗x(或首词条与被消耗的
     # Y 共享「被消耗」谓语;用前瞻校验结构,不占用或尾的 span)
     DescPattern("或首被动消耗",
                 re.compile(
-                    rf"(?P<demand>[^，。;或\n]{{0,10}})或(?=[^，。;或\n]{{0,10}}被(?:消耗|吸收|转化))"),
+                    r"(?P<demand>[^，。;或\n]{0,10})或(?=[^，。;或\n]{0,10}被(?:消耗|吸收|转化))"),
                 _post_passive_consume),
     # 需求短语:「消耗/带有/存在/拥有/已满/进入/命中/使用/击碎 + 片段」
     # → 片段内词条(使用/击碎 = 动用已有资源;捕获段以「并/且」为界不跨子句,
     # 免把后续谓语如「并强制施加导电」并进本条需求、挡掉其产出提取)
     DescPattern("需求短语",
                 re.compile(
-                    rf"(?:(?<!被)消耗|带有|存在|拥有|已满|进入|命中(?!处于)|使用|击碎)(?P<demand>[^，。;并且\n]{{0,16}})"),
+                    r"(?:(?<!被)消耗|带有|存在|拥有|已满|进入|命中(?!处于)|使用|击碎)(?P<demand>[^，。;并且\n]{0,16})"),
                 _post_demand_phrase),
     # 机制触发:「主控干员受到攻击后可以发动」→ 主控干员受到攻击
     DescPattern("主控受击",
@@ -456,7 +457,7 @@ _DEMAND_PATTERNS: list[DescPattern] = [
     # 受击引述:「受到主控干员重击时」→ 重击(引述主控动作的触发事件,
     # 非本条目产出;展示沿用发动条件句裸词条先例)
     DescPattern("主控受击引述",
-                re.compile(rf"受到(?P<demand>主控干员[^，。;\n]{{0,6}})"),
+                re.compile(r"受到(?P<demand>主控干员[^，。;\n]{0,6})"),
                 _post_terms),
     # 发动条件:整句含「可以发动」,句内词条全部视为需求
     DescPattern("发动条件",
@@ -468,24 +469,24 @@ _PRODUCE_PATTERNS: list[DescPattern] = [
     # 净化:「净化全队的寒冷附着和冻结状态」→ 净化全队的寒冷附着、净化全队的冻结
     # (须先于「施加产出」:净化片段内的「附着」会被后者当作施加动词截胡)
     DescPattern("净化产出",
-                re.compile(rf"净化(?P<produce>[^，。;\n]{{0,16}})"),
+                re.compile(r"净化(?P<produce>[^，。;\n]{0,16})"),
                 _post_purify),
     # 施加/承受/转化:「施加导电」「转化为猎矢」「敌人持续受到缓速」
     # 「(目标)被施加缓速」「将被强制冻结」(施加动作的被动语态)→ xx;
     # 「施加的X效果+N/提升至N倍」是其他技能的效果增幅句,不算产出
     DescPattern("施加产出",
                 re.compile(
-                    rf"(?:被施加|被强制|施加(?!的)|附加|附带|附着|受到|转化为)(?:\[[^\]]*\])?(?P<produce>[^，。;\n]{{0,16}})"),
+                    r"(?:被施加|被强制|施加(?!的)|附加|附带|附着|受到|转化为)(?:\[[^\]]*\])?(?P<produce>[^，。;\n]{0,16})"),
                 _post_terms),
     # 获得/生成:「获得启示」「生成青霆剑」「召唤盾卫」→ xx
     DescPattern("获得产出",
-                re.compile(rf"(?:获得(?!的)|生成|召唤|返还|恢复)(?P<produce>[^，。;\n]{{0,12}})"),
+                re.compile(r"(?:获得(?!的)|生成|召唤|返还|恢复)(?P<produce>[^，。;\n]{0,12})"),
                 _post_terms),
     # 造成:「造成倒地/击飞/猛击」→ xx(直接谓语的施加;置于表尾,不与
     # 施加/获得产出争抢同一片段;「造成基于X的Y」是倍率句、「造成X触发…」
     # 是触发引述,负向先行跳过)
     DescPattern("造成产出",
-                re.compile(rf"造成(?!(?:基于|[^，。;\n]{{0,8}}触发))(?!的[^，。;\n]{{0,10}}效果)(?P<produce>[^，。;\n]{{0,16}})"),
+                re.compile(r"造成(?!(?:基于|[^，。;\n]{0,8}触发))(?!的[^，。;\n]{0,10}效果)(?P<produce>[^，。;\n]{0,16})"),
                 _post_terms),
 ]
 
@@ -708,8 +709,8 @@ def _char_section(c: Operator) -> list[str]:
             _fmt_desc_text(x.desc))
     if not rows:
         return []
-    lines += (["", "| 技能 | 类型 | 需求 | 产出 | 描述 |", "|---|---|---|---|---|"]
-              + rows + [""])
+    lines += ["", "| 技能 | 类型 | 需求 | 产出 | 描述 |", "|---|---|---|---|---|",
+              *rows, ""]
     return lines
 
 
@@ -744,7 +745,7 @@ def _load_meta() -> dict:
         if f.is_file():
             try:
                 meta.update(json.loads(f.read_text(encoding="utf-8")))
-            except Exception:  # noqa: BLE001 - 头部信息缺失不影响分析
+            except Exception:  # noqa: BLE001, S112 - 头部信息缺失不影响分析
                 continue
     return meta
 

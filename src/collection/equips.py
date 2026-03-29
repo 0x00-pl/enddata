@@ -105,10 +105,11 @@ def collect_craft_options(raw: dict, t: I18n) -> dict[str, list[dict]]:
         for ch in cfg.get("chainList") or []:
             ids, nums = ch.get("costItemId") or [], ch.get("costItemNum") or []
             materials = []
-            for iid, cnt in zip(ids, nums):
+            for iid, cnt in zip(ids, nums, strict=False):
                 mat = cost_item(raw, t, iid, cnt)
-                if iid in scripts:
-                    mat.update({k: v for k, v in scripts[iid].items() if v is not None})
+                script = scripts.get(iid)
+                if mat is not None and script:
+                    mat.update({k: v for k, v in script.items() if v is not None})
                 materials.append(mat)
             opts.append({
                 "chainId": ch.get("chainId"),

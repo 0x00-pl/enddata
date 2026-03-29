@@ -60,10 +60,11 @@ def _side_item_ids(entries: list[dict]) -> set[str]:
     ids: set[str] = set()
     for e in entries or []:
         if "group" in e:
-            ids.update(o.get("id") for o in e["group"])
+            ids.update(oid for o in e["group"] if (oid := o.get("id")) is not None)
         else:
-            ids.add(e.get("id"))
-    ids.discard(None)
+            eid = e.get("id")
+            if eid is not None:
+                ids.add(eid)
     return ids
 
 
@@ -75,8 +76,8 @@ def collect_recipe_stats(raw: dict) -> tuple[dict, dict]:
         - produced:物品作为产物(outcomes / outcomeItemId)出现的配方数
     飞船制造表(SpaceshipManufactureFormulaTable)只登记产物,无原料侧。
     """
-    used = {s: {} for s in STATIONS}
-    produced = {s: {} for s in STATIONS}
+    used: dict[str, dict[str, int]] = {s: {} for s in STATIONS}
+    produced: dict[str, dict[str, int]] = {s: {} for s in STATIONS}
 
     def add(side: str, station: str, ids: set[str]) -> None:
         target = used if side == "ingredients" else produced
@@ -258,7 +259,7 @@ def collect_item_details(raw: dict, t: I18n) -> dict[str, dict]:
     for iid, e in raw["UsableItemChestTable"].items():
         rewards = [v for v in (reward_view(r) for r in e.get("rewardIdList") or []) if v]
         randoms = [{"id": i, "count": c} for i, c in zip(e.get("randomChestItemIds") or [],
-                                                         e.get("randomChestItemCounts") or [])]
+                                                         e.get("randomChestItemCounts") or [], strict=False)]
         put(iid, "chest", {"type": e.get("type"), "rewards": rewards or None,
                            "random": randoms or None,
                            "selectedCount": e.get("selectedCount") or None})
@@ -289,8 +290,8 @@ def collect_item_details(raw: dict, t: I18n) -> dict[str, dict]:
     for iid, e in raw["GachaLtTicket2PoolTable"].items():
         put(iid, "gachaPools", e.get("poolIdList") or None)
     for iid, e in raw["GachaWeaponLtTicket2PoolTable"].items():
-        pools = [d.get("gachaPoolId") for d in e.get("poolDataList") or [] if d.get("gachaPoolId")]
-        put(iid, "gachaPools", pools or None)
+        pool_ids = [d.get("gachaPoolId") for d in e.get("poolDataList") or [] if d.get("gachaPoolId")]
+        put(iid, "gachaPools", pool_ids or None)
 
     for iid, e in raw["MoneyConfigTable"].items():
         put(iid, "money", {"clearRule": e.get("clearRule"), "clearLimit": e.get("MoneyClearLimit")})

@@ -19,7 +19,6 @@
 from __future__ import annotations
 
 import argparse
-import json
 import subprocess
 import time
 
@@ -33,7 +32,8 @@ def run_git(args: list[str], cwd=None, timeout: int = 600) -> tuple[int, str]:
     if proxy:
         cmd += ["-c", f"http.proxy={proxy}", "-c", f"https.proxy={proxy}"]
     cmd += args
-    r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=git_env())
+    r = subprocess.run(cmd, check=False, cwd=cwd, capture_output=True,
+                       text=True, timeout=timeout, env=git_env())
     return r.returncode, (r.stdout + r.stderr)[-500:]
 
 
@@ -131,7 +131,8 @@ def run(args, default_names: list[str] | None = None) -> None:
         update_repos()
     versions.record_repo_heads()
     versions.refresh_game_build()
-    fetch_tables(args.tables or default_names, force=args.force)
+    names: list[str] = list(args.tables or default_names or [])
+    fetch_tables(names, force=args.force)
 
 
 def update_repos(no_update: bool = False, only: list[str] | None = None) -> None:
