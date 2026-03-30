@@ -1,8 +1,8 @@
 """描述占位符回填共享工具:{key:fmt} → blackboard/values 实际数值(采集/分析共用)。
 
-值来源约定(CLAUDE.md「描述占位符数值来源」):技能 → levels[].blackboard,
-潜能 → potentials[].values,被动节点 → passiveSkillNodeInfo.values,
-武器/套装 → SkillPatchTable blackboard。
+值来源约定与缺数规则见 docs/data-model.md「描述占位符数值来源与缺数约定」:
+技能 → levels[].blackboard,潜能 → potentials[].values,
+被动节点 → passiveSkillNodeInfo.values,武器/套装 → SkillPatchTable blackboard。
 
 解析规则:
     - fmt 为最后一个冒号后的模板(key 本身允许含冒号,如 floor:deck_wisd):
@@ -57,7 +57,7 @@ def _eval_expr(expr: str, values: dict, fallback: float | None = None) -> float 
     """
     total, sign, unknown = 0.0, 1.0, set()
     for term in re.split(r"([+-])", expr):
-        term = term.strip()
+        term = term.strip()  # noqa: PLW2901 - 原地去除空白
         if not term:
             continue
         if term == "+":
@@ -67,7 +67,7 @@ def _eval_expr(expr: str, values: dict, fallback: float | None = None) -> float 
             continue
         v = 1.0
         for k in term.split("*"):
-            k = k.strip()
+            k = k.strip()  # noqa: PLW2901 - 原地去除空白
             if _NUM_RE.fullmatch(k):
                 v *= float(k)
                 continue

@@ -47,7 +47,8 @@ def run_git_in(repo: str, args: list[str], timeout: int = 600) -> tuple[int, str
     if proxy:
         cmd += ["-c", f"http.proxy={proxy}", "-c", f"https.proxy={proxy}"]
     cmd += args
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=git_env())
+    r = subprocess.run(cmd, check=False, capture_output=True, text=True,
+                       timeout=timeout, env=git_env())
     return r.returncode, (r.stdout + r.stderr)
 
 
@@ -101,7 +102,8 @@ def read_from_git(repo: str, path: str, timeout: int = 180) -> bytes | None:
         return worktree_file.read_bytes()
     cmd = ["git", "-C", str(d), "cat-file", "blob", f"HEAD:{path}"]
     try:
-        r = subprocess.run(cmd, capture_output=True, timeout=timeout, env=git_env())
+        r = subprocess.run(cmd, check=False, capture_output=True,
+                           timeout=timeout, env=git_env())
     except (subprocess.TimeoutExpired, OSError):
         return None
     return r.stdout if r.returncode == 0 else None

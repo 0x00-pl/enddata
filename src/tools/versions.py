@@ -48,11 +48,13 @@ def repo_head(entry: dict) -> dict:
         return info
     if info["branch"] == "?":
         r = subprocess.run(["git", "-C", str(d), "symbolic-ref", "--short", "HEAD"],
-                           capture_output=True, text=True, timeout=10, env=_git_env())
+                           check=False, capture_output=True, text=True, timeout=10,
+                           env=_git_env())
         if r.returncode == 0:
             info["branch"] = r.stdout.strip()
     r = subprocess.run(["git", "-C", str(d), "log", "-1", "--format=%h|%cs|%s"],
-                       capture_output=True, text=True, timeout=30, env=_git_env())
+                       check=False, capture_output=True, text=True, timeout=30,
+                       env=_git_env())
     if r.returncode == 0:
         sha, date, subject = r.stdout.strip().split("|", 2)
         info.update({"sha": sha, "date": date, "subject": subject, "status": "ok"})
@@ -89,7 +91,7 @@ def fetch_game_build() -> str | None:
     for host in cfg["hosts"]:
         try:
             return http_get(host + cfg["version_endpoint"], timeout=10).decode().strip()
-        except Exception:  # noqa: BLE001 - 逐主机故障转移
+        except Exception:  # noqa: BLE001, S112, PERF203 - 逐主机故障转移
             continue
     return None
 
@@ -122,7 +124,7 @@ def project_version() -> str:
         return version("enddata")
     except Exception:  # noqa: BLE001 - 未安装时回退读 pyproject.toml
         text = (PROJECT_ROOT / "pyproject.toml").read_text(encoding="utf-8")
-        m = re.search(r'^version = "(.*?)"', text, re.M)
+        m = re.search(r'^version = "(.*?)"', text, re.MULTILINE)
         return m.group(1) if m else "?"
 
 

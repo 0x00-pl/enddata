@@ -32,7 +32,6 @@ import re
 import sys
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
-from difflib import SequenceMatcher
 from pathlib import Path
 
 from tools.datasource import PROJECT_ROOT, info, local_head, repo_dir
@@ -151,7 +150,7 @@ def _walk(obj, segs: list[str], rel: str, groups: dict, include_numeric: bool) -
             if ID_SHAPE.match(k) or (include_numeric and NUM_SHAPE.fullmatch(k)
                                      and abs(int(k)) > HASH_MIN):
                 groups[k][0].add(f"{rel}#{'.'.join((*segs, k))}")
-            _walk(v, segs + [k + ('[]' if isinstance(v, list) else '')],
+            _walk(v, [*segs, k + ('[]' if isinstance(v, list) else '')],
                   rel, groups, include_numeric)
     elif isinstance(obj, list):
         for v in obj:
@@ -160,7 +159,7 @@ def _walk(obj, segs: list[str], rel: str, groups: dict, include_numeric: bool) -
         if not segs:
             return
         key = segs[-1]
-        base = key[:-2] if key.endswith('[]') else key
+        base = key.removesuffix('[]')
         idish = _idish_key(base)
         if not idish and base not in EXTRA_REF_KEYS:
             return
@@ -178,7 +177,7 @@ def _walk(obj, segs: list[str], rel: str, groups: dict, include_numeric: bool) -
 
 
 def _idish_key(k: str) -> bool:
-    return k == "id" or "Id" in k or k.endswith("_id") or k.endswith("_ids")
+    return k == "id" or "Id" in k or k.endswith(("_id", "_ids"))
 
 
 def scan(root: Path, scope: list[str], include_numeric: bool = True):
@@ -194,7 +193,7 @@ def scan(root: Path, scope: list[str], include_numeric: bool = True):
         rel = path.relative_to(root).as_posix()
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except Exception as e:  # 单文件损坏不中断全量
+        except Exception as e:  # noqa: BLE001 - 单文件损坏不中断全量
             errors.append(f"{rel}: {e}")
             continue
         nfiles += 1
@@ -219,7 +218,7 @@ def _replace_is_safe(temps: list[str], spans: list[list[tuple[int, int]]], s: st
     否则 replace 会把变量的编号字符一并换掉(如 '10' 命中 v10 的编号),
     破坏已有变量。逐位置检查比 str.replace 的非重叠语义更保守,只会多拒绝。
     """
-    for t, spans_t in zip(temps, spans):
+    for t, spans_t in zip(temps, spans, strict=False):
         start = 0
         while True:
             i = t.find(s, start)
@@ -278,7 +277,7 @@ def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
     temps: list[str] = []
     counter = 0
     for loc in locs:
-        def _shield(m: "re.Match") -> str:  # ① 旧变量加前缀隔离
+        def _shield(m: re.Match) -> str:  # ① 旧变量加前缀隔离
             nonlocal counter
             counter += 1
             return f"{_VAR_MARK}v{counter}{_VAR_MARK}"
@@ -294,7 +293,7 @@ def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
         temps = [t.replace(s, v) for t in temps]
     pairs = []
     seen: set[str] = set()
-    for t, loc in zip(temps, locs):
+    for t, loc in zip(temps, locs, strict=False):
         if t not in seen:
             seen.add(t)
             pairs.append((t, loc))
@@ -302,19 +301,19 @@ def _generalize(locs: list[str]) -> tuple[list[str], list[str]]:
     mapping: dict[str, str] = {}
     pats = [
         _VAR_TOKEN_RE.sub(
-            lambda m: mapping.setdefault(m.group(0), "{v%d}" % (len(mapping) + 1)),
+            lambda m: mapping.setdefault(m.group(0), f"{{v{len(mapping) + 1}}}"),
             t,
         )
         for t, _ in pairs
     ]
     # 数组顺序规格化:按移除全部变量后的字符串排序 —— 变量名不影响顺序
-    out = sorted(zip(pats, (loc for _, loc in pairs)),
+    out = sorted(zip(pats, (loc for _, loc in pairs), strict=False),
                  key=lambda pair: (_VAR_RE.sub("", pair[0]), pair[0]))
     # 变量编号规格化:按最终数组的出现顺序重编为 {v1}…{vN}(同号跨模式同值)
     relabel: dict[str, str] = {}
     final = [
         _VAR_RE.sub(
-            lambda m: relabel.setdefault(m.group(0), "{v%d}" % (len(relabel) + 1)),
+            lambda m: relabel.setdefault(m.group(0), f"{{v{len(relabel) + 1}}}"),
             p,
         )
         for p, _ in out
@@ -351,11 +350,8 @@ def _match_lits(parts: list[str], s: str) -> bool:
 
 def _eligible(patterns: list[str]) -> list[str]:
     """参与覆盖判定的模式:至少含 1 个 ≥_MIN_COVER_LITERAL 字符的字面量段。"""
-    out = []
-    for p in patterns:
-        if max(map(len, _pattern_literals(p))) >= _MIN_COVER_LITERAL:
-            out.append(p)
-    return out
+    return [p for p in patterns
+            if max(map(len, _pattern_literals(p))) >= _MIN_COVER_LITERAL]
 
 
 def _pick_gram(lit: str, counter: Counter) -> str:
@@ -521,7 +517,7 @@ def _locator_id(locator: str) -> str | None:
         rest = locator.rpartition("#")[2]
         return rest.rsplit(".", 1)[-1] if rest else None
     stem = locator.rstrip("/").rsplit("/", 1)[-1]
-    stem = stem[:-5] if stem.endswith(".json") else stem
+    stem = stem.removesuffix(".json")
     return stem or None
 
 
