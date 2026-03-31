@@ -65,8 +65,8 @@ def _const_map(constants_ts: str) -> dict[str, str]:
     prettier 会把过长的字符串值折到下一行(KEY:\\n    "value"),`\\s*` 可同时兼容两种形态。
     """
     out: dict[str, str] = {}
-    for block in re.findall(r"const \w+ = \{(.*?)\} as const", constants_ts, re.S):
-        for m in re.finditer(r'^ {2}(\w+):\s*"([^"]+)",', block, re.M):
+    for block in re.findall(r"const \w+ = \{(.*?)\} as const", constants_ts, re.DOTALL):
+        for m in re.finditer(r'^ {2}(\w+):\s*"([^"]+)",', block, re.MULTILINE):
             out[m.group(1)] = m.group(2)
     return out
 
@@ -83,7 +83,7 @@ def _parse_calc_recipes(recipes_ts: str, consts: dict[str, str]) -> dict[str, di
         return int(v) if v.is_integer() else v
 
     def side(body: str, tag: str) -> list[tuple[str, int | float]]:
-        seg = re.search(rf"{tag}: \[(.*?)\]", body, re.S)
+        seg = re.search(rf"{tag}: \[(.*?)\]", body, re.DOTALL)
         if not seg:
             return []
         return [(consts.get(i, i), num(n))
@@ -91,7 +91,7 @@ def _parse_calc_recipes(recipes_ts: str, consts: dict[str, str]) -> dict[str, di
 
     out: dict[str, dict] = {}
     chunks = re.split(r"id: RecipeId\.(\w+),", recipes_ts)
-    for name, body in zip(chunks[1::2], chunks[2::2]):
+    for name, body in zip(chunks[1::2], chunks[2::2], strict=False):
         fac = re.search(r"facilityId: FacilityId\.(\w+)", body)
         ct = re.search(r"craftingTime: (\d+(?:\.\d+)?)", body)
         if not (fac and ct):
@@ -141,9 +141,7 @@ def build(raw: dict, t: I18n, calc: dict[str, dict] | None = None) -> list[dict]
         白名单只登记真正加工过的字段,其余(含上游新增,如机器表 gasEnv)一律透传,
         保证数据集不丢源表字段。
         """
-        for k, v in src.items():
-            if k not in transformed:
-                rec[k] = v
+        rec.update((k, v) for k, v in src.items() if k not in transformed)
         return rec
 
     recipes = []

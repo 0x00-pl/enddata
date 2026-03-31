@@ -30,7 +30,7 @@ import re
 import subprocess
 import time
 
-from tools.datasource import PROJECT_ROOT, git_env, info, repo_dir
+from tools.datasource import git_env, info, repo_dir
 from tools.tables import I18n, attr_map, dump_dir, i18n_table, load_tables, slugify
 
 PRODUCT = "enemies"
@@ -56,7 +56,7 @@ def _pack_file(repo: str, pack_dir: str, name: str) -> bytes | None:
 
 def _git_bytes(repo: str, *args, timeout: int = 300) -> bytes | None:
     d = repo_dir(repo)
-    r = subprocess.run(["git", "-C", str(d), *args],
+    r = subprocess.run(["git", "-C", str(d), *args], check=False,
                        capture_output=True, timeout=timeout, env=git_env())
     return r.stdout if r.returncode == 0 else None
 
@@ -86,7 +86,7 @@ def load_wiki_threats() -> dict[str, dict]:
             d = json.loads(raw)
             item = ((d.get("wiki") or {}).get("data") or {}).get("item") or {}
             out[d.get("name", "?")] = {"itemId": item.get("itemId"), "icon": d.get("icon")}
-        except Exception:  # noqa: BLE001 - 损坏条目跳过
+        except Exception:  # noqa: BLE001, S112 - 损坏条目跳过
             continue
     return out
 

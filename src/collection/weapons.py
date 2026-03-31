@@ -112,16 +112,15 @@ def collect_breakthrough(raw: dict, weapon: dict) -> dict | None:
     if not tpl:
         return None
     skills = weapon.get("weaponSkillList") or []
-    stages = []
-    for s in sorted(tpl, key=lambda x: (x.get("breakthroughShowLv") is None, x.get("breakthroughShowLv"))):
-        stages.append({
-            "stage": s.get("breakthroughShowLv"),
-            "level": s.get("breakthroughLv"),
-            "gold": s.get("breakthroughGold"),
-            "materials": [{"id": m.get("id"), "count": m.get("count")}
-                          for m in s.get("breakItemList") or []],
-            "skillLevelBounds": _bounds_with_skills(s.get("skillLevelBounds"), skills),
-        })
+    stages = [{
+        "stage": s.get("breakthroughShowLv"),
+        "level": s.get("breakthroughLv"),
+        "gold": s.get("breakthroughGold"),
+        "materials": [{"id": m.get("id"), "count": m.get("count")}
+                      for m in s.get("breakItemList") or []],
+        "skillLevelBounds": _bounds_with_skills(s.get("skillLevelBounds"), skills),
+    } for s in sorted(tpl, key=lambda x: (x.get("breakthroughShowLv") is None,
+                                          x.get("breakthroughShowLv")))]
     return {"templateId": weapon.get("breakthroughTemplateId"), "stages": stages}
 
 
