@@ -21,9 +21,19 @@ from __future__ import annotations
 
 import argparse
 
-from analysis import gacha, recipe_calc, solvers as recipe_solvers, team_comp
-from collection import build_all, fetch
-from collection import characters, enemies, equips, items, recipes, settlements, weapons
+from analysis import gacha, recipe_calc, team_comp
+from analysis import solvers as recipe_solvers
+from collection import (
+    build_all,
+    characters,
+    enemies,
+    equips,
+    fetch,
+    items,
+    recipes,
+    settlements,
+    weapons,
+)
 from tools import id_links, tables, versions
 from tools.datasource import FetchError, die
 
@@ -79,7 +89,7 @@ def build_parser() -> argparse.ArgumentParser:
     all_p.add_argument("--force", action="store_true",
                        help="核对数据源远端 HEAD(一致零下载,有更新增量拉取)后本地重读;隐含 --online")
     _add_lang_arg(all_p)
-    for name, mod in PRODUCT_MODULES.items():
+    for name in PRODUCT_MODULES:
         pp = coll_sub.add_parser(name, help=f"生成 {name} 数据集目录(离线直读本地,缺表报错)")
         pp.add_argument("--online", action="store_true", help="缺原始表时允许联网补抓")
         pp.add_argument("--force", action="store_true",

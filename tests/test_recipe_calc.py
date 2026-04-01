@@ -462,7 +462,7 @@ def test_to_dict(rbi):
         FlowGraph(rbi, targets, res).to_dict(per_min=True)))
     assert payload["target"]["per_min"] is True
     assert payload["strict_ok"] is True
-    kinds = {(l["id"], l["kind"]) for l in payload["leaves"]}
+    kinds = {(leaf["id"], leaf["kind"]) for leaf in payload["leaves"]}
     assert ("item_gas_xiranite", "external") in kinds
     assert ("item_gas_inert", "raw") in kinds
     machines = {m["recipe"]: m["count"] for m in payload["machines"] if "recipe" in m}

@@ -21,6 +21,8 @@
 
 from analysis.solvers.base import RecipeSolver, SolveRequest, SolveResult
 
+__all__ = ["SOLVERS", "RecipeSolver", "SolveRequest", "SolveResult", "register"]
+
 SOLVERS: dict[str, type[RecipeSolver]] = {}
 
 
