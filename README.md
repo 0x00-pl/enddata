@@ -65,12 +65,37 @@ poetry run enddata version
 导入采用规范的包内绝对导入(`from tools.datasource import ...`),不做任何 sys.path 修改,
 因此请在 Poetry 虚拟环境内运行(`poetry run`/`poetry shell`,需先 `poetry install`)。
 
+## 代码检查(ruff + mypy)
+
+Python 代码统一用 **ruff**(风格 + lint)与 **mypy**(静态类型)检查,
+规则与基线在 `pyproject.toml` 的 `[tool.ruff]` / `[tool.mypy]`(渐进式,非 strict):
+中文全角标点、git 子进程调用等项目既定风格按条目豁免,个别处用
+`# noqa: <code> - 原因` / `# type: ignore[<code>]` 逐点标注。
+
+```bash
+poetry run ruff check src tests   # 风格 + lint(毫秒级)
+poetry run mypy                   # 静态类型(增量缓存,首跑较慢)
+```
+
+### Git 提交自动检查
+
+`.githooks/pre-commit` 会在提交含 `.py` 改动时自动跑上述两项检查,不通过则拦截提交。
+克隆后启用一次即可:
+
+```bash
+git config core.hooksPath .githooks
+```
+
+跳过一次:`git commit --no-verify`(应急,勿作惯例)。
+
 ## 目录结构
 
 ```
 enddata/
-├── pyproject.toml          # Poetry 项目定义与命令行入口
+├── pyproject.toml          # Poetry 项目定义与命令行入口;含 ruff/mypy 检查配置
 ├── poetry.lock
+├── AGENTS.md               # 会话项目记忆(约定与坑,自动加载;细节在 docs/)
+├── .githooks/pre-commit    # 提交时自动跑 ruff + mypy(git config core.hooksPath .githooks 启用)
 ├── config/
 │   └── sources.json        # 数据源注册表(git 仓库清单/产物依赖表/官方 API 端点/资源路径模板)
 ├── docs/                   # 项目文档

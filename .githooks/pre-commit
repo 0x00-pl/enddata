@@ -1,0 +1,23 @@
+#!/bin/sh
+# pre-commit:Python 风格(ruff)+ 静态类型(mypy)检查
+#
+# 启用(本仓库一次性设置,新克隆后需执行):
+#     git config core.hooksPath .githooks
+# 跳过本次检查:git commit --no-verify
+# 手动全量检查:poetry run ruff check src tests && poetry run mypy
+#
+# 规则与基线在 pyproject.toml([tool.ruff] / [tool.mypy]);逐点豁免在代码内
+# 用 `# noqa: <code> - 原因` / `# type: ignore[<code>]` 标注。
+set -eu
+
+# 本次提交涉及的 Python 文件(暂存区新增/复制/修改/重命名)
+py_files=$(git diff --cached --name-only --diff-filter=ACMR -- '*.py')
+[ -n "$py_files" ] || exit 0
+
+# ruff:逐文件(工作区内容);mypy:整包增量(跨文件类型追,按文件切片会失真)
+echo "pre-commit: ruff check(风格/lint)"
+# shellcheck disable=SC2086
+poetry run ruff check $py_files
+
+echo "pre-commit: mypy(静态类型;有增量缓存,首跑稍慢)"
+poetry run mypy
