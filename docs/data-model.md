@@ -131,7 +131,9 @@ reports/build-report.md               ← 人类可读构建报告
   PotentialTalentEffectTable(效果描述 165/165 全可读,富文本标签已剥离;
   `{键:0%}` 占位符对应 blackboard/属性键,由游戏运行时填充)
 - `icon`/`professionIcon` 只存裸 id(`icon_<charId>` / 职业图标 id),
-  站点构建期经 icon_git 源本地化注入 URL
+  站点构建期经 icon_git 源本地化注入 URL(`web/build.mjs` 的 walk 跳过
+  `skillGroupMap` 子树——组对象的 `icon` 等字段不是干员/物品图标引用,
+  勿移除该跳过逻辑)
 - `potentials.values` 与技能 `castCost`/`buffs` 来自 rmxlinux 的
   `Json/BuffData`、`Json/SkillData`(表现层定义),并合并 PotentialTalentEffectTable
   `dataList` 的全部数值(attachBuff/attachSkill 黑板、attrModifier 经属性枚举转
@@ -139,6 +141,25 @@ reports/build-report.md               ← 人类可读构建报告
   191/204 按同名键精确命中 `values`,其余 13 处数值也在 `values` 中
   (游戏按位置对应,键名与占位符不一致,如「冷却-3秒」存为 `param2: -3.0`);
   `castCost` 为技能真实消耗(如终结技 8 点)
+- **描述占位符数值来源与缺数约定**:技能 → 成员 `levels[].blackboard`;
+  潜能 → `potentials[].values`;被动节点 → `passiveSkillNodeInfo.values`;
+  天赋节点 → `attributeNodeInfo.attributeModifiers`;武器/套装 →
+  SkillPatchTable blackboard。BuffData 是共享模板(常为 0 或非本潜能口径),
+  重叠键以 effect 行为准直接覆盖;约 6% 占位符与 values 键名为位置对应而非
+  同名,少数用游戏内部属性名(如 PhysicalAndSpellInflictionEnhance)而 values
+  存的是 AttributeMetaTable 词条名(OriginiumArts)——采集不做别名转换。
+  回填实现统一在 `tools/placeholders.py`(fmt 模板渲染、算式键(数字/键 ±
+  相连、* 连乘)、values 恰有一个 `paramN` 时回退顶替未知键名);缺数
+  (键查不到/解析到 0)一律维持占位符原文,不回填成「+0%」一类误导值——
+  传 missing 清单收集汇总、未传直接抛 ValueError,分析侧在运行末尾汇总打印
+- **管理员条目 `chr_9000_endmin` 是系统数据实体**:NPC 占位条目(无技能、
+  头像双源 404),但潜能与天赋的**效果行都在它名下**——CharacterPotentialTable
+  对 endminm/endminf 引用 `chr_9000_endmin_potential_*`,天赋效果行同理取
+  9000 行(characters.py `_TALENT_EFFECT_REDIRECT` 字面 id 逐条映射,不拼
+  字符串、不改写节点字面 talentEffectId;endminf 的节点甚至直接引用 endminm
+  前缀的旧行;0002/0003 前缀行是旧设计残留:dataList 空壳、「封印」版文案/
+  位置式占位符)。其 skillGroupMap 引用 endminm/endminf 的技能 id——展开时
+  必须按干员前缀过滤(唯一的多对多情形)
 - `weapon`/`recommendedWeapons` 来自 defaultWeaponId 与 CharWpnRecommendTable(join 武器表名称)
 - `stationTags` 派驻标签描述来自 CharacterTagDesTable(基建加成全文,i18n 已反查)
 - `breakStages` 不在干员文件内:来自全局表 CharBreakStageTable(实测 33 名干员完全一致),
@@ -343,6 +364,13 @@ common/elite/boss/advanced/alpha,缺展示信息的入 `unknown`,共 6 个;typeS
 ### meta.json — 构建信息
 `{generatedAt, source{repo,branch}, lang, i18nMisses, counts{...}}`;counts 含 equips/suits;
 `lang` 为本次构建的默认翻译语言(入口 `--lang` 指定,默认 CN,各语言覆盖见 I18nTextTable_<LANG>)。
+
+## 分析产物(data/analysis/)的 key 约定
+
+分析侧输出(`data/analysis/*.json`,如 team_comp)的机器键**一律用英文标识符**:
+资源键 atb/usp/poise/heal/shield,维度键 firepower/poise/survival/atbCycle/
+energyCycle/diversity;中文名一律经顶层 `resourceLabels`/`dimensionLabels` 映射,
+不拿中文词当 key。文案解析中提取的状态前缀用 `{term, prefix}` 列表承载。
 
 ## 按需读取、待加工的表
 
