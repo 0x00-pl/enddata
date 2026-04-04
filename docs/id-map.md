@@ -5,6 +5,11 @@
 聚成**关联组**,再用**循环最长公共子串(LCS)反统一**把关联组归纳成带 `{vN}`
 变量的**匹配规则**,存入 `data/id_map/`(gitignore 的派生产物,随时可重建)。
 
+使用约定:查找/核对 id 对应关系(引用是否存在、定义在哪、被谁引用)优先用
+idmap,不要手工拼字符串猜测——`enddata idmap build` 重建产物,
+`enddata idmap relate <file#path>` 返回同组定位符列表;程序化用法见
+`tools/id_links.py`(ids.jsonl 逐行 id → defs/refs)。
+
 ## 定位符规范(描述 id 值所在位置的 path 生成方法)
 
 ```
